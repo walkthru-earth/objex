@@ -208,12 +208,12 @@ async function changeVariable() {
 }
 
 onDestroy(() => {
-	if (zarrLayer && mapRef && mapRef.getLayer('zarr-data')) {
-		try {
+	try {
+		if (zarrLayer && mapRef?.getLayer('zarr-data')) {
 			mapRef.removeLayer('zarr-data');
-		} catch {
-			// map may already be destroyed
 		}
+	} catch {
+		// map may already be destroyed
 	}
 });
 </script>

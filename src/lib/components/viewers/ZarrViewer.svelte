@@ -120,9 +120,11 @@ async function loadZarrMetadata() {
 				<p class="max-w-md text-center text-sm text-red-400">{error}</p>
 			</div>
 		{:else if viewMode === 'map' && hasMapVars}
-			{#await import('./ZarrMapViewer.svelte') then ZarrMapViewer}
-				<ZarrMapViewer.default {tab} variables={mapVars} {spatialRefAttrs} {zarrVersion} />
-			{/await}
+			{#key viewMode}
+				{#await import('./ZarrMapViewer.svelte') then ZarrMapViewer}
+					<ZarrMapViewer.default {tab} variables={mapVars} {spatialRefAttrs} {zarrVersion} />
+				{/await}
+			{/key}
 		{:else}
 			<!-- Inspect mode -->
 			<div class="flex flex-1 overflow-hidden">
