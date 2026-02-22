@@ -25,7 +25,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.3",
 		"@internationalized/date": "^3.11.0",
-		"@lucide/svelte": "^0.575.0",
+		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.52.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
@@ -63,6 +63,7 @@
 		"@deck.gl/mesh-layers": "^9.2.9",
 		"@developmentseed/deck.gl-geotiff": "^0.2.0",
 		"@duckdb/duckdb-wasm": "1.33.1-dev19.0",
+		"@fontsource/cairo": "^5.2.7",
 		"@geoarrow/deck.gl-layers": "^0.3.1",
 		"@luma.gl/core": "^9.2.6",
 		"@milkdown/kit": "^7.18.0",
