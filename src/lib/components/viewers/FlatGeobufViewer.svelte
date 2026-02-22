@@ -81,7 +81,6 @@ const GEOM_TYPE_NAMES: Record<number, string> = {
 };
 
 async function fetchFeatures() {
-	const { deserialize } = fgbGeojson;
 	const url = buildHttpsUrl(tab);
 
 	const features: GeoJSON.Feature[] = [];
@@ -90,7 +89,14 @@ async function fetchFeatures() {
 		maxLng = -Infinity,
 		maxLat = -Infinity;
 
-	const iter = deserialize(url, undefined, (header) => {
+	// Fetch as ReadableStream so flatgeobuf uses deserializeStream
+	// (passing a URL string with no bbox falls into deserializeFiltered
+	// which crashes with "n2 is undefined" when rect is undefined)
+	const response = await fetch(url);
+	if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+	if (!response.body) throw new Error('No response body');
+
+	const iter = fgbGeojson.deserialize(response.body, undefined, (header) => {
 		totalFeatures = header.featuresCount;
 		headerInfo = {
 			geometryType: GEOM_TYPE_NAMES[header.geometryType] ?? `Type ${header.geometryType}`,
