@@ -26,7 +26,8 @@ export default defineConfig({
 			'@deck.gl/layers',
 			'@deck.gl/geo-layers',
 			'@deck.gl/mesh-layers',
-			'@luma.gl/core'
+			'@luma.gl/core',
+			'proj4'
 		]
 	}
 });

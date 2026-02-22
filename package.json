@@ -82,6 +82,7 @@
 		"openseadragon": "^6.0.0",
 		"pdfjs-dist": "^5.4.624",
 		"pmtiles": "^4.4.0",
+		"proj4": "^2.20.2",
 		"shiki": "^3.22.0",
 		"sql-formatter": "^15.7.2",
 		"svelte-chartjs": "^3.1.5",
