@@ -8,6 +8,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl } from '$lib/utils/url.js';
+import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import StyleEditorOverlay from './StyleEditorOverlay.svelte';
 
 let { tab }: { tab: Tab } = $props();
@@ -19,7 +20,10 @@ let error = $state<string | null>(null);
 let wordWrap = $state(false);
 let copied = $state(false);
 let showStyleEditor = $state(false);
-let viewMode = $state<'code' | 'browse' | 'kepler'>('code');
+const urlView = getUrlView();
+let viewMode = $state<'code' | 'stac-browser' | 'kepler'>(
+	urlView === 'stac-browser' ? 'stac-browser' : urlView === 'kepler' ? 'kepler' : 'code'
+);
 
 type JsonKind =
 	| 'maplibre-style'
@@ -128,6 +132,11 @@ async function loadCode() {
 	}
 }
 
+function setViewMode(mode: 'code' | 'stac-browser' | 'kepler') {
+	viewMode = viewMode === mode ? 'code' : mode;
+	updateUrlView(viewMode);
+}
+
 async function copyCode() {
 	try {
 		await navigator.clipboard.writeText(rawCode);
@@ -164,11 +173,11 @@ async function copyCode() {
 				</Badge>
 				<Button
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'browse' ? 'text-blue-500' : ''}"
+					class="h-7 px-2 text-xs {viewMode === 'stac-browser' ? 'text-blue-500' : ''}"
 					variant="ghost"
-					onclick={() => (viewMode = viewMode === 'browse' ? 'code' : 'browse')}
+					onclick={() => setViewMode('stac-browser')}
 				>
-					{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
+					{viewMode === 'stac-browser' ? t('code.code') : t('code.browseStac')}
 				</Button>
 			{:else if jsonKind === 'kepler'}
 				<Badge variant="outline" class="hidden border-violet-200 text-violet-600 sm:inline-flex dark:border-violet-800 dark:text-violet-300">
@@ -178,7 +187,7 @@ async function copyCode() {
 					size="sm"
 					class="h-7 px-2 text-xs {viewMode === 'kepler' ? 'text-blue-500' : ''}"
 					variant="ghost"
-					onclick={() => (viewMode = viewMode === 'kepler' ? 'code' : 'kepler')}
+					onclick={() => setViewMode('kepler')}
 				>
 					{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
 				</Button>
@@ -213,14 +222,14 @@ async function copyCode() {
 							<DropdownMenu.Item disabled>
 								{t(stacBadgeKey[jsonKind] ?? 'code.stacItem')}
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => (viewMode = viewMode === 'browse' ? 'code' : 'browse')}>
-								{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
+							<DropdownMenu.Item onclick={() => setViewMode('stac-browser')}>
+								{viewMode === 'stac-browser' ? t('code.code') : t('code.browseStac')}
 							</DropdownMenu.Item>
 						{:else if jsonKind === 'kepler'}
 							<DropdownMenu.Item disabled>
 								{t('code.keplerGl')}
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => (viewMode = viewMode === 'kepler' ? 'code' : 'kepler')}>
+							<DropdownMenu.Item onclick={() => setViewMode('kepler')}>
 								{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
 							</DropdownMenu.Item>
 						{/if}
@@ -236,7 +245,7 @@ async function copyCode() {
 		</div>
 	</div>
 
-	{#if viewMode === 'browse'}
+	{#if viewMode === 'stac-browser'}
 		<div class="flex-1 overflow-hidden">
 			<iframe
 				src={stacBrowserSrc}
