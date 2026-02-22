@@ -214,13 +214,17 @@ async function saveMarkdown(markdown: string) {
 	article :global(pre) {
 		direction: ltr;
 		text-align: left;
-		background-color: #f6f8fa;
-		border: 1px solid #e1e4e8;
 		border-radius: 6px;
 		padding: 1rem;
 		overflow-x: auto;
 		font-size: 0.9em;
 		line-height: 1.5;
+	}
+	/* Fallback for plain pre blocks not styled by Shiki */
+	article :global(pre:not([style])) {
+		background-color: #f6f8fa;
+		color: #24292e;
+		border: 1px solid #e1e4e8;
 	}
 	article :global(code) {
 		direction: ltr;
@@ -327,8 +331,9 @@ async function saveMarkdown(markdown: string) {
 	}
 
 	/* ========== DARK MODE OVERRIDES ========== */
-	:global(.dark) article :global(pre) {
+	:global(.dark) article :global(pre:not([style])) {
 		background-color: #1e1e2e;
+		color: #cdd6f4;
 		border-color: #313244;
 	}
 	:global(.dark) article :global(:not(pre) > code) {

@@ -95,10 +95,7 @@ function isPrimarilyEnglish(text: string): boolean {
  * that are primarily English get LTR direction.
  */
 export function processDirection(html: string, isRTL: boolean): string {
-	// Code blocks should always be LTR
-	html = html.replace(/<pre(\s)/g, '<pre style="direction:ltr;text-align:left"$1');
-	html = html.replace(/<pre>/g, '<pre style="direction:ltr;text-align:left">');
-
+	// Code blocks get LTR via scoped CSS (direction:ltr on article pre)
 	if (!isRTL) return html;
 
 	// In RTL documents, set per-element direction for mixed content
