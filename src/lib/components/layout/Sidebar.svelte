@@ -19,6 +19,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger
 } from '$lib/components/ui/tooltip/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
@@ -28,6 +29,7 @@ import { type DetectedHost, detectHostBucket } from '$lib/utils/host-detection.j
 import { parseStorageUrl } from '$lib/utils/storage-url.js';
 import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
 import ConnectionDialog from './ConnectionDialog.svelte';
+import LocaleToggle from './LocaleToggle.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
 
 let dialogOpen = $state(false);
@@ -56,18 +58,7 @@ async function handleAutoDetection() {
 			const conn = connections.getById(connId);
 			if (!conn) return;
 
-			// If the connection requires credentials but they're not in memory
-			// (e.g. page refresh), try restoring from browser password manager first.
-			if (!conn.anonymous && !credentialStore.has(conn.id)) {
-				const native = await loadFromNative(conn.id);
-				if (native) {
-					credentialStore.set(conn.id, native);
-				} else {
-					editingConnection = conn;
-					dialogOpen = true;
-					return;
-				}
-			}
+			if (!(await ensureCredentials(conn))) return;
 
 			const parsed = parseStorageUrl(url.searchParams.get('url')!);
 			const prefixParam = parsed.prefix;
@@ -109,6 +100,7 @@ async function handleConnectDetected() {
 		const connId = await connections.saveHostConnection(detectedHost);
 		const conn = connections.getById(connId);
 		if (conn) {
+			if (!(await ensureCredentials(conn))) return;
 			browser.browse(conn);
 			syncUrlParam(conn);
 		}
@@ -129,7 +121,7 @@ function handleEditConnection(connection: Connection) {
 }
 
 async function handleDeleteConnection(connection: Connection) {
-	if (!confirm(`Delete connection "${connection.name}"?`)) return;
+	if (!confirm(t('sidebar.deleteConfirm', { name: connection.name }))) return;
 	await connections.remove(connection.id);
 	if (browser.activeConnection?.id === connection.id) {
 		browser.clear();
@@ -137,7 +129,30 @@ async function handleDeleteConnection(connection: Connection) {
 	}
 }
 
-function handleBrowseConnection(connection: Connection) {
+/**
+ * Ensure credentials are available for a non-anonymous connection.
+ * Tries the browser password manager first, then opens the dialog.
+ * Returns true if credentials are ready, false if the dialog was opened.
+ */
+async function ensureCredentials(connection: Connection): Promise<boolean> {
+	if (connection.anonymous) return true;
+	if (credentialStore.has(connection.id)) return true;
+
+	// Try restoring from browser password manager
+	const native = await loadFromNative(connection.id);
+	if (native) {
+		credentialStore.set(connection.id, native);
+		return true;
+	}
+
+	// No credentials — open the dialog so the user can re-enter them
+	editingConnection = connection;
+	dialogOpen = true;
+	return false;
+}
+
+async function handleBrowseConnection(connection: Connection) {
+	if (!(await ensureCredentials(connection))) return;
 	browser.browse(connection);
 	syncUrlParam(connection);
 }
@@ -168,7 +183,7 @@ function handleBrowseConnection(connection: Connection) {
 						</button>
 					</TooltipTrigger>
 					<TooltipContent side="right">
-						Browse detected bucket: {detectedHost.bucket}
+						{t('sidebar.browseDetected', { name: detectedHost.bucket })}
 					</TooltipContent>
 				</Tooltip>
 			{/if}
@@ -196,16 +211,16 @@ function handleBrowseConnection(connection: Connection) {
 					</ContextMenuTrigger>
 					<ContextMenuContent class="w-40">
 						<ContextMenuItem onclick={() => handleEditConnection(connection)}>
-							<PencilIcon class="mr-2 size-3.5" />
-							Edit
+							<PencilIcon class="me-2 size-3.5" />
+							{t('sidebar.edit')}
 						</ContextMenuItem>
 						<ContextMenuSeparator />
 						<ContextMenuItem
 							class="text-destructive data-[highlighted]:text-destructive"
 							onclick={() => handleDeleteConnection(connection)}
 						>
-							<TrashIcon class="mr-2 size-3.5" />
-							Delete
+							<TrashIcon class="me-2 size-3.5" />
+							{t('sidebar.delete')}
 						</ContextMenuItem>
 					</ContextMenuContent>
 				</ContextMenu>
@@ -221,12 +236,13 @@ function handleBrowseConnection(connection: Connection) {
 						<PlusIcon class="size-4" />
 					</button>
 				</TooltipTrigger>
-				<TooltipContent side="right">Add connection</TooltipContent>
+				<TooltipContent side="right">{t('sidebar.addConnection')}</TooltipContent>
 			</Tooltip>
 		</div>
 
 		<!-- Bottom actions -->
 		<div class="mt-auto flex flex-col items-center gap-1 pt-2">
+			<LocaleToggle />
 			<ThemeToggle />
 		</div>
 	</div>
@@ -235,5 +251,16 @@ function handleBrowseConnection(connection: Connection) {
 <ConnectionDialog
 	bind:open={dialogOpen}
 	editConnection={editingConnection}
-	onSaved={() => { connections.reload(); handleAutoDetection(); }}
+	onSaved={() => {
+		connections.reload();
+		// If we opened the dialog for a credential re-entry, auto-browse after save
+		if (editingConnection) {
+			const conn = connections.getById(editingConnection.id);
+			if (conn && credentialStore.has(conn.id)) {
+				browser.browse(conn);
+				syncUrlParam(conn);
+			}
+		}
+		handleAutoDetection();
+	}}
 />
