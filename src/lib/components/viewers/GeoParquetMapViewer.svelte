@@ -2,7 +2,7 @@
 import type maplibregl from 'maplibre-gl';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
-import type { SchemaField } from '$lib/query/engine';
+import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import type { Tab } from '$lib/types';
 import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
@@ -12,7 +12,11 @@ import { findGeoColumn } from '$lib/utils/wkb.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
-let { tab, schema }: { tab: Tab; schema: SchemaField[] } = $props();
+let {
+	tab,
+	schema,
+	mapData = null
+}: { tab: Tab; schema: SchemaField[]; mapData?: MapQueryResult | null } = $props();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -38,50 +42,44 @@ async function loadGeoData() {
 	error = null;
 
 	try {
-		const geoCol = findGeoColumn(schema);
-		if (!geoCol) {
-			error = t('map.noGeoColumn');
-			loading = false;
-			return;
-		}
+		// Use pre-loaded map data from TableViewer (unified query) or fetch independently
+		const result = mapData && mapData.rowCount > 0 ? mapData : await fetchMapData();
 
-		// Find geometry column type from schema
-		const geoField = schema.find((f) => f.name === geoCol);
-		const geomColType = geoField?.type ?? 'GEOMETRY';
-
-		const fileUrl = buildDuckDbUrl(tab);
-		const source = buildDuckDbSource(tab.path, fileUrl);
-		const baseSql = `SELECT * FROM ${source} LIMIT ${MAP_FEATURE_LIMIT}`;
-		const connId = tab.connectionId ?? '';
-
-		// Query DuckDB for raw WKB + attributes (parallel with module loading)
-		const engine = await getQueryEngine();
-		const [mapResult, modules] = await Promise.all([
-			engine.queryForMap(connId, baseSql, geoCol, geomColType),
-			loadGeoArrowModules()
-		]);
-
-		if (mapResult.rowCount === 0) {
+		if (!result || result.rowCount === 0) {
 			error = t('map.noData');
 			loading = false;
 			return;
 		}
 
+		const modules = await loadGeoArrowModules();
+
 		// Convert WKB → GeoArrow Arrow Table
-		const geoArrow = buildGeoArrowTable(
-			mapResult.wkbArrays,
-			mapResult.geometryType,
-			mapResult.attributes
-		);
+		const geoArrow = buildGeoArrowTable(result.wkbArrays, result.geometryType, result.attributes);
 
 		geoArrowState = { modules, geoArrow };
-		featureCount = mapResult.rowCount;
+		featureCount = result.rowCount;
 		bounds = geoArrow.bounds;
 		loading = false;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	}
+}
+
+async function fetchMapData(): Promise<MapQueryResult> {
+	const geoCol = findGeoColumn(schema);
+	if (!geoCol) throw new Error(t('map.noGeoColumn'));
+
+	const geoField = schema.find((f) => f.name === geoCol);
+	const geomColType = geoField?.type ?? 'GEOMETRY';
+
+	const fileUrl = buildDuckDbUrl(tab);
+	const source = buildDuckDbSource(tab.path, fileUrl);
+	const baseSql = `SELECT * FROM ${source} LIMIT ${MAP_FEATURE_LIMIT}`;
+	const connId = tab.connectionId ?? '';
+
+	const engine = await getQueryEngine();
+	return engine.queryForMap(connId, baseSql, geoCol, geomColType);
 }
 
 function onMapReady(map: maplibregl.Map) {

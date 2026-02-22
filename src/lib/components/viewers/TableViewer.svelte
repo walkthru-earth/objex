@@ -7,13 +7,13 @@ import { untrack } from 'svelte';
 import CodeMirrorEditor from '$lib/components/editor/CodeMirrorEditor.svelte';
 import { buildDuckDbSource, isCloudNativeFormat } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
-import type { SchemaField } from '$lib/query/engine';
+import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildDuckDbUrl, buildStorageUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
-import { findGeoColumn, findGeoColumnFromRows } from '$lib/utils/wkb.js';
+import { findGeoColumn, findGeoColumnFromRows, parseWKB, toBinary } from '$lib/utils/wkb.js';
 import QueryHistoryPanel from './QueryHistoryPanel.svelte';
 import SchemaPanel from './SchemaPanel.svelte';
 import TableGrid from './TableGrid.svelte';
@@ -55,16 +55,39 @@ let loadGeneration = 0;
 let sortColumn = $state<string | null>(null);
 let sortDirection = $state<'asc' | 'desc' | null>(null);
 
+// Geo column state for unified table+map query
+let geoCol = $state<string | null>(null);
+let geoColType = $state<string>('');
+let mapData = $state<MapQueryResult | null>(null);
+
 const totalPages = $derived(totalRows != null ? Math.max(1, Math.ceil(totalRows / pageSize)) : 1);
 const connId = $derived(tab?.connectionId ?? '');
 
 // Build column type map from schema
 const columnTypes = $derived(Object.fromEntries(schema.map((f) => [f.name, f.type])));
 
+// Columns for display — exclude internal __wkb helper
+const displayColumns = $derived(columns.filter((c) => c !== '__wkb'));
+
 function buildDefaultSql(offset = 0): string {
 	const fileUrl = buildDuckDbUrl(tab);
 	const source = buildDuckDbSource(tab.path, fileUrl);
-	let sql = `SELECT * FROM ${source}`;
+
+	let sql: string;
+	if (geoCol) {
+		const quoted = `"${geoCol}"`;
+		const upper = geoColType.toUpperCase();
+		const isSpatialType =
+			upper === 'GEOMETRY' ||
+			upper === 'WKB_BLOB' ||
+			upper.includes('POINT') ||
+			upper.includes('LINESTRING') ||
+			upper.includes('POLYGON');
+		const geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+		sql = `SELECT * EXCLUDE(${quoted}), ST_AsWKB(${geomExpr}) AS __wkb FROM ${source}`;
+	} else {
+		sql = `SELECT * FROM ${source}`;
+	}
 
 	if (sortColumn && sortDirection) {
 		sql += ` ORDER BY "${sortColumn}" ${sortDirection.toUpperCase()}`;
@@ -72,6 +95,35 @@ function buildDefaultSql(offset = 0): string {
 
 	sql += ` LIMIT ${pageSize} OFFSET ${offset}`;
 	return sql;
+}
+
+function extractMapData(queryRows: Record<string, any>[]): MapQueryResult | null {
+	if (!geoCol || queryRows.length === 0 || !columns.includes('__wkb')) return null;
+
+	const wkbArrays: Uint8Array[] = [];
+	let geometryType = 'POINT';
+
+	for (const row of queryRows) {
+		const bin = toBinary(row.__wkb);
+		if (bin) wkbArrays.push(bin);
+	}
+
+	// Detect geometry type from first WKB value
+	if (wkbArrays.length > 0) {
+		const parsed = parseWKB(wkbArrays[0]);
+		if (parsed) geometryType = parsed.type.toUpperCase();
+	}
+
+	// Build attributes map (exclude __wkb)
+	const attributes = new Map<string, { values: any[]; type: string }>();
+	for (const col of columns) {
+		if (col === '__wkb') continue;
+		const fieldType = columnTypes[col] ?? 'VARCHAR';
+		const values = queryRows.map((r) => r[col]);
+		attributes.set(col, { values, type: fieldType });
+	}
+
+	return { wkbArrays, geometryType, attributes, rowCount: wkbArrays.length };
 }
 
 // Track last loaded tab to prevent duplicate loads
@@ -100,6 +152,9 @@ async function loadTable() {
 	const thisGen = ++loadGeneration;
 	loading = true;
 	error = null;
+	geoCol = null;
+	geoColType = '';
+	mapData = null;
 	loadStage = t('table.preparingQuery');
 
 	// Set SQL eagerly so editor shows the query while loading
@@ -122,7 +177,14 @@ async function loadTable() {
 			schema = await engine.getSchema(connId, fileUrl);
 			if (thisGen !== loadGeneration) return;
 			columns = schema.map((f) => f.name);
-			hasGeo = findGeoColumn(schema) !== null;
+
+			const detectedGeoCol = findGeoColumn(schema);
+			geoCol = detectedGeoCol;
+			if (detectedGeoCol) {
+				const geoField = schema.find((f) => f.name === detectedGeoCol);
+				geoColType = geoField?.type ?? 'GEOMETRY';
+			}
+			hasGeo = detectedGeoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
 		}
 
@@ -145,8 +207,26 @@ async function loadTable() {
 				nullable: true
 			}));
 			columns = schema.map((f) => f.name);
-			hasGeo = findGeoColumn(schema) !== null;
+
+			const detectedGeoCol = findGeoColumn(schema);
+			geoCol = detectedGeoCol;
+			if (detectedGeoCol) {
+				const geoField = schema.find((f) => f.name === detectedGeoCol);
+				geoColType = geoField?.type ?? 'GEOMETRY';
+			}
+			hasGeo = detectedGeoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
+
+			// Re-query with geo-aware SQL if geo column was detected
+			if (hasGeo) {
+				const geoSql = buildDefaultSql(0);
+				sqlQuery = geoSql;
+				customSql = geoSql;
+				const geoStart = performance.now();
+				await executeQuery(geoSql);
+				if (thisGen !== loadGeneration) return;
+				executionTimeMs = Math.round(performance.now() - geoStart);
+			}
 		}
 
 		// If schema-only detection missed geo, try content sniffing on actual rows
@@ -154,6 +234,7 @@ async function loadTable() {
 			hasGeo = findGeoColumnFromRows(rows, schema) !== null;
 		}
 
+		mapData = extractMapData(rows);
 		loading = false;
 		loadStage = '';
 		updateUrlView(viewMode);
@@ -222,12 +303,14 @@ async function loadPage(page: number) {
 	const start = performance.now();
 	await executeQuery(sql);
 	executionTimeMs = Math.round(performance.now() - start);
+	mapData = extractMapData(rows);
 	currentPage = page;
 }
 
 async function runCustomSql() {
 	queryRunning = true;
 	error = null;
+	mapData = null;
 	loadStage = t('table.runningCustomQuery');
 	const start = performance.now();
 	try {
@@ -287,6 +370,7 @@ function handleSort(column: string, direction: 'asc' | 'desc' | null) {
 	const start = performance.now();
 	executeQuery(sql).then(() => {
 		executionTimeMs = Math.round(performance.now() - start);
+		mapData = extractMapData(rows);
 	});
 }
 
@@ -304,6 +388,7 @@ function handlePageSizeChange(size: number) {
 	const start = performance.now();
 	executeQuery(sql).then(() => {
 		executionTimeMs = Math.round(performance.now() - start);
+		mapData = extractMapData(rows);
 	});
 }
 
@@ -343,7 +428,7 @@ function setStacView() {
 	<!-- Toolbar — always visible -->
 	<TableToolbar
 		fileName={tab.name}
-		columnCount={columns.length}
+		columnCount={displayColumns.length}
 		rowCount={totalRows ?? 0}
 		{currentPage}
 		{totalPages}
@@ -373,7 +458,7 @@ function setStacView() {
 						onChange={handleSqlChange}
 						onExecute={runCustomSql}
 						placeholder={t('table.enterSql')}
-						schemaColumns={columns}
+						schemaColumns={displayColumns}
 					/>
 				</div>
 				<div class="flex shrink-0 flex-col gap-1">
@@ -429,7 +514,7 @@ function setStacView() {
 				</div>
 			{:else}
 				<TableGrid
-					{columns}
+					columns={displayColumns}
 					{rows}
 					totalRows={totalRows ?? rows.length}
 					{columnTypes}
@@ -451,7 +536,7 @@ function setStacView() {
 			rowCount={rows.length}
 			{executionTimeMs}
 			loading={loading || queryRunning}
-			{columns}
+			columns={displayColumns}
 			{rows}
 			fileName={tab.name}
 		/>
@@ -466,7 +551,7 @@ function setStacView() {
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
 			{#await import('./GeoParquetMapViewer.svelte') then GeoParquetMapViewer}
-				<GeoParquetMapViewer.default {tab} {schema} />
+				<GeoParquetMapViewer.default {tab} {schema} {mapData} />
 			{/await}
 		</div>
 	{/if}
