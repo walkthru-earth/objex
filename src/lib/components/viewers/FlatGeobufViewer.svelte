@@ -160,8 +160,8 @@ function onMapReady(map: maplibregl.Map) {
 	const overlay = createDeckOverlay(deckState.modules, {
 		layerId: 'flatgeobuf-data',
 		data: deckState.data,
-		fillColor: [16, 185, 129, 77],
-		lineColor: [16, 185, 129, 200],
+		fillColor: [232, 121, 61, 110],
+		lineColor: [230, 81, 0, 220],
 		onClick: (props) => {
 			selectedFeature = props;
 			showAttributes = true;

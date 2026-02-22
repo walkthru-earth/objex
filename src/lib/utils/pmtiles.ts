@@ -146,7 +146,7 @@ export function buildPmtilesLayers(
 			source: sourceId,
 			'source-layer': layerId,
 			paint: {
-				'fill-color': `hsl(${hue}, 60%, 50%)`,
+				'fill-color': `hsl(${hue}, 70%, 55%)`,
 				'fill-opacity': 0.4
 			}
 		} as maplibregl.LayerSpecification);
@@ -157,8 +157,8 @@ export function buildPmtilesLayers(
 			source: sourceId,
 			'source-layer': layerId,
 			paint: {
-				'line-color': `hsl(${hue}, 60%, 40%)`,
-				'line-width': 0.5
+				'line-color': `hsl(${hue}, 70%, 40%)`,
+				'line-width': 1.5
 			}
 		} as maplibregl.LayerSpecification);
 	}

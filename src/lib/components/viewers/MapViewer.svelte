@@ -101,8 +101,8 @@ function onMapReady(map: maplibregl.Map) {
 		source: 'geojson-source',
 		filter: ['==', '$type', 'Polygon'],
 		paint: {
-			'fill-color': '#3b82f6',
-			'fill-opacity': 0.3
+			'fill-color': '#e8793d',
+			'fill-opacity': 0.35
 		}
 	});
 
@@ -113,8 +113,8 @@ function onMapReady(map: maplibregl.Map) {
 		source: 'geojson-source',
 		filter: ['any', ['==', '$type', 'LineString'], ['==', '$type', 'Polygon']],
 		paint: {
-			'line-color': '#3b82f6',
-			'line-width': 1.5
+			'line-color': '#e65100',
+			'line-width': 2.5
 		}
 	});
 
@@ -125,9 +125,9 @@ function onMapReady(map: maplibregl.Map) {
 		source: 'geojson-source',
 		filter: ['==', '$type', 'Point'],
 		paint: {
-			'circle-radius': 5,
-			'circle-color': '#3b82f6',
-			'circle-stroke-width': 1,
+			'circle-radius': 7,
+			'circle-color': '#e8793d',
+			'circle-stroke-width': 1.5,
 			'circle-stroke-color': '#fff'
 		}
 	});

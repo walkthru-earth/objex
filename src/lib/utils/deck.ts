@@ -38,8 +38,8 @@ export function createDeckOverlay(
 	const {
 		layerId,
 		data,
-		fillColor = [59, 130, 246, 77],
-		lineColor = [59, 130, 246, 200],
+		fillColor = [232, 121, 61, 110],
+		lineColor = [230, 81, 0, 220],
 		onClick
 	} = options;
 
@@ -55,13 +55,13 @@ export function createDeckOverlay(
 				pointType: 'circle',
 				getFillColor: fillColor,
 				getLineColor: lineColor,
-				getPointRadius: 4,
-				getLineWidth: 1.5,
-				lineWidthMinPixels: 1,
-				pointRadiusMinPixels: 3,
-				pointRadiusMaxPixels: 10,
+				getPointRadius: 6,
+				getLineWidth: 2.5,
+				lineWidthMinPixels: 1.5,
+				pointRadiusMinPixels: 4,
+				pointRadiusMaxPixels: 12,
 				autoHighlight: true,
-				highlightColor: [255, 255, 255, 80],
+				highlightColor: [255, 255, 255, 100],
 				onClick: (info: any) => {
 					if (info.object?.properties && onClick) {
 						onClick({ ...info.object.properties });
@@ -104,8 +104,8 @@ export function createGeoArrowOverlay(
 	const {
 		layerId,
 		geoArrow,
-		fillColor = [59, 130, 246, 77],
-		lineColor = [59, 130, 246, 200],
+		fillColor = [232, 121, 61, 110],
+		lineColor = [230, 81, 0, 220],
 		onClick
 	} = options;
 	const { table, geometryType } = geoArrow;
@@ -116,13 +116,13 @@ export function createGeoArrowOverlay(
 			id: layerId,
 			data: table,
 			getFillColor: fillColor,
-			getRadius: 4,
+			getRadius: 6,
 			radiusUnits: 'pixels',
-			radiusMinPixels: 3,
-			radiusMaxPixels: 10,
+			radiusMinPixels: 4,
+			radiusMaxPixels: 12,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 80],
+			highlightColor: [255, 255, 255, 100],
 			_validate: false,
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
@@ -131,12 +131,12 @@ export function createGeoArrowOverlay(
 			id: layerId,
 			data: table,
 			getColor: lineColor,
-			getWidth: 2,
+			getWidth: 2.5,
 			widthUnits: 'pixels',
-			widthMinPixels: 1,
+			widthMinPixels: 1.5,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 80],
+			highlightColor: [255, 255, 255, 100],
 			_validate: false,
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
@@ -146,11 +146,11 @@ export function createGeoArrowOverlay(
 			data: table,
 			getFillColor: fillColor,
 			getLineColor: lineColor,
-			getLineWidth: 1.5,
-			lineWidthMinPixels: 1,
+			getLineWidth: 2,
+			lineWidthMinPixels: 1.5,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 80],
+			highlightColor: [255, 255, 255, 100],
 			_validate: false,
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
