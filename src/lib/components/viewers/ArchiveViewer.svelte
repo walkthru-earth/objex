@@ -175,9 +175,9 @@ async function selectNode(node: FileTreeNode) {
 						>
 							<span class="shrink-0 text-zinc-400">
 								{#if node.isDir}
-									{expandedDirs.has(node.path) ? '&#9660;' : '&#9654;'}
+									{expandedDirs.has(node.path) ? '▼' : '►'}
 								{:else}
-									&#9679;
+									●
 								{/if}
 							</span>
 							<span
