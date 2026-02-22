@@ -36,7 +36,7 @@ let scale = $state(1);
 let rotation = $state(0);
 let panX = $state(0);
 let panY = $state(0);
-let dragging = false;
+let dragging = $state(false);
 let lastX = 0;
 let lastY = 0;
 let wrapperEl: HTMLDivElement | undefined = $state();
@@ -61,7 +61,9 @@ async function loadImage() {
 			const adapter = getAdapter(tab.source, tab.connectionId);
 			const data = await adapter.read(tab.path);
 			const ext = tab.extension.toLowerCase();
-			const blob = new Blob([data], { type: mimeMap[ext] || 'application/octet-stream' });
+			const blob = new Blob([data as unknown as BlobPart], {
+				type: mimeMap[ext] || 'application/octet-stream'
+			});
 			blobUrl = URL.createObjectURL(blob);
 			imgSrc = blobUrl;
 		}

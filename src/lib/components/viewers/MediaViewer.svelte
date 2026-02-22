@@ -48,7 +48,7 @@ async function loadMedia() {
 			const adapter = getAdapter(tab.source, tab.connectionId);
 			const data = await adapter.read(tab.path);
 			const mime = mimeMap[tab.extension.toLowerCase()] || 'application/octet-stream';
-			const blob = new Blob([data], { type: mime });
+			const blob = new Blob([data as unknown as BlobPart], { type: mime });
 			blobUrl = URL.createObjectURL(blob);
 			mediaSrc = blobUrl;
 		}
