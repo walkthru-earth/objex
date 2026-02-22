@@ -19,12 +19,13 @@ import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 let { tab }: { tab: Tab } = $props();
 
 let canvasEl: HTMLCanvasElement | undefined = $state();
-let pdfDoc: PDFDocumentProxy | null = null;
+let pdfDoc = $state.raw<PDFDocumentProxy | null>(null);
 let currentPage = $state(1);
 let totalPages = $state(0);
 let scale = $state(1.5);
 let loading = $state(true);
 let error = $state<string | null>(null);
+let renderGeneration = 0;
 
 $effect(() => {
 	if (!tab) return;
@@ -33,16 +34,24 @@ $effect(() => {
 
 $effect(() => {
 	if (!tab) return;
-	if (pdfDoc && canvasEl) renderPage(currentPage);
+	// Read all reactive deps unconditionally to ensure tracking
+	const doc = pdfDoc;
+	const canvas = canvasEl;
+	const page = currentPage;
+	const s = scale;
+	if (doc && canvas) renderPage(doc, canvas, page, s);
 });
 
 async function loadPdf() {
 	loading = true;
 	error = null;
+	pdfDoc?.destroy();
+	pdfDoc = null;
 
 	try {
-		pdfDoc = await loadPdfData();
-		totalPages = pdfDoc.numPages;
+		const doc = await loadPdfData();
+		pdfDoc = doc;
+		totalPages = doc.numPages;
 		currentPage = 1;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
@@ -66,21 +75,31 @@ async function loadPdfData(): Promise<PDFDocumentProxy> {
 	return await loadPdfDocument(data);
 }
 
-async function renderPage(pageNum: number) {
-	if (!pdfDoc || !canvasEl) return;
+async function renderPage(
+	doc: PDFDocumentProxy,
+	canvas: HTMLCanvasElement,
+	pageNum: number,
+	currentScale: number
+) {
+	const gen = ++renderGeneration;
 
 	try {
-		const page = await pdfDoc.getPage(pageNum);
-		const viewport = page.getViewport({ scale });
-		canvasEl.width = viewport.width;
-		canvasEl.height = viewport.height;
+		const page = await doc.getPage(pageNum);
+		// Stale or unmounted — skip
+		if (gen !== renderGeneration || !canvasEl) return;
 
-		const ctx = canvasEl.getContext('2d');
+		const viewport = page.getViewport({ scale: currentScale });
+		canvas.width = viewport.width;
+		canvas.height = viewport.height;
+
+		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		await page.render({ canvasContext: ctx, viewport, canvas: canvasEl } as any).promise;
+		await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		if (gen === renderGeneration) {
+			error = err instanceof Error ? err.message : String(err);
+		}
 	}
 }
 
@@ -94,12 +113,10 @@ function nextPage() {
 
 function zoomIn() {
 	scale = Math.min(scale + 0.25, 5);
-	renderPage(currentPage);
 }
 
 function zoomOut() {
 	scale = Math.max(scale - 0.25, 0.5);
-	renderPage(currentPage);
 }
 
 onDestroy(() => {
