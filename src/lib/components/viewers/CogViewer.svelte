@@ -402,7 +402,7 @@ onDestroy(() => {
 		</div>
 
 		<button
-			class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+			class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 			class:ring-1={showInfo}
 			class:ring-primary={showInfo}
 			onclick={() => (showInfo = !showInfo)}
@@ -412,7 +412,7 @@ onDestroy(() => {
 
 		{#if showInfo}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.cogInfo')}</h3>
 				<dl class="space-y-1.5">

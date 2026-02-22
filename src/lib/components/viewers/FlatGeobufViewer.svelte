@@ -202,7 +202,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating info toggle -->
 		{#if headerInfo}
 			<button
-				class="absolute right-12 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="absolute right-12 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showInfo}
 				class:ring-primary={showInfo}
 				onclick={() => (showInfo = !showInfo)}
@@ -214,7 +214,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating attributes toggle -->
 		{#if selectedFeature}
 			<button
-				class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showAttributes}
 				class:ring-primary={showAttributes}
 				onclick={() => (showAttributes = !showAttributes)}
@@ -225,7 +225,7 @@ function onMapReady(map: maplibregl.Map) {
 
 		{#if showInfo && headerInfo}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.flatgeobufInfo')}</h3>
 				<dl class="space-y-1.5">
@@ -264,6 +264,10 @@ function onMapReady(map: maplibregl.Map) {
 			</div>
 		{/if}
 
-		<AttributeTable feature={selectedFeature} visible={showAttributes} />
+		<AttributeTable
+			feature={selectedFeature}
+			visible={showAttributes}
+			onClose={() => (showAttributes = false)}
+		/>
 	{/if}
 </div>

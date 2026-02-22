@@ -1,10 +1,14 @@
 <script lang="ts">
+import XIcon from '@lucide/svelte/icons/x';
+
 let {
 	feature = null,
-	visible = false
+	visible = false,
+	onClose
 }: {
 	feature: Record<string, any> | null;
 	visible?: boolean;
+	onClose?: () => void;
 } = $props();
 
 function formatValue(value: any): string {
@@ -16,16 +20,29 @@ function formatValue(value: any): string {
 
 {#if visible && feature}
 	<div
-		class="w-72 shrink-0 overflow-auto border-s border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+		class="absolute bottom-2 end-2 top-28 z-10 flex w-64 flex-col overflow-hidden rounded bg-card/95 text-card-foreground shadow-lg backdrop-blur-sm sm:w-72"
 	>
-		<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+		<div
+			class="flex items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-zinc-800"
+		>
 			<h3 class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Feature Attributes</h3>
+			{#if onClose}
+				<button
+					class="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+					onclick={onClose}
+				>
+					<XIcon class="size-3.5" />
+				</button>
+			{/if}
 		</div>
-		<div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+		<div class="flex-1 divide-y divide-zinc-100 overflow-auto dark:divide-zinc-800">
 			{#each Object.entries(feature) as [key, value]}
 				<div class="px-3 py-1.5">
 					<div class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">{key}</div>
-					<div class="text-xs text-zinc-700 dark:text-zinc-300" title={formatValue(value)}>
+					<div
+						class="break-all text-xs text-zinc-700 dark:text-zinc-300"
+						title={formatValue(value)}
+					>
 						{formatValue(value)}
 					</div>
 				</div>

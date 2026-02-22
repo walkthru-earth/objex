@@ -53,7 +53,7 @@ $effect(() => {
 
 		currentStyleUrl = resolvedStyle;
 
-		map.addControl(new maplibregl.NavigationControl(), 'top-right');
+		map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
 		map.on('load', () => {
 			if (bounds && map) {

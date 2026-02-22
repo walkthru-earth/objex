@@ -127,7 +127,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating attributes toggle -->
 		{#if selectedFeature}
 			<button
-				class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showAttributes}
 				class:ring-primary={showAttributes}
 				onclick={() => (showAttributes = !showAttributes)}
@@ -136,6 +136,10 @@ function onMapReady(map: maplibregl.Map) {
 			</button>
 		{/if}
 
-		<AttributeTable feature={selectedFeature} visible={showAttributes} />
+		<AttributeTable
+			feature={selectedFeature}
+			visible={showAttributes}
+			onClose={() => (showAttributes = false)}
+		/>
 	{/if}
 </div>
