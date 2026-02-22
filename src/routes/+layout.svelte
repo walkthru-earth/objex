@@ -1,5 +1,6 @@
 <script lang="ts">
 import './layout.css';
+import { base } from '$app/paths';
 import { settings } from '$lib/stores/settings.svelte.js';
 
 let { children } = $props();
@@ -30,7 +31,7 @@ $effect(() => {
 });
 </script>
 
-<svelte:head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></svelte:head>
+<svelte:head><link rel="icon" type="image/svg+xml" href="{base}/favicon.svg" /></svelte:head>
 
 <div class="flex h-screen flex-col overflow-hidden bg-background text-foreground">
 	{@render children()}
