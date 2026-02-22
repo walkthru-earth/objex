@@ -1,5 +1,8 @@
 <script lang="ts">
 import { untrack } from 'svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { Button } from '$lib/components/ui/button/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
@@ -74,43 +77,33 @@ async function loadZarrMetadata() {
 <div class="flex h-full flex-col">
 	<!-- Toolbar -->
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
-		<span
-			class="rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-600 dark:bg-purple-900 dark:text-purple-300"
-		>
-			Zarr
-		</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<Badge variant="secondary" class="bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300">{t('zarr.badge')}</Badge>
 
 		{#if variables.length > 0}
-			<span class="text-xs text-zinc-400">{variables.length} variables</span>
+			<span class="hidden text-xs text-zinc-400 sm:inline">{variables.length} {t('zarr.variables')}</span>
 		{/if}
 
-		<div class="ml-auto flex items-center gap-1">
-			<button
-				class="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-				class:bg-zinc-200={viewMode === 'inspect'}
-				class:dark:bg-zinc-700={viewMode === 'inspect'}
-				class:text-zinc-700={viewMode === 'inspect'}
-				class:dark:text-zinc-200={viewMode === 'inspect'}
-				class:text-zinc-400={viewMode !== 'inspect'}
+		<div class="ms-auto flex items-center gap-1">
+			<Button
+				variant={viewMode === 'inspect' ? 'secondary' : 'ghost'}
+				size="sm"
+				class="h-7 px-2 text-xs"
 				onclick={() => (viewMode = 'inspect')}
 			>
-				Inspect
-			</button>
+				{t('zarr.inspect')}
+			</Button>
 			{#if hasMapVars}
-				<button
-					class="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-					class:bg-zinc-200={viewMode === 'map'}
-					class:dark:bg-zinc-700={viewMode === 'map'}
-					class:text-zinc-700={viewMode === 'map'}
-					class:dark:text-zinc-200={viewMode === 'map'}
-					class:text-zinc-400={viewMode !== 'map'}
+				<Button
+					variant={viewMode === 'map' ? 'secondary' : 'ghost'}
+					size="sm"
+					class="h-7 px-2 text-xs"
 					onclick={() => (viewMode = 'map')}
 				>
-					Map
-				</button>
+					{t('zarr.map')}
+				</Button>
 			{/if}
 		</div>
 	</div>
@@ -119,7 +112,7 @@ async function loadZarrMetadata() {
 	<div class="flex min-h-0 flex-1 overflow-hidden">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-400">Loading Zarr metadata...</p>
+				<p class="text-sm text-zinc-400">{t('zarr.loading')}</p>
 			</div>
 		{:else if error}
 			<div class="flex flex-1 items-center justify-center">
@@ -134,12 +127,12 @@ async function loadZarrMetadata() {
 			<div class="flex flex-1 overflow-hidden">
 				<!-- Variable list sidebar -->
 				<div
-					class="w-64 shrink-0 overflow-auto border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+					class="w-64 shrink-0 overflow-auto border-e border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
 				>
 					{#if Object.keys(storeAttrs).length > 0}
 						<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
 							<button
-								class="w-full text-left text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+								class="w-full text-start text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
 								onclick={() => (selectedNode = null)}
 							>
 								Store Attributes
@@ -153,13 +146,13 @@ async function loadZarrMetadata() {
 						</div>
 						{#each variables as v}
 							<button
-								class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+								class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
 								class:bg-blue-50={selectedNode?.name === v.name}
 								class:dark:bg-blue-950={selectedNode?.name === v.name}
 								onclick={() => (selectedNode = v)}
 							>
 								<span class="font-medium text-zinc-700 dark:text-zinc-300">{v.name}</span>
-								<span class="ml-auto text-zinc-400">{v.dtype}</span>
+								<span class="ms-auto text-zinc-400">{v.dtype}</span>
 							</button>
 						{/each}
 					{/if}
@@ -170,13 +163,13 @@ async function loadZarrMetadata() {
 						</div>
 						{#each coordVars as v}
 							<button
-								class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+								class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
 								class:bg-blue-50={selectedNode?.name === v.name}
 								class:dark:bg-blue-950={selectedNode?.name === v.name}
 								onclick={() => (selectedNode = v)}
 							>
 								<span class="text-zinc-500 dark:text-zinc-400">{v.name}</span>
-								<span class="ml-auto text-zinc-400">{v.dtype}</span>
+								<span class="ms-auto text-zinc-400">{v.dtype}</span>
 							</button>
 						{/each}
 					{/if}

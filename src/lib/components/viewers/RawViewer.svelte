@@ -1,4 +1,6 @@
 <script lang="ts">
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 import { formatFileSize } from '$lib/utils/format';
@@ -41,23 +43,19 @@ async function loadHexDump() {
 
 <div class="flex h-full flex-col">
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
 		{#if tab.extension}
-			<span
-				class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-			>
-				{tab.extension}
-			</span>
+			<Badge variant="secondary">{tab.extension}</Badge>
 		{/if}
 		{#if !loading && fileSize > 0}
-			<span class="text-xs text-zinc-400 dark:text-zinc-500">
+			<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
 				{formatFileSize(fileSize)}
 			</span>
 			{#if truncated}
-				<span class="text-xs text-amber-500">
-					(showing first {formatFileSize(MAX_BYTES)})
+				<span class="hidden text-xs text-amber-500 sm:inline">
+					({t('raw.showingFirst').replace('{size}', formatFileSize(MAX_BYTES))})
 				</span>
 			{/if}
 		{/if}
@@ -65,16 +63,16 @@ async function loadHexDump() {
 
 	<div class="flex-1 overflow-auto bg-zinc-950 p-4 font-mono text-xs">
 		{#if loading}
-			<p class="text-zinc-400">Loading hex dump...</p>
+			<p class="text-zinc-400">{t('raw.loading')}</p>
 		{:else if error}
 			<p class="text-red-400">{error}</p>
 		{:else}
 			<table class="w-full border-collapse">
 				<thead>
 					<tr class="text-zinc-500">
-						<th class="px-2 pb-2 text-left">Offset</th>
-						<th class="px-2 pb-2 text-left" colspan="2">Hex</th>
-						<th class="px-2 pb-2 text-left">ASCII</th>
+						<th class="px-2 pb-2 text-start">Offset</th>
+						<th class="px-2 pb-2 text-start" colspan="2">Hex</th>
+						<th class="px-2 pb-2 text-start">ASCII</th>
 					</tr>
 				</thead>
 				<tbody>

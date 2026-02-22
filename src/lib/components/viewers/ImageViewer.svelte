@@ -1,6 +1,16 @@
 <script lang="ts">
+import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import MaximizeIcon from '@lucide/svelte/icons/maximize';
+import MinusIcon from '@lucide/svelte/icons/minus';
+import PlusIcon from '@lucide/svelte/icons/plus';
+import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+import ScanIcon from '@lucide/svelte/icons/scan';
 import OpenSeadragon from 'openseadragon';
 import { onDestroy } from 'svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { Button } from '$lib/components/ui/button/index.js';
+import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 
@@ -116,40 +126,57 @@ onDestroy(cleanup);
 
 <div class="flex h-full flex-col">
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
-		<span
-			class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-		>
-			{tab.extension.toUpperCase()}
-		</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<Badge variant="secondary">{tab.extension.toUpperCase()}</Badge>
 
-		<div class="ml-auto flex items-center gap-1">
-			<button
-				class="rounded p-1.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-				onclick={zoomIn} title="Zoom In">+</button>
-			<button
-				class="rounded p-1.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-				onclick={zoomOut} title="Zoom Out">-</button>
-			<button
-				class="rounded p-1.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-				onclick={fitView} title="Fit">Fit</button>
-			<button
-				class="rounded p-1.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-				onclick={rotate} title="Rotate">Rotate</button>
-			{#if !isSvg}
-				<button
-					class="rounded p-1.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-					onclick={fullscreen} title="Fullscreen">Fullscreen</button>
-			{/if}
+		<div class="ms-auto flex items-center gap-1">
+			<!-- Desktop controls -->
+			<div class="hidden items-center gap-1 sm:flex">
+				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={zoomIn} title={t('image.zoomIn')}>
+					<PlusIcon class="size-3.5" />
+				</Button>
+				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={zoomOut} title={t('image.zoomOut')}>
+					<MinusIcon class="size-3.5" />
+				</Button>
+				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={fitView} title={t('image.fit')}>
+					<ScanIcon class="size-3.5" />
+				</Button>
+				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={rotate} title={t('image.rotate')}>
+					<RotateCwIcon class="size-3.5" />
+				</Button>
+				{#if !isSvg}
+					<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={fullscreen} title={t('image.fullscreen')}>
+						<MaximizeIcon class="size-3.5" />
+					</Button>
+				{/if}
+			</div>
+
+			<!-- Mobile overflow menu -->
+			<div class="flex sm:hidden">
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+						<EllipsisVerticalIcon class="size-4" />
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-40">
+						<DropdownMenu.Item onclick={zoomIn}>{t('image.zoomIn')}</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={zoomOut}>{t('image.zoomOut')}</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={fitView}>{t('image.fit')}</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={rotate}>{t('image.rotate')}</DropdownMenu.Item>
+						{#if !isSvg}
+							<DropdownMenu.Item onclick={fullscreen}>{t('image.fullscreen')}</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			</div>
 		</div>
 	</div>
 
 	<div class="relative flex-1 overflow-hidden bg-zinc-100 dark:bg-zinc-900">
 		{#if loading}
 			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">Loading image...</p>
+				<p class="text-sm text-zinc-400">{t('image.loading')}</p>
 			</div>
 		{:else if error}
 			<div class="flex h-full items-center justify-center">

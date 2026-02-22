@@ -1,6 +1,9 @@
 <script lang="ts">
 import { tableFromIPC } from 'apache-arrow';
 import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { Button } from '$lib/components/ui/button/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getQueryEngine } from '$lib/query/index.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
@@ -107,34 +110,30 @@ async function selectTable(tableName: string) {
 
 <div class="flex h-full flex-col">
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
-		<span
-			class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-		>
-			Database
-		</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<Badge variant="secondary">{t('database.badge')}</Badge>
 		{#if tables.length > 0}
-			<span class="text-xs text-zinc-400">{tables.length} tables</span>
+			<span class="hidden text-xs text-zinc-400 sm:inline">{tables.length} {t('database.tables')}</span>
 		{/if}
 
-		<div class="ml-auto">
-			<button
-				class="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-				class:text-blue-500={showSql}
-				class:text-zinc-400={!showSql}
+		<div class="ms-auto">
+			<Button
+				variant="ghost"
+				size="sm"
+				class="h-7 px-2 text-xs {showSql ? 'text-blue-500' : ''}"
 				onclick={() => (showSql = !showSql)}
 			>
-				SQL
-			</button>
+				{t('database.sql')}
+			</Button>
 		</div>
 	</div>
 
 	<div class="flex flex-1 overflow-hidden">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-400">Loading database...</p>
+				<p class="text-sm text-zinc-400">{t('database.loading')}</p>
 			</div>
 		{:else if error}
 			<div class="flex flex-1 items-center justify-center">
@@ -143,14 +142,14 @@ async function selectTable(tableName: string) {
 		{:else}
 			<!-- Table list -->
 			<div
-				class="w-56 shrink-0 overflow-auto border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+				class="w-56 shrink-0 overflow-auto border-e border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
 			>
 				<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-					<h3 class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Tables</h3>
+					<h3 class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('database.tablesHeader')}</h3>
 				</div>
 				{#each tables as tableName}
 					<button
-						class="flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+						class="flex w-full items-center px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
 						class:bg-blue-50={selectedTable === tableName}
 						class:dark:bg-blue-950={selectedTable === tableName}
 						onclick={() => selectTable(tableName)}
@@ -168,13 +167,13 @@ async function selectTable(tableName: string) {
 					</div>
 				{:else if tableLoading}
 					<div class="flex flex-1 items-center justify-center">
-						<p class="text-sm text-zinc-400">Loading table...</p>
+						<p class="text-sm text-zinc-400">{t('database.loadingTable')}</p>
 					</div>
 				{:else if selectedTable && columns.length > 0}
 					<TableGrid {columns} {rows} />
 				{:else}
 					<div class="flex flex-1 items-center justify-center">
-						<p class="text-sm text-zinc-400">Select a table to browse</p>
+						<p class="text-sm text-zinc-400">{t('database.selectTable')}</p>
 					</div>
 				{/if}
 			</div>

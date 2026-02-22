@@ -1,6 +1,8 @@
 <script lang="ts">
 import type { Entry } from '@zip.js/zip.js';
 import { untrack } from 'svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 import {
@@ -135,29 +137,23 @@ async function selectNode(node: FileTreeNode) {
 </script>
 
 <div class="flex h-full flex-col">
-	<div class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
-		<span
-			class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-		>
-			Archive
-		</span>
+	<div class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800">
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<Badge variant="secondary">{t('archive.badge')}</Badge>
 		{#if entries.length > 0}
-			<span class="text-xs text-zinc-400">{entries.length} entries</span>
+			<span class="hidden text-xs text-zinc-400 sm:inline">{entries.length} {t('archive.entries')}</span>
 		{/if}
 		{#if loadMethod === 'range'}
-			<span
-				class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400"
-			>
-				Streamed
-			</span>
+			<Badge variant="outline" class="border-emerald-200 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400">
+				{t('archive.streamed')}
+			</Badge>
 		{/if}
 	</div>
 
 	<div class="flex flex-1 overflow-hidden">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-400">Loading archive...</p>
+				<p class="text-sm text-zinc-400">{t('archive.loading')}</p>
 			</div>
 		{:else if error}
 			<div class="flex flex-1 items-center justify-center">
@@ -166,15 +162,15 @@ async function selectNode(node: FileTreeNode) {
 		{:else}
 			<!-- File tree -->
 			<div
-				class="w-72 shrink-0 overflow-auto border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+				class="w-72 shrink-0 overflow-auto border-e border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
 			>
 				{#snippet renderTree(nodes: FileTreeNode[], depth: number)}
 					{#each nodes as node}
 						<button
-							class="flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+							class="flex w-full items-center gap-1.5 px-3 py-1 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
 							class:bg-blue-50={selectedNode?.path === node.path}
 							class:dark:bg-blue-950={selectedNode?.path === node.path}
-							style="padding-left: {depth * 16 + 12}px;"
+							style="padding-inline-start: {depth * 16 + 12}px;"
 							onclick={() => selectNode(node)}
 						>
 							<span class="shrink-0 text-zinc-400">
@@ -193,7 +189,7 @@ async function selectNode(node: FileTreeNode) {
 								{node.name}
 							</span>
 							{#if !node.isDir}
-								<span class="ml-auto shrink-0 text-[10px] text-zinc-400">
+								<span class="ms-auto shrink-0 text-[10px] text-zinc-400">
 									{formatFileSize(node.size)}
 								</span>
 							{/if}
@@ -211,7 +207,7 @@ async function selectNode(node: FileTreeNode) {
 				class="flex flex-1 items-center justify-center overflow-auto bg-white p-4 dark:bg-zinc-950"
 			>
 				{#if extracting}
-					<p class="text-sm text-zinc-400">Extracting...</p>
+					<p class="text-sm text-zinc-400">{t('archive.extracting')}</p>
 				{:else if selectedNode && previewType === 'text' && previewContent !== null}
 					<pre
 						class="h-full w-full overflow-auto whitespace-pre-wrap font-mono text-xs text-zinc-700 dark:text-zinc-300"
@@ -225,7 +221,7 @@ async function selectNode(node: FileTreeNode) {
 				{:else if selectedNode}
 					<p class="text-sm text-zinc-400">Binary file — {formatFileSize(selectedNode.size)}</p>
 				{:else}
-					<p class="text-sm text-zinc-400">Select a file to preview</p>
+					<p class="text-sm text-zinc-400">{t('archive.selectFile')}</p>
 				{/if}
 			</div>
 		{/if}

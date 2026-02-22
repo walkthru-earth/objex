@@ -1,5 +1,8 @@
 <script lang="ts">
 import SqlResultBlock from '$lib/components/editor/SqlResultBlock.svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { Button } from '$lib/components/ui/button/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 import { EvidenceContext } from '$lib/utils/evidence-context';
@@ -100,29 +103,25 @@ async function saveMarkdown(markdown: string) {
 
 <div class="flex h-full flex-col">
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
-		<span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tab.name}</span>
-		<span
-			class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-		>
-			Markdown
-		</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<Badge variant="secondary">{t('markdown.badge')}</Badge>
 		{#if hasSqlBlocks}
-			<span class="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600 dark:bg-blue-900 dark:text-blue-300">
-				Evidence
-			</span>
+			<Badge variant="outline" class="border-blue-200 text-blue-600 dark:border-blue-800 dark:text-blue-300">
+				{t('markdown.evidence')}
+			</Badge>
 		{/if}
 
-		<div class="ml-auto flex items-center gap-2">
-			<button
-				class="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-				class:text-blue-500={editMode}
-				class:text-zinc-400={!editMode}
+		<div class="ms-auto">
+			<Button
+				variant="ghost"
+				size="sm"
+				class="h-7 px-2 text-xs {editMode ? 'text-blue-500' : ''}"
 				onclick={() => (editMode = !editMode)}
 			>
-				{editMode ? 'View' : 'Edit'}
-			</button>
+				{editMode ? t('markdown.view') : t('markdown.edit')}
+			</Button>
 		</div>
 	</div>
 
