@@ -70,6 +70,20 @@ function safeDecodeURIComponent(s: string): string {
 }
 
 /**
+ * Check if a tab's file can be loaded directly via HTTPS URL (streaming).
+ * True for URL-sourced tabs, anonymous buckets, and Azure (SAS token in URL).
+ * False for authenticated S3 (needs signed URLs or blob download via adapter).
+ */
+export function canStreamDirectly(tab: Tab): boolean {
+	if (tab.source === 'url') return true;
+	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
+	if (!conn) return true;
+	if (conn.anonymous) return true;
+	if (conn.provider === 'azure') return true;
+	return false;
+}
+
+/**
  * Append Azure SAS token to a URL if available.
  */
 function appendAzureSas(url: string, connectionId: string): string {

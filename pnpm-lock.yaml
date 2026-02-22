@@ -107,9 +107,6 @@ importers:
       marked:
         specifier: ^17.0.3
         version: 17.0.3
-      openseadragon:
-        specifier: ^6.0.0
-        version: 6.0.0
       pdfjs-dist:
         specifier: ^5.4.624
         version: 5.4.624
@@ -2839,9 +2836,6 @@ packages:
 
   oniguruma-to-es@4.3.4:
     resolution: {integrity: sha512-3VhUGN3w2eYxnTzHn+ikMI+fp/96KoRSVK9/kMTcFqj1NRDh2IhQCKvYxDnWePKRXY/AqH+Fuiyb7VHSzBjHfA==}
-
-  openseadragon@6.0.0:
-    resolution: {integrity: sha512-8B3HbYdW1EEoZQvp3BAdD42o+I6VznKMEG6BvzIFMqADPuKjmsWTaUgWJ23YgxG1sxdpvIgF/OV3oSNiAnO4lA==}
 
   orderedmap@2.1.1:
     resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
@@ -6661,8 +6655,6 @@ snapshots:
       oniguruma-parser: 0.12.1
       regex: 6.1.0
       regex-recursion: 6.0.2
-
-  openseadragon@6.0.0: {}
 
   orderedmap@2.1.1: {}
 

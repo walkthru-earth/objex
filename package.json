@@ -79,7 +79,6 @@
 		"geotiff-geokeys-to-proj4": "^2024.4.13",
 		"maplibre-gl": "^5.18.0",
 		"marked": "^17.0.3",
-		"openseadragon": "^6.0.0",
 		"pdfjs-dist": "^5.4.624",
 		"pmtiles": "^4.4.0",
 		"proj4": "^2.20.2",

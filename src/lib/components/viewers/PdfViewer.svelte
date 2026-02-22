@@ -13,7 +13,8 @@ import { Separator } from '$lib/components/ui/separator/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
-import { loadPdfDocument } from '$lib/utils/pdf';
+import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -40,9 +41,7 @@ async function loadPdf() {
 	error = null;
 
 	try {
-		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
-		pdfDoc = await loadPdfDocument(data);
+		pdfDoc = await loadPdfData();
 		totalPages = pdfDoc.numPages;
 		currentPage = 1;
 	} catch (err) {
@@ -50,6 +49,21 @@ async function loadPdf() {
 	} finally {
 		loading = false;
 	}
+}
+
+async function loadPdfData(): Promise<PDFDocumentProxy> {
+	// Try streaming from URL first (range requests for progressive page rendering)
+	if (canStreamDirectly(tab)) {
+		try {
+			return await loadPdfFromUrl(buildHttpsUrl(tab));
+		} catch {
+			// CORS or network error — fall through to adapter download
+		}
+	}
+	// Fall back to full download via storage adapter
+	const adapter = getAdapter(tab.source, tab.connectionId);
+	const data = await adapter.read(tab.path);
+	return await loadPdfDocument(data);
 }
 
 async function renderPage(pageNum: number) {

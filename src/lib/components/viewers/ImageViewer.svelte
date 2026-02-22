@@ -5,7 +5,6 @@ import MinusIcon from '@lucide/svelte/icons/minus';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 import ScanIcon from '@lucide/svelte/icons/scan';
-import OpenSeadragon from 'openseadragon';
 import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
@@ -13,8 +12,7 @@ import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
-
-let { tab }: { tab: Tab } = $props();
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
 const mimeMap: Record<string, string> = {
 	png: 'image/png',
@@ -28,17 +26,23 @@ const mimeMap: Record<string, string> = {
 	ico: 'image/x-icon'
 };
 
-let containerEl: HTMLDivElement | undefined = $state();
-let objectUrl = $state<string | null>(null);
+let { tab }: { tab: Tab } = $props();
+
+let imgSrc = $state<string | null>(null);
+let blobUrl = $state<string | null>(null);
 let loading = $state(true);
 let error = $state<string | null>(null);
-let viewer: OpenSeadragon.Viewer | null = null;
-let isSvg = $derived(tab.extension.toLowerCase() === 'svg');
+let scale = $state(1);
 let rotation = $state(0);
-let zoom = $state(1);
+let panX = $state(0);
+let panY = $state(0);
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+let wrapperEl: HTMLDivElement | undefined = $state();
 
 $effect(() => {
-	if (!tab || !containerEl) return;
+	if (!tab) return;
 	loadImage();
 });
 
@@ -46,29 +50,20 @@ async function loadImage() {
 	loading = true;
 	error = null;
 	cleanup();
+	resetView();
 
 	try {
-		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
-		const ext = tab.extension.toLowerCase();
-		const mime = mimeMap[ext] || 'application/octet-stream';
-		const blob = new Blob([data as unknown as BlobPart], { type: mime });
-		objectUrl = URL.createObjectURL(blob);
-
-		if (!isSvg && containerEl) {
-			viewer = OpenSeadragon({
-				element: containerEl,
-				tileSources: {
-					type: 'image',
-					url: objectUrl
-				},
-				showNavigationControl: false,
-				animationTime: 0.3,
-				minZoomLevel: 0.1,
-				maxZoomLevel: 20,
-				visibilityRatio: 0.5,
-				constrainDuringPan: false
-			});
+		if (canStreamDirectly(tab)) {
+			// Direct URL — browser streams natively (no CORS needed for <img>)
+			imgSrc = buildHttpsUrl(tab);
+		} else {
+			// Authenticated S3 — download via storage adapter
+			const adapter = getAdapter(tab.source, tab.connectionId);
+			const data = await adapter.read(tab.path);
+			const ext = tab.extension.toLowerCase();
+			const blob = new Blob([data], { type: mimeMap[ext] || 'application/octet-stream' });
+			blobUrl = URL.createObjectURL(blob);
+			imgSrc = blobUrl;
 		}
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
@@ -77,48 +72,73 @@ async function loadImage() {
 	}
 }
 
+function resetView() {
+	scale = 1;
+	rotation = 0;
+	panX = 0;
+	panY = 0;
+}
+
 function zoomIn() {
-	if (isSvg) {
-		zoom = Math.min(zoom * 1.5, 10);
-		return;
-	}
-	if (viewer) viewer.viewport.zoomBy(1.5);
+	scale = Math.min(scale * 1.4, 20);
 }
 
 function zoomOut() {
-	if (isSvg) {
-		zoom = Math.max(zoom / 1.5, 0.1);
-		return;
-	}
-	if (viewer) viewer.viewport.zoomBy(0.667);
+	scale = Math.max(scale / 1.4, 0.1);
 }
 
 function fitView() {
-	if (isSvg) {
-		zoom = 1;
-		return;
-	}
-	if (viewer) viewer.viewport.goHome();
+	resetView();
 }
 
 function rotate() {
 	rotation = (rotation + 90) % 360;
-	if (viewer) viewer.viewport.setRotation(rotation);
 }
 
 function fullscreen() {
-	if (viewer) viewer.setFullScreen(true);
+	wrapperEl?.requestFullscreen?.();
+}
+
+function handleWheel(e: WheelEvent) {
+	e.preventDefault();
+	const factor = e.deltaY > 0 ? 0.9 : 1.1;
+	scale = Math.max(0.1, Math.min(20, scale * factor));
+}
+
+function handlePointerDown(e: PointerEvent) {
+	if (e.button !== 0) return;
+	dragging = true;
+	lastX = e.clientX;
+	lastY = e.clientY;
+	(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+}
+
+function handlePointerMove(e: PointerEvent) {
+	if (!dragging) return;
+	panX += e.clientX - lastX;
+	panY += e.clientY - lastY;
+	lastX = e.clientX;
+	lastY = e.clientY;
+}
+
+function handlePointerUp() {
+	dragging = false;
+}
+
+function handleDblClick() {
+	if (scale !== 1 || panX !== 0 || panY !== 0) {
+		resetView();
+	} else {
+		scale = 2;
+	}
 }
 
 function cleanup() {
-	if (viewer) {
-		viewer.destroy();
-		viewer = null;
+	if (blobUrl) {
+		URL.revokeObjectURL(blobUrl);
+		blobUrl = null;
 	}
-	if (objectUrl) {
-		URL.revokeObjectURL(objectUrl);
-		objectUrl = null;
-	}
+	imgSrc = null;
 }
 
 onDestroy(cleanup);
@@ -146,11 +166,9 @@ onDestroy(cleanup);
 				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={rotate} title={t('image.rotate')}>
 					<RotateCwIcon class="size-3.5" />
 				</Button>
-				{#if !isSvg}
-					<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={fullscreen} title={t('image.fullscreen')}>
-						<MaximizeIcon class="size-3.5" />
-					</Button>
-				{/if}
+				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={fullscreen} title={t('image.fullscreen')}>
+					<MaximizeIcon class="size-3.5" />
+				</Button>
 			</div>
 
 			<!-- Mobile overflow menu -->
@@ -164,35 +182,38 @@ onDestroy(cleanup);
 						<DropdownMenu.Item onclick={zoomOut}>{t('image.zoomOut')}</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={fitView}>{t('image.fit')}</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={rotate}>{t('image.rotate')}</DropdownMenu.Item>
-						{#if !isSvg}
-							<DropdownMenu.Item onclick={fullscreen}>{t('image.fullscreen')}</DropdownMenu.Item>
-						{/if}
+						<DropdownMenu.Item onclick={fullscreen}>{t('image.fullscreen')}</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</div>
 		</div>
 	</div>
 
-	<div class="relative flex-1 overflow-hidden bg-zinc-100 dark:bg-zinc-900">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		bind:this={wrapperEl}
+		class="relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-100 dark:bg-zinc-900"
+		class:cursor-grab={scale > 1 && !dragging}
+		class:cursor-grabbing={dragging}
+		onwheel={handleWheel}
+		ondblclick={handleDblClick}
+	>
 		{#if loading}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">{t('image.loading')}</p>
-			</div>
+			<p class="text-sm text-zinc-400">{t('image.loading')}</p>
 		{:else if error}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-red-400">{error}</p>
-			</div>
-		{:else if isSvg && objectUrl}
-			<div class="flex h-full items-center justify-center overflow-auto">
-				<img
-					src={objectUrl}
-					alt={tab.name}
-					style="transform: scale({zoom}) rotate({rotation}deg); transition: transform 0.2s;"
-					class="max-h-full max-w-full object-contain"
-				/>
-			</div>
-		{:else}
-			<div bind:this={containerEl} class="h-full w-full"></div>
+			<p class="text-sm text-red-400">{error}</p>
+		{:else if imgSrc}
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<img
+				src={imgSrc}
+				alt={tab.name}
+				class="max-h-full max-w-full select-none"
+				style="transform: translate({panX}px, {panY}px) scale({scale}) rotate({rotation}deg); transition: {dragging ? 'none' : 'transform 0.15s ease-out'};"
+				draggable="false"
+				onpointerdown={handlePointerDown}
+				onpointermove={handlePointerMove}
+				onpointerup={handlePointerUp}
+			/>
 		{/if}
 	</div>
 </div>
