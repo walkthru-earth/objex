@@ -1,13 +1,35 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { COGLayer } from '@developmentseed/deck.gl-geotiff';
+import { COGLayer, proj } from '@developmentseed/deck.gl-geotiff';
 import { fromUrl } from 'geotiff';
+import { toProj4 } from 'geotiff-geokeys-to-proj4';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
+
+/**
+ * Custom GeoKeys parser using geotiff-geokeys-to-proj4.
+ * Bypasses the default proj4 EPSG lookup (which fails for non-standard CRS codes
+ * like EPSG:32767) by parsing GeoKeys directly into a proj4 definition string.
+ */
+async function geoKeysParser(
+	geoKeys: Record<string, unknown>
+): Promise<proj.ProjectionInfo | null> {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const projDef = toProj4(geoKeys as any);
+		return {
+			def: projDef.proj4,
+			parsed: proj.parseCrs(projDef.proj4),
+			coordinatesUnits: projDef.coordinatesUnits as proj.SupportedCrsUnit
+		};
+	} catch {
+		return null;
+	}
+}
 
 let { tab }: { tab: Tab } = $props();
 
@@ -42,17 +64,16 @@ async function onMapReady(map: maplibregl.Map) {
 	try {
 		const url = buildHttpsUrl(tab);
 
-		// Pre-validate: check PhotometricInterpretation before creating the layer.
-		// COGLayer only supports RGB (2); single-band grayscale (1) and palette (3)
-		// cause per-tile errors that flood the console.
+		// Pre-validate: reject single-band grayscale COGs (PhotometricInterpretation 0/1)
+		// which cause per-tile rendering errors. RGB (2) and Palette (3) are supported.
 		const tiff = await fromUrl(url);
-		const image = await tiff.getImage();
+		const preImage = await tiff.getImage();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const photometric = (image.fileDirectory as any).PhotometricInterpretation as
+		const photometric = (preImage.fileDirectory as any).PhotometricInterpretation as
 			| number
 			| undefined;
-		if (photometric !== undefined && photometric !== 2 /* RGB */) {
-			const labels: Record<number, string> = { 0: 'WhiteIsZero', 1: 'Grayscale', 3: 'Palette' };
+		if (photometric !== undefined && photometric <= 1) {
+			const labels: Record<number, string> = { 0: 'WhiteIsZero', 1: 'Grayscale' };
 			error = t('map.cogUnsupportedFormat', {
 				type: labels[photometric] ?? `PhotometricInterpretation ${photometric}`
 			});
@@ -63,6 +84,7 @@ async function onMapReady(map: maplibregl.Map) {
 		const layer = new COGLayer({
 			id: 'cog-layer',
 			geotiff: url,
+			geoKeysParser,
 			onError: (err: Error) => {
 				const msg = err?.message || String(err);
 				// Detect CORS / network errors and show a helpful message
