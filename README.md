@@ -97,6 +97,73 @@ graph TD
 | **Archives** | ZIP, TAR, GZIP | zip.js |
 | **Database** | DuckDB, SQLite | DuckDB-WASM |
 
+## Viewers & Sources
+
+### Data Viewers
+
+| Viewer | Formats | Powered by |
+|--------|---------|------------|
+| **TableViewer** | Parquet, CSV, TSV, JSONL, GeoJSON, Shapefile, GeoPackage | [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm), [Apache Arrow](https://github.com/apache/arrow) |
+| **DatabaseViewer** | DuckDB, SQLite | [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm) |
+
+### Map Viewers
+
+| Viewer | Formats | Powered by |
+|--------|---------|------------|
+| **GeoParquetMapViewer** | GeoParquet | [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org), custom WKB parser |
+| **MapViewer** | GeoJSON | [MapLibre GL](https://maplibre.org) |
+| **PmtilesViewer** | PMTiles (vector + raster) | [pmtiles](https://github.com/protomaps/PMTiles), [MapLibre GL](https://maplibre.org) |
+| **FlatGeobufViewer** | FlatGeobuf | [flatgeobuf](https://github.com/flatgeobuf/flatgeobuf), [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org) |
+| **CogViewer** | Cloud Optimized GeoTIFF | [geotiff.js](https://github.com/geotiffjs/geotiff.js), [@developmentseed/deck.gl-geotiff](https://github.com/developmentseed/deck.gl-geotiff), [proj4js](https://github.com/proj4js/proj4js) |
+| **ZarrViewer** | Zarr v2/v3 | [zarrita](https://github.com/manzt/zarrita.js), [@carbonplan/zarr-layer](https://github.com/carbonplan/maps), [MapLibre GL](https://maplibre.org) |
+| **StacMapViewer** | STAC GeoParquet | [stac-map](https://developmentseed.org/stac-map) by Development Seed (iframe) |
+
+### Document & Code Viewers
+
+| Viewer | Formats | Powered by |
+|--------|---------|------------|
+| **CodeViewer** | 30+ languages (JSON, Python, TS, Rust, Go, SQL, etc.) | [Shiki](https://github.com/shikijs/shiki) |
+| **MarkdownViewer** | Markdown | [Marked](https://github.com/markedjs/marked), [Milkdown](https://milkdown.dev), [Mermaid](https://mermaid.js.org) |
+| **PdfViewer** | PDF | [PDF.js](https://mozilla.github.io/pdf.js/) |
+
+### Media Viewers
+
+| Viewer | Formats | Powered by |
+|--------|---------|------------|
+| **ImageViewer** | PNG, JPEG, GIF, WebP, AVIF, SVG, BMP, ICO | Native `<img>` with CSS transforms |
+| **MediaViewer** | MP4, WebM, MOV, MP3, WAV, OGG, FLAC, AAC | Native `<video>` / `<audio>` |
+| **ModelViewer** | GLB, glTF, OBJ, STL, FBX | [Babylon.js](https://www.babylonjs.com) |
+
+### Other Viewers
+
+| Viewer | Formats | Powered by |
+|--------|---------|------------|
+| **ArchiveViewer** | ZIP, TAR, GZIP, 7Z, RAR, BZ2 | [zip.js](https://github.com/nicbarker/zip.js) |
+| **RawViewer** | Any (fallback) | Custom hex dump |
+
+### Smart JSON Detection
+
+The CodeViewer auto-detects special JSON files and offers contextual actions:
+
+| JSON Kind | Detection | Action |
+|-----------|-----------|--------|
+| **MapLibre Style** | `version === 8` + `sources` + `layers` | "Edit Style" — opens [Maputnik](https://maplibre.org/maputnik/) (iframe) |
+| **TileJSON** | `tilejson` + `tiles` | Badge only |
+| **STAC Catalog** | `type === "Catalog"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
+| **STAC Collection** | `type === "Collection"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
+| **STAC Item** | `type === "Feature"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
+
+### Basemaps & External Services
+
+| Service | Source | Used by |
+|---------|--------|---------|
+| Basemap (light) | [CARTO Positron](https://basemaps.cartocdn.com/gl/positron-gl-style/style.json) | All map viewers |
+| Basemap (dark) | [CARTO Dark Matter](https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json) | All map viewers |
+| RTL text plugin | [@mapbox/mapbox-gl-rtl-text](https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.3.0/) | MapLibre GL |
+| STAC Map | [Development Seed stac-map](https://developmentseed.org/stac-map) | StacMapViewer |
+| STAC Browser | [Radiant Earth STAC Browser](https://radiantearth.github.io/stac-browser/) | CodeViewer |
+| Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | StyleEditorOverlay |
+
 ## Quick Start
 
 ```bash
