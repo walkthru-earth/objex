@@ -75,6 +75,7 @@
 		"chart.js": "^4.5.1",
 		"deck.gl": "^9.2.8",
 		"flatgeobuf": "^4.4.0",
+		"geotiff": "^3.0.3",
 		"maplibre-gl": "^5.18.0",
 		"marked": "^17.0.3",
 		"openseadragon": "^6.0.0",

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { COGLayer } from '@developmentseed/deck.gl-geotiff';
+import { fromUrl } from 'geotiff';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -40,6 +41,24 @@ async function onMapReady(map: maplibregl.Map) {
 
 	try {
 		const url = buildHttpsUrl(tab);
+
+		// Pre-validate: check PhotometricInterpretation before creating the layer.
+		// COGLayer only supports RGB (2); single-band grayscale (1) and palette (3)
+		// cause per-tile errors that flood the console.
+		const tiff = await fromUrl(url);
+		const image = await tiff.getImage();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const photometric = (image.fileDirectory as any).PhotometricInterpretation as
+			| number
+			| undefined;
+		if (photometric !== undefined && photometric !== 2 /* RGB */) {
+			const labels: Record<number, string> = { 0: 'WhiteIsZero', 1: 'Grayscale', 3: 'Palette' };
+			error = t('map.cogUnsupportedFormat', {
+				type: labels[photometric] ?? `PhotometricInterpretation ${photometric}`
+			});
+			loading = false;
+			return;
+		}
 
 		const layer = new COGLayer({
 			id: 'cog-layer',

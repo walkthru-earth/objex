@@ -2,18 +2,20 @@ import { connectionStore } from '$lib/stores/connections.svelte.js';
 import type { StorageAdapter } from './adapter.js';
 import { BrowserAzureAdapter } from './browser-azure.js';
 import { BrowserCloudAdapter } from './browser-cloud.js';
+import { UrlAdapter } from './url-adapter.js';
 
 export type { StorageAdapter } from './adapter.js';
 
 /**
- * Returns the appropriate storage adapter for the given connection.
- * Azure connections get BrowserAzureAdapter; everything else (S3, R2, GCS, Storj, MinIO)
- * gets BrowserCloudAdapter which uses SigV4 signing or anonymous fetch.
- *
- * @param source - must be 'remote' (local filesystem is not available in web mode)
- * @param connectionId - identifies the connection config
+ * Returns the appropriate storage adapter for the given source.
+ * - 'url': direct HTTPS fetch (no connection needed)
+ * - 'remote': connection-based adapter (Azure or S3-compatible)
  */
-export function getAdapter(_source: 'remote', connectionId?: string): StorageAdapter {
+export function getAdapter(source: 'remote' | 'url', connectionId?: string): StorageAdapter {
+	if (source === 'url') {
+		return new UrlAdapter();
+	}
+
 	if (!connectionId) {
 		throw new Error('A connectionId is required for remote storage adapters.');
 	}

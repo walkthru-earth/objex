@@ -270,6 +270,8 @@ export const ar: Record<string, string> = {
 	'map.cogInfo': 'معلومات COG',
 	'map.cogCorsError':
 		'تعذّر تحميل COG: الخادم لا يسمح بطلبات عبر النطاقات (CORS). يجب استضافة الملف مع تفعيل ترويسات CORS.',
+	'map.cogUnsupportedFormat':
+		'يستخدم هذا الملف صيغة {{type}} غير مدعومة لعرض الخريطة. يمكن عرض ملفات COG بصيغة RGB فقط.',
 	'map.noGeoColumn': 'لم يتم اكتشاف عمود هندسي في المخطط',
 	'map.noData': 'لا تتوفر بيانات لعرض الخريطة',
 	'map.noFeatures': 'لم يتم العثور على معالم في ملف FlatGeobuf',
