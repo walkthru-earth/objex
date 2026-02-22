@@ -2,9 +2,13 @@
 import DatabaseIcon from '@lucide/svelte/icons/database';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import XIcon from '@lucide/svelte/icons/x';
+import type { Snippet } from 'svelte';
 import { Button } from '$lib/components/ui/button/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
+
+let { leading }: { leading?: Snippet } = $props();
 
 function getTabIcon(tab: { connectionId?: string }) {
 	if (tab.connectionId) return DatabaseIcon;
@@ -17,15 +21,20 @@ function handleClose(event: MouseEvent, id: string) {
 }
 </script>
 
-{#if tabs.items.length > 0}
+{#if tabs.items.length > 0 || leading}
 	<div class="flex h-9 shrink-0 items-center border-b bg-muted/30">
+		{#if leading}
+			<div class="flex items-center ps-1">
+				{@render leading()}
+			</div>
+		{/if}
 		<ScrollArea orientation="horizontal" class="w-full">
 			<div class="flex h-9 items-center">
 				{#each tabs.items as tab (tab.id)}
 					{@const TabIcon = getTabIcon(tab)}
 					{@const isActive = tabs.active?.id === tab.id}
 					<button
-						class="group relative flex h-full shrink-0 items-center gap-1.5 border-r px-3 text-sm transition-colors
+						class="group relative flex h-full shrink-0 items-center gap-1.5 border-e px-3 text-sm transition-colors
 							{isActive
 							? 'bg-background text-foreground'
 							: 'text-muted-foreground hover:bg-background/50 hover:text-foreground'}"
@@ -36,10 +45,10 @@ function handleClose(event: MouseEvent, id: string) {
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							class="ml-1 size-5 opacity-0 transition-opacity group-hover:opacity-100
+							class="ms-1 size-5 opacity-0 transition-opacity group-hover:opacity-100
 								{isActive ? 'opacity-60' : ''}"
 							onclick={(e: MouseEvent) => handleClose(e, tab.id)}
-							aria-label="Close tab {tab.name}"
+							aria-label={t('tabBar.closeTab', { name: tab.name })}
 						>
 							<XIcon class="size-3" />
 						</Button>
