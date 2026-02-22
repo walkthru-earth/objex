@@ -9,7 +9,6 @@ import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
-import StyleEditorOverlay from './StyleEditorOverlay.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -19,10 +18,15 @@ let loading = $state(true);
 let error = $state<string | null>(null);
 let wordWrap = $state(false);
 let copied = $state(false);
-let showStyleEditor = $state(false);
 const urlView = getUrlView();
-let viewMode = $state<'code' | 'stac-browser' | 'kepler'>(
-	urlView === 'stac-browser' ? 'stac-browser' : urlView === 'kepler' ? 'kepler' : 'code'
+let viewMode = $state<'code' | 'stac-browser' | 'kepler' | 'maputnik'>(
+	urlView === 'stac-browser'
+		? 'stac-browser'
+		: urlView === 'kepler'
+			? 'kepler'
+			: urlView === 'maputnik'
+				? 'maputnik'
+				: 'code'
 );
 
 type JsonKind =
@@ -66,6 +70,9 @@ const stacBrowserSrc = $derived(
 	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
 );
 const keplerSrc = $derived(`https://kepler.gl/demo?mapUrl=${encodeURIComponent(styleUrl)}`);
+const maputnikSrc = $derived(
+	`https://maplibre.org/maputnik/?style=${encodeURIComponent(styleUrl)}`
+);
 
 const languageMap: Record<string, string> = {
 	'.js': 'JavaScript',
@@ -132,7 +139,7 @@ async function loadCode() {
 	}
 }
 
-function setViewMode(mode: 'code' | 'stac-browser' | 'kepler') {
+function setViewMode(mode: 'code' | 'stac-browser' | 'kepler' | 'maputnik') {
 	viewMode = viewMode === mode ? 'code' : mode;
 	updateUrlView(viewMode);
 }
@@ -160,8 +167,13 @@ async function copyCode() {
 				<Badge variant="outline" class="hidden border-blue-200 text-blue-600 sm:inline-flex dark:border-blue-800 dark:text-blue-300">
 					{t('code.maplibreStyle')}
 				</Badge>
-				<Button size="sm" class="h-7 px-2 text-xs" onclick={() => (showStyleEditor = true)}>
-					{t('code.editStyle')}
+				<Button
+					size="sm"
+					class="h-7 px-2 text-xs {viewMode === 'maputnik' ? 'text-blue-500' : ''}"
+					variant="ghost"
+					onclick={() => setViewMode('maputnik')}
+				>
+					{viewMode === 'maputnik' ? t('code.code') : t('code.editStyle')}
 				</Button>
 			{:else if jsonKind === 'tilejson'}
 				<Badge variant="outline" class="hidden border-teal-200 text-teal-600 sm:inline-flex dark:border-teal-800 dark:text-teal-300">
@@ -214,6 +226,9 @@ async function copyCode() {
 							<DropdownMenu.Item disabled>
 								{t('code.maplibreStyle')}
 							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setViewMode('maputnik')}>
+								{viewMode === 'maputnik' ? t('code.code') : t('code.editStyle')}
+							</DropdownMenu.Item>
 						{:else if jsonKind === 'tilejson'}
 							<DropdownMenu.Item disabled>
 								{t('code.tileJson')}
@@ -263,6 +278,15 @@ async function copyCode() {
 				allow="fullscreen"
 			></iframe>
 		</div>
+	{:else if viewMode === 'maputnik'}
+		<div class="flex-1 overflow-hidden">
+			<iframe
+				src={maputnikSrc}
+				class="h-full w-full border-0"
+				title="Maputnik Style Editor"
+				allow="clipboard-read; clipboard-write; fullscreen"
+			></iframe>
+		</div>
 	{:else}
 		<div
 			dir="ltr"
@@ -283,10 +307,6 @@ async function copyCode() {
 		</div>
 	{/if}
 </div>
-
-{#if showStyleEditor}
-	<StyleEditorOverlay {styleUrl} onclose={() => (showStyleEditor = false)} />
-{/if}
 
 <style>
 	.code-viewer :global(pre) {

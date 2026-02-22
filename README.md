@@ -110,7 +110,7 @@ graph TD
 
 | Viewer | Formats | Powered by | URL Hash |
 |--------|---------|------------|----------|
-| **GeoParquetMapViewer** | GeoParquet | [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org), custom WKB parser | `#map` |
+| **GeoParquetMapViewer** | GeoParquet | [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org), custom WKB parser (unified query with TableViewer) | `#map` |
 | **MapViewer** | GeoJSON | [MapLibre GL](https://maplibre.org) | `#map` |
 | **PmtilesViewer** | PMTiles (vector + raster) | [pmtiles](https://github.com/protomaps/PMTiles), [MapLibre GL](https://maplibre.org) | — |
 | **FlatGeobufViewer** | FlatGeobuf | [flatgeobuf](https://github.com/flatgeobuf/flatgeobuf), [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org) | — |
@@ -147,7 +147,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 
 | JSON Kind | Detection | Action | URL Hash |
 |-----------|-----------|--------|----------|
-| **MapLibre Style** | `version === 8` + `sources` + `layers` | "Edit Style" — opens [Maputnik](https://maplibre.org/maputnik/) (overlay) | — |
+| **MapLibre Style** | `version === 8` + `sources` + `layers` | "Edit Style" — opens [Maputnik](https://maplibre.org/maputnik/) (iframe) | `#maputnik` |
 | **TileJSON** | `tilejson` + `tiles` | Badge only | — |
 | **STAC Catalog** | `type === "Catalog"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) | `#stac-browser` |
 | **STAC Collection** | `type === "Collection"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) | `#stac-browser` |
@@ -163,7 +163,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | RTL text plugin | [@mapbox/mapbox-gl-rtl-text](https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.3.0/) | MapLibre GL |
 | STAC Map | [Development Seed stac-map](https://developmentseed.org/stac-map) | StacMapViewer |
 | STAC Browser | [Radiant Earth STAC Browser](https://radiantearth.github.io/stac-browser/) | CodeViewer |
-| Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | StyleEditorOverlay |
+| Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | CodeViewer |
 | Kepler.gl | [Kepler.gl Demo](https://kepler.gl/demo) | CodeViewer |
 
 ## Quick Start
