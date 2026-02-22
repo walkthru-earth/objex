@@ -195,7 +195,7 @@ $effect(() => {
 });
 </script>
 
-<div bind:this={editorContainer} class="codemirror-wrapper overflow-hidden rounded border border-zinc-200 dark:border-zinc-700"></div>
+<div bind:this={editorContainer} dir="ltr" class="codemirror-wrapper overflow-hidden rounded border border-zinc-200 dark:border-zinc-700"></div>
 
 <style>
 	.codemirror-wrapper :global(.cm-editor) {

@@ -63,6 +63,7 @@ onDestroy(() => {
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+	dir="ltr"
 	class="milkdown-wrapper h-full overflow-auto"
 	bind:this={editorEl}
 	onkeydown={handleKeydown}
