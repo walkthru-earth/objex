@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, FolderOpen, Loader2 } from '@lucide/sv
 import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
 import { Button } from '$lib/components/ui/button/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { safeLock } from '$lib/stores/safelock.svelte.js';
 import type { FileEntry } from '$lib/types.js';
@@ -119,7 +120,7 @@ function handleRename(entry: FileEntry) {
 					onclick={() => { createFolderOpen = true; }}
 				>
 					<FolderPlusIcon class="size-3.5" />
-					New Folder
+					{t('fileBrowser.newFolder')}
 				</Button>
 			{/if}
 		</div>
@@ -132,7 +133,7 @@ function handleRename(entry: FileEntry) {
 			class="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1 transition-colors"
 			onclick={() => handleSort('name')}
 		>
-			Name
+			{t('fileBrowser.name')}
 			{#if sortField === 'name'}
 				{#if sortDirection === 'asc'}
 					<ArrowUp class="size-3" />
@@ -154,7 +155,7 @@ function handleRename(entry: FileEntry) {
 					<ArrowDown class="size-3" />
 				{/if}
 			{/if}
-			Size
+			{t('fileBrowser.size')}
 		</button>
 		<button
 			class="text-muted-foreground hover:text-foreground flex w-24 shrink-0 items-center justify-end gap-1 transition-colors"
@@ -167,7 +168,7 @@ function handleRename(entry: FileEntry) {
 					<ArrowDown class="size-3" />
 				{/if}
 			{/if}
-			Modified
+			{t('fileBrowser.modified')}
 		</button>
 	</div>
 
@@ -186,9 +187,9 @@ function handleRename(entry: FileEntry) {
 				<div class="flex h-full flex-col items-center justify-center gap-2 px-4">
 					<FolderOpen class="text-muted-foreground/50 size-10" />
 					{#if filterQuery}
-						<p class="text-muted-foreground text-sm">No files matching "{filterQuery}"</p>
+						<p class="text-muted-foreground text-sm">{t('fileBrowser.noMatch', { query: filterQuery })}</p>
 					{:else}
-						<p class="text-muted-foreground text-sm">This folder is empty</p>
+						<p class="text-muted-foreground text-sm">{t('fileBrowser.empty')}</p>
 					{/if}
 				</div>
 			{:else}

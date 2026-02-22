@@ -113,7 +113,7 @@ $effect(() => {
 			<thead class="sticky top-0 z-10">
 				<tr class="bg-zinc-100 dark:bg-zinc-800">
 					<th
-						class="border-b border-r border-zinc-200 px-3 py-1.5 text-left text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
+						class="border-b border-e border-zinc-200 px-3 py-1.5 text-start text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
 						style="width: 3rem;"
 					>
 						#
@@ -121,9 +121,9 @@ $effect(() => {
 					{#each columns as col}
 						{@const category = columnCategories[col]}
 						<th
-							class="border-b border-r border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
-							class:text-left={category !== 'number'}
-							class:text-right={category === 'number'}
+							class="border-b border-e border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
+							class:text-start={category !== 'number'}
+							class:text-end={category === 'number'}
 							class:cursor-pointer={!!onSort}
 							onclick={() => handleHeaderClick(col)}
 						>
@@ -159,7 +159,7 @@ $effect(() => {
 				{#each visibleRows as row, i}
 					<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
 						<td
-							class="border-b border-r border-zinc-200 px-3 py-1 text-xs text-zinc-400 dark:border-zinc-700/50 dark:text-zinc-500"
+							class="border-b border-e border-zinc-200 px-3 py-1 text-xs text-zinc-400 dark:border-zinc-700/50 dark:text-zinc-500"
 							style="height: {ROW_HEIGHT}px;"
 						>
 							{visibleStart + i + 1}
@@ -169,8 +169,8 @@ $effect(() => {
 							{@const cellValue = row[col]}
 							{@const cellIsNull = isNull(cellValue)}
 							<td
-								class="border-b border-r border-zinc-200 px-3 py-1 text-xs dark:border-zinc-700/50"
-								class:text-right={category === 'number' && !cellIsNull}
+								class="border-b border-e border-zinc-200 px-3 py-1 text-xs dark:border-zinc-700/50"
+								class:text-end={category === 'number' && !cellIsNull}
 								class:font-mono={category === 'number' && !cellIsNull}
 								style="height: {ROW_HEIGHT}px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
 								title={cellIsNull ? 'NULL' : formatCell(cellValue, category)}

@@ -11,6 +11,7 @@ import {
 	SheetHeader,
 	SheetTitle
 } from '$lib/components/ui/sheet/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 
 interface Props {
@@ -61,16 +62,16 @@ function handleKeydown(e: KeyboardEvent) {
 		<SheetHeader>
 			<div class="flex items-center gap-2">
 				<FolderPlusIcon class="size-5 text-primary" />
-				<SheetTitle>New Folder</SheetTitle>
+				<SheetTitle>{t('createFolder.title')}</SheetTitle>
 			</div>
 			<SheetDescription>
-				Create a new folder in the current directory.
+				{t('createFolder.description')}
 			</SheetDescription>
 		</SheetHeader>
 
 		<div class="py-4">
 			<Input
-				placeholder="Folder name"
+				placeholder={t('createFolder.placeholder')}
 				bind:value={folderName}
 				onkeydown={handleKeydown}
 			/>
@@ -82,14 +83,14 @@ function handleKeydown(e: KeyboardEvent) {
 		<SheetFooter class="flex-row gap-2">
 			<div class="flex-1"></div>
 			<Button variant="ghost" size="sm" onclick={() => { open = false; }} disabled={creating}>
-				Cancel
+				{t('createFolder.cancel')}
 			</Button>
 			<Button size="sm" disabled={!canCreate || creating} onclick={handleCreate}>
 				{#if creating}
-					<Loader2Icon class="mr-1.5 size-4 animate-spin" />
-					Creating...
+					<Loader2Icon class="me-1.5 size-4 animate-spin" />
+					{t('createFolder.creating')}
 				{:else}
-					Create
+					{t('createFolder.create')}
 				{/if}
 			</Button>
 		</SheetFooter>

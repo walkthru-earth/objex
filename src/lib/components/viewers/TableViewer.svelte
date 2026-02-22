@@ -6,6 +6,7 @@ import { format as formatSql } from 'sql-formatter';
 import { untrack } from 'svelte';
 import CodeMirrorEditor from '$lib/components/editor/CodeMirrorEditor.svelte';
 import { buildDuckDbSource, isCloudNativeFormat } from '$lib/file-icons/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
@@ -90,14 +91,14 @@ function cancelLoad() {
 	loading = false;
 	queryRunning = false;
 	loadStage = '';
-	error = 'Query cancelled';
+	error = t('table.queryCancelled');
 }
 
 async function loadTable() {
 	const thisGen = ++loadGeneration;
 	loading = true;
 	error = null;
-	loadStage = 'Preparing query...';
+	loadStage = t('table.preparingQuery');
 
 	// Set SQL eagerly so editor shows the query while loading
 	const initialSql = buildDefaultSql(0);
@@ -105,7 +106,7 @@ async function loadTable() {
 	customSql = initialSql;
 
 	try {
-		loadStage = 'Initializing query engine...';
+		loadStage = t('table.initEngine');
 		const engine = await getQueryEngine();
 		if (thisGen !== loadGeneration) return; // cancelled
 
@@ -115,7 +116,7 @@ async function loadTable() {
 		if (cloudNative) {
 			// Cloud-native formats (Parquet): metadata reads are cheap range
 			// requests — separate schema + count queries don't re-download.
-			loadStage = 'Loading schema...';
+			loadStage = t('table.loadingSchema');
 			schema = await engine.getSchema(connId, fileUrl);
 			if (thisGen !== loadGeneration) return;
 			columns = schema.map((f) => f.name);
@@ -126,7 +127,7 @@ async function loadTable() {
 		sqlQuery = buildDefaultSql(0);
 		customSql = sqlQuery;
 
-		loadStage = 'Running query...';
+		loadStage = t('table.runningQuery');
 		const start = performance.now();
 		const result = await executeQuery(sqlQuery);
 		if (thisGen !== loadGeneration) return;
@@ -158,7 +159,7 @@ async function loadTable() {
 		if (!cloudNative && rows.length < pageSize) {
 			totalRows = rows.length;
 		} else {
-			loadStage = 'Counting total rows...';
+			loadStage = t('table.countingRows');
 			engine
 				.getRowCount(connId, fileUrl)
 				.then((count) => {
@@ -223,7 +224,7 @@ async function loadPage(page: number) {
 async function runCustomSql() {
 	queryRunning = true;
 	error = null;
-	loadStage = 'Running custom query...';
+	loadStage = t('table.runningCustomQuery');
 	const start = performance.now();
 	try {
 		sqlQuery = customSql;
@@ -374,23 +375,23 @@ async function copyLink(type: 'https' | 's3') {
 						value={customSql}
 						onChange={handleSqlChange}
 						onExecute={runCustomSql}
-						placeholder="Enter SQL query... (Cmd+Enter to run)"
+						placeholder={t('table.enterSql')}
 						schemaColumns={columns}
 					/>
 				</div>
 				<div class="flex shrink-0 flex-col gap-1">
 					<button
-						class="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+						class="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
 						onclick={runCustomSql}
 						disabled={queryRunning || loading}
 					>
-						{queryRunning ? 'Running...' : 'Run'}
+						{queryRunning ? t('table.running') : t('table.run')}
 					</button>
 					<button
 						class="rounded px-3 py-1 text-xs text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 						onclick={handleFormatSql}
 					>
-						Format
+						{t('table.format')}
 					</button>
 				</div>
 			</div>
@@ -411,14 +412,14 @@ async function copyLink(type: 'https' | 's3') {
 		<div class="flex flex-1 overflow-hidden">
 			{#if loading || queryRunning}
 				<div class="flex flex-1 flex-col items-center justify-center gap-3">
-					<Loader2Icon class="size-6 animate-spin text-blue-500" />
-					<p class="text-sm text-zinc-400">{loadStage || 'Loading...'}</p>
+					<Loader2Icon class="size-6 animate-spin text-primary" />
+					<p class="text-sm text-zinc-400">{loadStage || t('table.loading')}</p>
 					<button
 						class="mt-1 flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
 						onclick={cancelLoad}
 					>
 						<XCircleIcon class="size-3" />
-						Cancel
+						{t('table.cancel')}
 					</button>
 				</div>
 			{:else if error && rows.length === 0}

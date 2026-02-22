@@ -15,6 +15,7 @@ import {
 	SheetHeader,
 	SheetTitle
 } from '$lib/components/ui/sheet/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
 import { describeParseResult, looksLikeUrl, parseStorageUrl } from '$lib/utils/storage-url.js';
@@ -54,7 +55,7 @@ let parsedHint = $state<string | null>(null);
 let isAzure = $derived(provider === 'azure');
 let isStorj = $derived(provider === 'storj');
 let needsRegion = $derived(provider !== 'azure' && provider !== 'r2' && provider !== 'storj');
-let bucketLabel = $derived(isAzure ? 'Container' : 'Bucket');
+let bucketLabel = $derived(isAzure ? t('connection.container') : t('connection.bucket'));
 
 function handleBucketInput(value: string) {
 	bucket = value;
@@ -93,7 +94,7 @@ function applyParsedUrl() {
 }
 
 let isEditMode = $derived(editConnection !== null && editConnection !== undefined);
-let title = $derived(isEditMode ? 'Edit Connection' : 'New Connection');
+let title = $derived(isEditMode ? t('connection.editTitle') : t('connection.newTitle'));
 let canSave = $derived(
 	name.trim() !== '' && bucket.trim() !== '' && (!needsRegion || region.trim() !== '')
 );
@@ -222,9 +223,9 @@ function handleCancel() {
 			</div>
 			<SheetDescription>
 				{#if isEditMode}
-					Update the connection settings below.
+					{t('connection.editDescription')}
 				{:else}
-					Configure a new cloud storage connection.
+					{t('connection.newDescription')}
 				{/if}
 			</SheetDescription>
 		</SheetHeader>
@@ -233,7 +234,7 @@ function handleCancel() {
 			<!-- Name -->
 			<div class="flex flex-col gap-1.5">
 				<label for="conn-name" class="text-sm font-medium">
-					Name <span class="text-destructive">*</span>
+					{t('connection.name')} <span class="text-destructive">*</span>
 				</label>
 				<Input
 					id="conn-name"
@@ -244,7 +245,7 @@ function handleCancel() {
 
 			<!-- Provider -->
 			<fieldset class="flex flex-col gap-1.5">
-				<legend class="text-sm font-medium">Provider</legend>
+				<legend class="text-sm font-medium">{t('connection.provider')}</legend>
 				<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Cloud storage provider">
 					{#each providers as p (p.value)}
 						<Button
@@ -273,22 +274,22 @@ function handleCancel() {
 				</label>
 				<Input
 					id="conn-bucket"
-					placeholder={isAzure ? 'my-container' : 'my-bucket or s3://bucket or https://endpoint/bucket'}
+					placeholder={isAzure ? t('connection.containerPlaceholder') : t('connection.bucketPlaceholder')}
 					value={bucket}
 					oninput={(e: Event) => handleBucketInput((e.target as HTMLInputElement).value)}
 				/>
 				{#if parsedHint}
 					<button
 						type="button"
-						class="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-left text-xs text-blue-700 hover:bg-blue-500/20 dark:text-blue-400"
+						class="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-start text-xs text-blue-700 hover:bg-blue-500/20 dark:text-blue-400"
 						onclick={applyParsedUrl}
 					>
 						<LinkIcon class="size-3 shrink-0" />
-						<span>{parsedHint} — <strong>click to apply</strong></span>
+						<span>{parsedHint} <strong>{t('connection.clickToApply')}</strong></span>
 					</button>
 				{/if}
 				<p class="text-xs text-muted-foreground">
-					{isAzure ? 'Azure Blob container name.' : 'Paste an S3 URL or bucket name. URLs are auto-detected.'}
+					{isAzure ? t('connection.azureBucketHelper') : t('connection.s3BucketHelper')}
 				</p>
 			</div>
 
@@ -296,7 +297,7 @@ function handleCancel() {
 			{#if needsRegion}
 				<div class="flex flex-col gap-1.5">
 					<label for="conn-region" class="text-sm font-medium">
-						Region <span class="text-destructive">*</span>
+						{t('connection.region')} <span class="text-destructive">*</span>
 					</label>
 					<Input
 						id="conn-region"
@@ -308,7 +309,7 @@ function handleCancel() {
 
 			<!-- Endpoint -->
 			<div class="flex flex-col gap-1.5">
-				<label for="conn-endpoint" class="text-sm font-medium">Endpoint{isAzure ? ' *' : ''}</label>
+				<label for="conn-endpoint" class="text-sm font-medium">{t('connection.endpoint')}{isAzure ? ' *' : ''}</label>
 				<Input
 					id="conn-endpoint"
 					placeholder={isAzure
@@ -320,10 +321,10 @@ function handleCancel() {
 				/>
 				<p class="text-xs text-muted-foreground">
 					{isAzure
-						? 'Azure Blob Storage endpoint, e.g. https://myaccount.blob.core.windows.net'
+						? t('connection.azureEndpointHelper')
 						: isStorj
-							? 'Storj S3 gateway. Use gateway.us1/eu1/ap1.storjshare.io for a specific region.'
-							: 'Leave empty for default AWS endpoint. Required for MinIO, R2, and other S3-compatible services.'}
+							? t('connection.storjEndpointHelper')
+							: t('connection.endpointHelper')}
 				</p>
 			</div>
 
@@ -333,7 +334,7 @@ function handleCancel() {
 					type="button"
 					role="switch"
 					aria-checked={anonymous}
-					aria-label="Toggle anonymous access"
+					aria-label={t('connection.anonymous')}
 					class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background {anonymous ? 'bg-primary' : 'bg-input'}"
 					onclick={() => { anonymous = !anonymous; }}
 				>
@@ -341,7 +342,7 @@ function handleCancel() {
 						class="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform {anonymous ? 'translate-x-4' : 'translate-x-0'}"
 					></span>
 				</button>
-				<span class="text-sm font-medium">Anonymous Access</span>
+				<span class="text-sm font-medium">{t('connection.anonymous')}</span>
 			</div>
 
 			<!-- Credentials (shown only when not anonymous) -->
@@ -349,7 +350,7 @@ function handleCancel() {
 				<form onsubmit={(e: Event) => e.preventDefault()} class="flex flex-col gap-4 rounded-md border border-border bg-muted/30 p-3">
 					{#if isAzure}
 						<div class="flex flex-col gap-1.5">
-							<label for="conn-sas-token" class="text-sm font-medium">SAS Token</label>
+							<label for="conn-sas-token" class="text-sm font-medium">{t('connection.sasToken')}</label>
 							<Input
 								id="conn-sas-token"
 								name="password"
@@ -359,12 +360,12 @@ function handleCancel() {
 								bind:value={sasToken}
 							/>
 							<p class="text-xs text-muted-foreground">
-								Shared Access Signature token for Azure Blob Storage.
+								{t('connection.sasTokenHelper')}
 							</p>
 						</div>
 					{:else}
 						<div class="flex flex-col gap-1.5">
-							<label for="conn-access-key" class="text-sm font-medium">Access Key</label>
+							<label for="conn-access-key" class="text-sm font-medium">{t('connection.accessKey')}</label>
 							<Input
 								id="conn-access-key"
 								name="username"
@@ -374,7 +375,7 @@ function handleCancel() {
 							/>
 						</div>
 						<div class="flex flex-col gap-1.5">
-							<label for="conn-secret-key" class="text-sm font-medium">Secret Key</label>
+							<label for="conn-secret-key" class="text-sm font-medium">{t('connection.secretKey')}</label>
 							<Input
 								id="conn-secret-key"
 								name="password"
@@ -388,7 +389,7 @@ function handleCancel() {
 
 					<div class="flex items-start gap-1.5 text-xs text-muted-foreground">
 						<LockIcon class="mt-0.5 size-3 shrink-0" />
-						<p>Your credentials are stored only in your browser's password manager if you choose to save them. They are never sent to any external server or stored in local storage.</p>
+						<p>{t('connection.credentialNotice')}</p>
 					</div>
 				</form>
 			{/if}
@@ -397,12 +398,12 @@ function handleCancel() {
 			{#if testResult === 'success'}
 				<div class="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
 					<CheckIcon class="size-4 shrink-0" />
-					Connection successful
+					{t('connection.testSuccess')}
 				</div>
 			{:else if testResult === 'error'}
 				<div class="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
 					<XIcon class="size-4 shrink-0" />
-					Connection failed. Check your settings and try again.
+					{t('connection.testFail')}
 				</div>
 			{/if}
 		</div>
@@ -415,17 +416,17 @@ function handleCancel() {
 				onclick={handleTestConnection}
 			>
 				{#if testing}
-					<Loader2Icon class="mr-1.5 size-4 animate-spin" />
-					Testing...
+					<Loader2Icon class="me-1.5 size-4 animate-spin" />
+					{t('connection.testing')}
 				{:else}
-					Test Connection
+					{t('connection.testButton')}
 				{/if}
 			</Button>
 
 			<div class="flex-1"></div>
 
 			<Button variant="ghost" size="sm" onclick={handleCancel} disabled={saving}>
-				Cancel
+				{t('connection.cancel')}
 			</Button>
 
 			<Button
@@ -434,10 +435,10 @@ function handleCancel() {
 				onclick={handleSave}
 			>
 				{#if saving}
-					<Loader2Icon class="mr-1.5 size-4 animate-spin" />
-					Saving...
+					<Loader2Icon class="me-1.5 size-4 animate-spin" />
+					{t('connection.saving')}
 				{:else}
-					{isEditMode ? 'Update' : 'Create'}
+					{isEditMode ? t('connection.update') : t('connection.create')}
 				{/if}
 			</Button>
 		</SheetFooter>

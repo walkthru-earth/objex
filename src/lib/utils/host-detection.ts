@@ -120,7 +120,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: awsPath[1],
 				endpoint: '',
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `https://s3.${awsPath[1]}.amazonaws.com/${parts[0]}`
 			};
 		}
@@ -135,7 +135,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: 'us',
 				endpoint: '',
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `https://storage.googleapis.com/${parts[0]}`
 			};
 		}
@@ -177,7 +177,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: '',
 				endpoint: `https://${host}`,
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `https://${host}/${parts[0]}`
 			};
 		}
@@ -192,7 +192,7 @@ export function detectHostBucket(): DetectedHost | null {
 			bucket: parts[0] || r2Public[1],
 			region: 'auto',
 			endpoint: `https://${host}`,
-			rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+			rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 			bucketUrl: `https://${host}`
 		};
 	}
@@ -233,7 +233,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: wasabi[1],
 				endpoint: `https://${host}`,
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `https://${host}/${parts[0]}`
 			};
 		}
@@ -275,7 +275,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: storjGateway[1] || 'us1',
 				endpoint: `${url.protocol}//${url.host}`,
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}`
 			};
 		}
@@ -291,7 +291,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[2],
 				region: storjLink[1] || 'us1',
 				endpoint: `${url.protocol}//${url.host}/${parts[0]}/${parts[1]}`,
-				rootPrefix: parts.length > 3 ? extractRootPrefix('/' + parts.slice(3).join('/')) : '',
+				rootPrefix: parts.length > 3 ? extractRootPrefix(`/${parts.slice(3).join('/')}`) : '',
 				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}/${parts[1]}/${parts[2]}`
 			};
 		}
@@ -311,7 +311,7 @@ export function detectHostBucket(): DetectedHost | null {
 				bucket: parts[0],
 				region: 'us-east-1',
 				endpoint: `${url.protocol}//${url.host}`,
-				rootPrefix: parts.length > 1 ? extractRootPrefix('/' + parts.slice(1).join('/')) : '',
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
 				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}`
 			};
 		}

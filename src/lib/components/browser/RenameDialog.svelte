@@ -11,6 +11,7 @@ import {
 	SheetHeader,
 	SheetTitle
 } from '$lib/components/ui/sheet/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import type { FileEntry } from '$lib/types.js';
 
@@ -64,7 +65,7 @@ function handleKeydown(e: KeyboardEvent) {
 		<SheetHeader>
 			<div class="flex items-center gap-2">
 				<PencilIcon class="size-5 text-primary" />
-				<SheetTitle>Rename</SheetTitle>
+				<SheetTitle>{t('rename.title')}</SheetTitle>
 			</div>
 			<SheetDescription>
 				Enter a new name for <span class="font-medium">{entry?.name}</span>.
@@ -73,7 +74,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 		<div class="py-4">
 			<Input
-				placeholder="New name"
+				placeholder={t('rename.placeholder')}
 				bind:value={newName}
 				onkeydown={handleKeydown}
 			/>
@@ -85,14 +86,14 @@ function handleKeydown(e: KeyboardEvent) {
 		<SheetFooter class="flex-row gap-2">
 			<div class="flex-1"></div>
 			<Button variant="ghost" size="sm" onclick={() => { open = false; }} disabled={renaming}>
-				Cancel
+				{t('rename.cancel')}
 			</Button>
 			<Button size="sm" disabled={!canRename || renaming} onclick={handleRename}>
 				{#if renaming}
-					<Loader2Icon class="mr-1.5 size-4 animate-spin" />
-					Renaming...
+					<Loader2Icon class="me-1.5 size-4 animate-spin" />
+					{t('rename.renaming')}
 				{:else}
-					Rename
+					{t('rename.rename')}
 				{/if}
 			</Button>
 		</SheetFooter>

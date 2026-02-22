@@ -1,6 +1,7 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import type { Tab } from '$lib/types';
@@ -39,7 +40,7 @@ async function loadGeoData() {
 	try {
 		const geoCol = findGeoColumn(schema);
 		if (!geoCol) {
-			error = 'No geometry column detected in schema';
+			error = t('map.noGeoColumn');
 			loading = false;
 			return;
 		}
@@ -61,7 +62,7 @@ async function loadGeoData() {
 		]);
 
 		if (mapResult.rowCount === 0) {
-			error = 'No data available for map view';
+			error = t('map.noData');
 			loading = false;
 			return;
 		}
@@ -102,7 +103,7 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">Loading geometry data...</p>
+			<p class="text-sm text-zinc-400">{t('map.loadingGeometry')}</p>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
@@ -116,7 +117,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating feature count badge -->
 		{#if featureCount > 0}
 			<div
-				class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+				class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				{featureCount.toLocaleString()} features{#if featureCount >= MAP_FEATURE_LIMIT}
 					<span class="text-amber-300">(limit)</span>{/if}
@@ -126,12 +127,12 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating attributes toggle -->
 		{#if selectedFeature}
 			<button
-				class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+				class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showAttributes}
-				class:ring-blue-400={showAttributes}
+				class:ring-primary={showAttributes}
 				onclick={() => (showAttributes = !showAttributes)}
 			>
-				Attributes
+				{t('map.attributes')}
 			</button>
 		{/if}
 

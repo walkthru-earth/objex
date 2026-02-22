@@ -3,6 +3,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 import { COGLayer } from '@developmentseed/deck.gl-geotiff';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
@@ -95,9 +96,9 @@ onDestroy(() => {
 
 	{#if loading}
 		<div
-			class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+			class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 		>
-			Loading COG...
+			{t('map.loadingCog')}
 		</div>
 	{/if}
 
@@ -111,31 +112,31 @@ onDestroy(() => {
 
 	{#if cogInfo}
 		<div
-			class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+			class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 		>
 			COG {cogInfo.width} x {cogInfo.height}, {cogInfo.bandCount} band{cogInfo.bandCount !== 1 ? 's' : ''}
 		</div>
 
 		<button
-			class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+			class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 			class:ring-1={showInfo}
-			class:ring-blue-400={showInfo}
+			class:ring-primary={showInfo}
 			onclick={() => (showInfo = !showInfo)}
 		>
-			Info
+			{t('map.info')}
 		</button>
 
 		{#if showInfo}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-black/80 p-3 text-xs text-white backdrop-blur"
+				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
-				<h3 class="mb-2 font-medium text-zinc-300">COG Info</h3>
+				<h3 class="mb-2 font-medium">{t('map.cogInfo')}</h3>
 				<dl class="space-y-1.5">
-					<dt class="text-zinc-400">Size</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.size')}</dt>
 					<dd>{cogInfo.width} x {cogInfo.height}</dd>
-					<dt class="text-zinc-400">Bands</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.bands')}</dt>
 					<dd>{cogInfo.bandCount}</dd>
-					<dt class="text-zinc-400">Bounds</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.bounds')}</dt>
 					<dd>
 						W {cogInfo.bounds.west.toFixed(4)}, S {cogInfo.bounds.south.toFixed(4)}<br />
 						E {cogInfo.bounds.east.toFixed(4)}, N {cogInfo.bounds.north.toFixed(4)}

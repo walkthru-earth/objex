@@ -10,6 +10,7 @@ import {
 	SheetHeader,
 	SheetTitle
 } from '$lib/components/ui/sheet/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import type { FileEntry } from '$lib/types.js';
 
@@ -51,10 +52,10 @@ async function handleDelete() {
 		<SheetHeader>
 			<div class="flex items-center gap-2">
 				<TriangleAlertIcon class="size-5 text-destructive" />
-				<SheetTitle>Confirm Delete</SheetTitle>
+				<SheetTitle>{t('deleteConfirm.title')}</SheetTitle>
 			</div>
 			<SheetDescription>
-				This action cannot be undone.
+				{t('deleteConfirm.description')}
 			</SheetDescription>
 		</SheetHeader>
 
@@ -74,14 +75,14 @@ async function handleDelete() {
 		<SheetFooter class="flex-row gap-2">
 			<div class="flex-1"></div>
 			<Button variant="ghost" size="sm" onclick={() => { open = false; }} disabled={deleting}>
-				Cancel
+				{t('deleteConfirm.cancel')}
 			</Button>
 			<Button variant="destructive" size="sm" disabled={deleting} onclick={handleDelete}>
 				{#if deleting}
-					<Loader2Icon class="mr-1.5 size-4 animate-spin" />
-					Deleting...
+					<Loader2Icon class="me-1.5 size-4 animate-spin" />
+					{t('deleteConfirm.deleting')}
 				{:else}
-					Delete
+					{t('deleteConfirm.delete')}
 				{/if}
 			</Button>
 		</SheetFooter>

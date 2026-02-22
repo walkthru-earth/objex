@@ -1,6 +1,7 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
@@ -223,7 +224,7 @@ onDestroy(() => {
 		class="flex items-center gap-2 border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800"
 	>
 		<label class="flex items-center gap-1 text-xs text-zinc-400">
-			Variable:
+			{t('map.variable')}
 			<select
 				class="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
 				bind:value={selectedVar}
@@ -246,12 +247,12 @@ onDestroy(() => {
 					onchange={updateSelector}
 					class="h-1 w-16"
 				/>
-				<span class="w-6 text-right text-zinc-500">{selectorValues[dim.name] ?? 0}</span>
+				<span class="w-6 text-end text-zinc-500">{selectorValues[dim.name] ?? 0}</span>
 			</label>
 		{/each}
 
 		{#if selectedMeta}
-			<span class="ml-auto text-xs text-zinc-400">
+			<span class="ms-auto text-xs text-zinc-400">
 				{selectedMeta.dtype} [{selectedMeta.shape.join(', ')}]
 			</span>
 		{/if}
@@ -267,9 +268,9 @@ onDestroy(() => {
 			<MapContainer {onMapReady} bounds={[-130, 20, -60, 55]} />
 			{#if loading}
 				<div
-					class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+					class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 				>
-					Loading Zarr data...
+					{t('map.loadingZarr')}
 				</div>
 			{/if}
 		{/if}

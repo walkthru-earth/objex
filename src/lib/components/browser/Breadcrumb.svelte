@@ -1,5 +1,6 @@
 <script lang="ts">
 import { ChevronRight, Home } from '@lucide/svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 
 let { path, onNavigate }: { path: string; onNavigate: (path: string) => void } = $props();
 
@@ -25,13 +26,13 @@ function navigateToSegment(index: number) {
 	<button
 		class="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-accent"
 		onclick={() => navigateToSegment(-1)}
-		aria-label="Navigate to root"
+		aria-label={t('breadcrumb.root')}
 	>
 		<Home class="size-3.5" />
 	</button>
 
 	{#each segments as segment, i}
-		<ChevronRight class="text-muted-foreground/50 size-3.5 shrink-0" />
+		<ChevronRight class="text-muted-foreground/50 size-3.5 shrink-0 rtl:-scale-x-100" />
 
 		{#if i === segments.length - 1}
 			<span class="text-foreground truncate rounded px-1.5 py-0.5 font-medium">

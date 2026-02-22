@@ -138,7 +138,7 @@ function downloadCsv() {
 			{/if}
 			<span class="text-xs text-zinc-400">{rows.length} rows</span>
 
-			<div class="ml-auto flex items-center gap-1">
+			<div class="ms-auto flex items-center gap-1">
 				<button
 					class="rounded px-2 py-0.5 text-xs"
 					class:bg-blue-100={viewMode === 'table'}
@@ -166,7 +166,7 @@ function downloadCsv() {
 
 				{#if viewMode === 'chart'}
 					<select
-						class="ml-2 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-700"
+						class="ms-2 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-700"
 						bind:value={chartType}
 						onchange={() => renderChart()}
 					>
@@ -177,7 +177,7 @@ function downloadCsv() {
 				{/if}
 
 				<button
-					class="ml-2 rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+					class="ms-2 rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
 					onclick={downloadCsv}
 				>
 					CSV

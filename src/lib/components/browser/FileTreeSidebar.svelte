@@ -5,6 +5,7 @@ import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import SearchIcon from '@lucide/svelte/icons/search';
 import FileTypeIcon from '$lib/file-icons/FileTypeIcon.svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
@@ -137,7 +138,7 @@ async function expandToPath(path: string) {
 
 	// Expand each directory segment (skip the last segment — it's the file)
 	for (let i = 0; i < segments.length - 1; i++) {
-		accumulatedPath += segments[i] + '/';
+		accumulatedPath += `${segments[i]}/`;
 		const node = currentNodes.find((n) => n.entry.path === accumulatedPath);
 		if (!node || !node.entry.is_dir) break;
 
@@ -180,9 +181,9 @@ async function loadRoot() {
 	<div class="flex items-center gap-2 border-b border-sidebar-border px-3 py-2">
 		<span class="truncate text-xs font-medium text-muted-foreground">{connection.name}</span>
 		<button
-			class="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+			class="ms-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
 			onclick={loadRoot}
-			title="Refresh"
+			title={t('fileTree.refresh')}
 		>
 			<RefreshCwIcon class="size-3" />
 		</button>
@@ -195,7 +196,7 @@ async function loadRoot() {
 			<input
 				type="text"
 				class="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-				placeholder="Filter files..."
+				placeholder={t('fileTree.filterPlaceholder')}
 				bind:value={filterQuery}
 			/>
 		</div>
@@ -209,7 +210,7 @@ async function loadRoot() {
 			</div>
 		{:else if filteredNodes.length === 0}
 			<div class="px-3 py-6 text-center text-xs text-muted-foreground">
-				{filterQuery ? 'No matching files' : 'Empty bucket'}
+				{filterQuery ? t('fileTree.noMatch') : t('fileTree.emptyBucket')}
 			</div>
 		{:else}
 			<div class="min-w-max py-1">
@@ -223,22 +224,22 @@ async function loadRoot() {
 
 {#snippet treeItem(node: TreeNode, depth: number)}
 	<div
-		class="flex w-full items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-left text-xs hover:bg-accent/50"
-		style="padding-left: {8 + depth * 16}px; height: 24px;"
+		class="flex w-full items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-start text-xs hover:bg-accent/50"
+		style="padding-inline-start: {8 + depth * 16}px; height: 24px;"
 	>
 		<!-- Expand/collapse chevron for folders -->
 		{#if node.entry.is_dir}
 			<button
 				class="shrink-0 rounded hover:bg-accent"
 				onclick={(e) => handleChevronClick(e, node)}
-				title={isViewerDir(node.entry) ? 'Expand directory' : undefined}
+				title={isViewerDir(node.entry) ? t('fileTree.expandDir') : undefined}
 			>
 				{#if node.loading}
 					<Loader2Icon class="size-3 animate-spin text-muted-foreground" />
 				{:else if node.expanded}
 					<ChevronDownIcon class="size-3 text-muted-foreground" />
 				{:else}
-					<ChevronRightIcon class="size-3 text-muted-foreground" />
+					<ChevronRightIcon class="size-3 text-muted-foreground rtl:-scale-x-100" />
 				{/if}
 			</button>
 		{:else}

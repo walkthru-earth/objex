@@ -2,6 +2,7 @@
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import UploadIcon from '@lucide/svelte/icons/upload';
 import { Button } from '$lib/components/ui/button/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 
 let fileInput: HTMLInputElement;
@@ -56,9 +57,9 @@ async function handleFileSelect(e: Event) {
 >
 	{#if uploading}
 		<Loader2Icon class="size-3.5 animate-spin" />
-		Uploading
+		{t('upload.uploading')}
 	{:else}
 		<UploadIcon class="size-3.5" />
-		Upload
+		{t('upload.upload')}
 	{/if}
 </Button>

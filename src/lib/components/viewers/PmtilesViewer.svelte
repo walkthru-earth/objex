@@ -2,6 +2,7 @@
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
 import { untrack } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import {
 	buildPmtilesLayers,
@@ -86,7 +87,7 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">Loading PMTiles...</p>
+			<p class="text-sm text-zinc-400">{t('map.loadingPmtiles')}</p>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
@@ -100,7 +101,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating metadata badge -->
 		{#if metadata}
 			<div
-				class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+				class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				{metadata.formatLabel} · z{metadata.minZoom}-{metadata.maxZoom}
 				{#if metadata.layers.length > 0}
@@ -112,70 +113,70 @@ function onMapReady(map: maplibregl.Map) {
 
 		<!-- Floating info toggle -->
 		<button
-			class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+			class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 			class:ring-1={showInfo}
-			class:ring-blue-400={showInfo}
+			class:ring-primary={showInfo}
 			onclick={() => (showInfo = !showInfo)}
 		>
-			Info
+			{t('map.info')}
 		</button>
 
 		{#if showInfo && metadata}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-black/80 p-3 text-xs text-white backdrop-blur"
+				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
-				<h3 class="mb-2 font-medium text-zinc-300">Archive Info</h3>
+				<h3 class="mb-2 font-medium">{t('map.archiveInfo')}</h3>
 				<dl class="space-y-1.5">
 					{#if metadata.name}
-						<dt class="text-zinc-400">Name</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.name')}</dt>
 						<dd>{metadata.name}</dd>
 					{/if}
 					{#if metadata.description}
-						<dt class="text-zinc-400">Description</dt>
-						<dd class="text-zinc-300">{metadata.description}</dd>
+						<dt class="text-muted-foreground">{t('mapInfo.description')}</dt>
+						<dd class="opacity-80">{metadata.description}</dd>
 					{/if}
-					<dt class="text-zinc-400">Spec Version</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.specVersion')}</dt>
 					<dd>v{metadata.specVersion}</dd>
-					<dt class="text-zinc-400">Tile Format</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.tileFormat')}</dt>
 					<dd>{metadata.formatLabel}</dd>
-					<dt class="text-zinc-400">Zoom Range</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.zoomRange')}</dt>
 					<dd>{metadata.minZoom} - {metadata.maxZoom}</dd>
-					<dt class="text-zinc-400">Tile Compression</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.tileCompression')}</dt>
 					<dd>{metadata.tileCompression}</dd>
-					<dt class="text-zinc-400">Internal Compression</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.internalCompression')}</dt>
 					<dd>{metadata.internalCompression}</dd>
-					<dt class="text-zinc-400">Clustered</dt>
-					<dd>{metadata.clustered ? 'Yes' : 'No'}</dd>
-					<dt class="text-zinc-400">Addressed Tiles</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.clustered')}</dt>
+					<dd>{metadata.clustered ? t('mapInfo.yes') : t('mapInfo.no')}</dd>
+					<dt class="text-muted-foreground">{t('mapInfo.addressedTiles')}</dt>
 					<dd>{metadata.numAddressedTiles.toLocaleString()}</dd>
-					<dt class="text-zinc-400">Tile Entries</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.tileEntries')}</dt>
 					<dd>{metadata.numTileEntries.toLocaleString()}</dd>
-					<dt class="text-zinc-400">Unique Contents</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.uniqueContents')}</dt>
 					<dd>{metadata.numTileContents.toLocaleString()}</dd>
 					{#if metadata.bounds}
-						<dt class="text-zinc-400">Bounds</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.bounds')}</dt>
 						<dd class="font-mono text-[10px]">
 							{metadata.bounds.map((v) => v.toFixed(4)).join(', ')}
 						</dd>
 					{/if}
 					{#if metadata.center}
-						<dt class="text-zinc-400">Center</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.center')}</dt>
 						<dd class="font-mono text-[10px]">
 							{metadata.center.map((v) => v.toFixed(4)).join(', ')} (z{metadata.centerZoom})
 						</dd>
 					{/if}
 					{#if metadata.layers.length > 0}
-						<dt class="text-zinc-400">Layers ({metadata.layers.length})</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.layers')} ({metadata.layers.length})</dt>
 						{#each metadata.layers as layer}
-							<dd class="ml-2 text-zinc-300">- {layer}</dd>
+							<dd class="ms-2 opacity-80">- {layer}</dd>
 						{/each}
 					{/if}
 					{#if metadata.attribution}
-						<dt class="text-zinc-400">Attribution</dt>
-						<dd class="text-zinc-300">{metadata.attribution}</dd>
+						<dt class="text-muted-foreground">{t('mapInfo.attribution')}</dt>
+						<dd class="opacity-80">{metadata.attribution}</dd>
 					{/if}
 					{#if metadata.version}
-						<dt class="text-zinc-400">Data Version</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.dataVersion')}</dt>
 						<dd>{metadata.version}</dd>
 					{/if}
 				</dl>

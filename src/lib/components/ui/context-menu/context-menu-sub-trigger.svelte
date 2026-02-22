@@ -25,5 +25,5 @@ let {
 	{...restProps}
 >
 	{@render children?.()}
-	<ChevronRightIcon class="ms-auto" />
+	<ChevronRightIcon class="ms-auto rtl:-scale-x-100" />
 </ContextMenuPrimitive.SubTrigger>

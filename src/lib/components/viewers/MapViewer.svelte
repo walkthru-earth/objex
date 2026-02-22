@@ -1,5 +1,6 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
+import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
 import AttributeTable from './map/AttributeTable.svelte';
@@ -154,7 +155,7 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">Loading map data...</p>
+			<p class="text-sm text-zinc-400">{t('map.loadingData')}</p>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
@@ -167,12 +168,12 @@ function onMapReady(map: maplibregl.Map) {
 
 		{#if selectedFeature}
 			<button
-				class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+				class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showAttributes}
-				class:ring-blue-400={showAttributes}
+				class:ring-primary={showAttributes}
 				onclick={() => (showAttributes = !showAttributes)}
 			>
-				Attributes
+				{t('map.attributes')}
 			</button>
 		{/if}
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 import UploadCloudIcon from '@lucide/svelte/icons/upload-cloud';
 import type { Snippet } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { safeLock } from '$lib/stores/safelock.svelte.js';
 
@@ -76,7 +77,7 @@ async function handleDrop(e: DragEvent) {
 			class="absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm"
 		>
 			<UploadCloudIcon class="size-10 text-primary/70" />
-			<p class="text-sm font-medium text-primary/70">Drop files to upload</p>
+			<p class="text-sm font-medium text-primary/70">{t('dropZone.message')}</p>
 		</div>
 	{/if}
 </div>

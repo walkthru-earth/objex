@@ -4,6 +4,7 @@ import FileTextIcon from '@lucide/svelte/icons/file-text';
 import FolderIcon from '@lucide/svelte/icons/folder';
 import GlobeIcon from '@lucide/svelte/icons/globe';
 import { Separator } from '$lib/components/ui/separator/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { files } from '$lib/stores/files.svelte.js';
 import SafeLockToggle from './SafeLockToggle.svelte';
@@ -37,7 +38,7 @@ let displayCount = $derived(isBrowsingRemote ? browser.entries.length : files.en
 	<!-- Entry count -->
 	{#if displayCount > 0}
 		<FileTextIcon class="size-3 shrink-0" />
-		<span>{displayCount} {displayCount === 1 ? "item" : "items"}</span>
+		<span>{displayCount} {displayCount === 1 ? t('statusBar.item') : t('statusBar.items')}</span>
 		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
 	{/if}
 
@@ -50,5 +51,5 @@ let displayCount = $derived(isBrowsingRemote ? browser.entries.length : files.en
 
 	<!-- Mode indicator -->
 	<GlobeIcon class="size-3 shrink-0" />
-	<span>Web</span>
+	<span>{t('statusBar.web')}</span>
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 import DownloadIcon from '@lucide/svelte/icons/download';
+import { t } from '$lib/i18n/index.svelte.js';
 import { exportToCsv, exportToJson } from '$lib/utils/export.js';
 
 let {
@@ -42,14 +43,14 @@ function handleClickOutside(e: MouseEvent) {
 	<!-- Left side -->
 	<div>
 		{#if loading}
-			<span class="animate-pulse">Running query...</span>
+			<span class="animate-pulse">{t('statusBar.runningQuery')}</span>
 		{:else if rowCount > 0}
-			<span>{rowCount.toLocaleString()} rows</span>
+			<span>{rowCount.toLocaleString()} {t('statusBar.rowsLabel')}</span>
 			{#if executionTimeMs > 0}
-				<span class="text-zinc-400 dark:text-zinc-500"> in {executionTimeMs}ms</span>
+				<span class="text-zinc-400 dark:text-zinc-500"> {t('statusBar.inTime', { time: executionTimeMs })}</span>
 			{/if}
 		{:else}
-			<span>No results</span>
+			<span>{t('statusBar.noResults')}</span>
 		{/if}
 	</div>
 
@@ -62,28 +63,28 @@ function handleClickOutside(e: MouseEvent) {
 			class:opacity-40={rows.length === 0}
 		>
 			<DownloadIcon class="size-3" />
-			<span>Export</span>
+			<span>{t('statusBar.export')}</span>
 			<ChevronDownIcon class="size-3" />
 		</button>
 
 		{#if exportOpen}
 			<div
-				class="absolute bottom-full right-0 mb-1 w-32 rounded border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+				class="absolute bottom-full end-0 mb-1 w-32 rounded border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
 				role="menu"
 			>
 				<button
-					class="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
+					class="w-full px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
 					onclick={(e) => { e.stopPropagation(); handleExportCsv(); }}
 					role="menuitem"
 				>
-					Export as CSV
+					{t('statusBar.exportCsv')}
 				</button>
 				<button
-					class="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
+					class="w-full px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
 					onclick={(e) => { e.stopPropagation(); handleExportJson(); }}
 					role="menuitem"
 				>
-					Export as JSON
+					{t('statusBar.exportJson')}
 				</button>
 			</div>
 		{/if}

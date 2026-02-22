@@ -1,6 +1,7 @@
 <script lang="ts">
 import './layout.css';
 import { base } from '$app/paths';
+import { getDir } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 
 let { children } = $props();
@@ -15,6 +16,13 @@ $effect(() => {
 	} else {
 		root.classList.toggle('dark', settings.theme === 'dark');
 	}
+});
+
+// Apply locale dir and lang to html element
+$effect(() => {
+	const root = document.documentElement;
+	root.dir = getDir();
+	root.lang = settings.locale;
 });
 
 // Also listen for system theme changes when set to "system"

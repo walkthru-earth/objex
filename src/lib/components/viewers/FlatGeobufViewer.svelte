@@ -2,6 +2,7 @@
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import type maplibregl from 'maplibre-gl';
 import { untrack } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { createDeckOverlay, loadDeckModules } from '$lib/utils/deck.js';
 import { buildHttpsUrl } from '$lib/utils/url.js';
@@ -174,7 +175,7 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">Loading FlatGeobuf...</p>
+			<p class="text-sm text-zinc-400">{t('map.loadingFgb')}</p>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
@@ -188,7 +189,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating feature count badge -->
 		{#if featureCount > 0}
 			<div
-				class="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white"
+				class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= FEATURE_LIMIT}
 					<span class="text-amber-300">
@@ -201,49 +202,49 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating info toggle -->
 		{#if headerInfo}
 			<button
-				class="absolute right-12 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+				class="absolute right-12 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showInfo}
-				class:ring-blue-400={showInfo}
+				class:ring-primary={showInfo}
 				onclick={() => (showInfo = !showInfo)}
 			>
-				Info
+				{t('map.info')}
 			</button>
 		{/if}
 
 		<!-- Floating attributes toggle -->
 		{#if selectedFeature}
 			<button
-				class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
+				class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showAttributes}
-				class:ring-blue-400={showAttributes}
+				class:ring-primary={showAttributes}
 				onclick={() => (showAttributes = !showAttributes)}
 			>
-				Attributes
+				{t('map.attributes')}
 			</button>
 		{/if}
 
 		{#if showInfo && headerInfo}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-black/80 p-3 text-xs text-white backdrop-blur"
+				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
-				<h3 class="mb-2 font-medium text-zinc-300">FlatGeobuf Info</h3>
+				<h3 class="mb-2 font-medium">{t('map.flatgeobufInfo')}</h3>
 				<dl class="space-y-1.5">
 					{#if headerInfo.title}
-						<dt class="text-zinc-400">Title</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.title')}</dt>
 						<dd>{headerInfo.title}</dd>
 					{/if}
 					{#if headerInfo.description}
-						<dt class="text-zinc-400">Description</dt>
-						<dd class="text-zinc-300">{headerInfo.description}</dd>
+						<dt class="text-muted-foreground">{t('mapInfo.description')}</dt>
+						<dd class="opacity-80">{headerInfo.description}</dd>
 					{/if}
-					<dt class="text-zinc-400">Geometry Type</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.geometryType')}</dt>
 					<dd>{headerInfo.geometryType}</dd>
-					<dt class="text-zinc-400">Total Features</dt>
+					<dt class="text-muted-foreground">{t('mapInfo.totalFeatures')}</dt>
 					<dd>{headerInfo.featuresCount.toLocaleString()}</dd>
-					<dt class="text-zinc-400">Spatial Index</dt>
-					<dd>{headerInfo.hasIndex ? 'Yes (packed R-tree)' : 'No'}</dd>
+					<dt class="text-muted-foreground">{t('mapInfo.spatialIndex')}</dt>
+					<dd>{headerInfo.hasIndex ? t('mapInfo.yesRTree') : t('mapInfo.no')}</dd>
 					{#if headerInfo.crs}
-						<dt class="text-zinc-400">CRS</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.crs')}</dt>
 						<dd>
 							{#if headerInfo.crs.org && headerInfo.crs.code}
 								{headerInfo.crs.org}:{headerInfo.crs.code}
@@ -254,9 +255,9 @@ function onMapReady(map: maplibregl.Map) {
 						</dd>
 					{/if}
 					{#if headerInfo.columns.length > 0}
-						<dt class="text-zinc-400">Columns ({headerInfo.columns.length})</dt>
+						<dt class="text-muted-foreground">{t('mapInfo.columns')} ({headerInfo.columns.length})</dt>
 						{#each headerInfo.columns as col}
-							<dd class="ml-2 text-zinc-300">- {col.name}</dd>
+							<dd class="ms-2 opacity-80">- {col.name}</dd>
 						{/each}
 					{/if}
 				</dl>

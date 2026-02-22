@@ -2,6 +2,7 @@
 import LockIcon from '@lucide/svelte/icons/lock';
 import LockOpenIcon from '@lucide/svelte/icons/lock-open';
 import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+import { t } from '$lib/i18n/index.svelte.js';
 import { safeLock } from '$lib/stores/safelock.svelte.js';
 
 safeLock.init();
@@ -14,7 +15,7 @@ safeLock.init();
 				<button
 					{...props}
 					class="inline-flex size-5 items-center justify-center rounded transition-colors hover:bg-accent"
-					aria-label={safeLock.locked ? 'Safe lock enabled (read-only)' : 'Safe lock disabled (writes allowed)'}
+					aria-label={safeLock.locked ? t('safeLock.enabledAria') : t('safeLock.disabledAria')}
 					onclick={() => safeLock.toggle()}
 				>
 					{#if safeLock.locked}
@@ -27,9 +28,9 @@ safeLock.init();
 		</Tooltip.Trigger>
 		<Tooltip.Content>
 			{#if safeLock.locked}
-				Safe lock ON — write operations disabled
+				{t('safeLock.enabledTooltip')}
 			{:else}
-				Safe lock OFF — write operations enabled
+				{t('safeLock.disabledTooltip')}
 			{/if}
 		</Tooltip.Content>
 	</Tooltip.Root>
