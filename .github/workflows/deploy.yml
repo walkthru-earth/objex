@@ -31,6 +31,8 @@ jobs:
       - run: pnpm run build
         env:
           BASE_PATH: /objex
+          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
+          PUBLIC_POSTHOG_HOST: ${{ secrets.PUBLIC_POSTHOG_HOST }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

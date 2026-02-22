@@ -235,6 +235,15 @@ async function loadTable() {
 		}
 
 		mapData = extractMapData(rows);
+
+		// Auto-switch to table if URL hash requested map/stac but no geo/stac was detected
+		if (!hasGeo && viewMode === 'map') {
+			viewMode = 'table';
+		}
+		if (!isStac && viewMode === 'stac') {
+			viewMode = 'table';
+		}
+
 		loading = false;
 		loadStage = '';
 		updateUrlView(viewMode);

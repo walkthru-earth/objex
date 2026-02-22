@@ -1,10 +1,21 @@
 <script lang="ts">
 import './layout.css';
+import { afterNavigate, beforeNavigate } from '$app/navigation';
 import { base } from '$app/paths';
 import { getDir } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
+import { capturePageleave, capturePageview, initAnalytics } from '$lib/utils/analytics.js';
 
 let { children } = $props();
+
+// PostHog analytics
+initAnalytics();
+beforeNavigate(({ willUnload }) => {
+	if (!willUnload) capturePageleave();
+});
+afterNavigate(() => {
+	capturePageview(window.location.href);
+});
 
 // Apply theme class to html element
 $effect(() => {
