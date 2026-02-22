@@ -218,7 +218,7 @@ onDestroy(() => {
 });
 </script>
 
-<div class="relative flex h-full w-full flex-col overflow-hidden">
+<div class="flex h-full w-full flex-col overflow-hidden">
 	<!-- Controls bar -->
 	<div
 		class="flex items-center gap-2 border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800"
@@ -259,7 +259,7 @@ onDestroy(() => {
 	</div>
 
 	<!-- Map -->
-	<div class="min-h-0 flex-1">
+	<div class="relative min-h-0 flex-1">
 		{#if error && !loading}
 			<div class="flex h-full items-center justify-center">
 				<p class="max-w-md text-center text-sm text-red-400">{error}</p>

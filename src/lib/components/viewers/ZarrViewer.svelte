@@ -39,10 +39,10 @@ $effect(() => {
 	});
 });
 
-$effect(() => {
-	if (!tab) return;
+function setViewMode(mode: 'inspect' | 'map') {
+	viewMode = mode;
 	updateUrlView(viewMode);
-});
+}
 
 async function loadZarrMetadata() {
 	loading = true;
@@ -70,6 +70,7 @@ async function loadZarrMetadata() {
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
+		updateUrlView(viewMode);
 	}
 }
 </script>
@@ -91,7 +92,7 @@ async function loadZarrMetadata() {
 				variant={viewMode === 'inspect' ? 'secondary' : 'ghost'}
 				size="sm"
 				class="h-7 px-2 text-xs"
-				onclick={() => (viewMode = 'inspect')}
+				onclick={() => setViewMode('inspect')}
 			>
 				{t('zarr.inspect')}
 			</Button>
@@ -100,7 +101,7 @@ async function loadZarrMetadata() {
 					variant={viewMode === 'map' ? 'secondary' : 'ghost'}
 					size="sm"
 					class="h-7 px-2 text-xs"
-					onclick={() => (viewMode = 'map')}
+					onclick={() => setViewMode('map')}
 				>
 					{t('zarr.map')}
 				</Button>
