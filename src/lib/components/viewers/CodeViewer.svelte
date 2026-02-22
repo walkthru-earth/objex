@@ -19,16 +19,26 @@ let error = $state<string | null>(null);
 let wordWrap = $state(false);
 let copied = $state(false);
 let showStyleEditor = $state(false);
+let viewMode = $state<'code' | 'browse'>('code');
 
-type JsonKind = 'maplibre-style' | 'tilejson' | null;
+type JsonKind =
+	| 'maplibre-style'
+	| 'tilejson'
+	| 'stac-catalog'
+	| 'stac-collection'
+	| 'stac-item'
+	| null;
 
-/** Detect if JSON is a MapLibre style or TileJSON spec */
+/** Detect if JSON is a MapLibre style, TileJSON spec, or STAC object */
 function detectJsonKind(code: string): JsonKind {
 	try {
 		const obj = JSON.parse(code);
 		if (obj && typeof obj === 'object') {
 			if (obj.version === 8 && obj.sources && obj.layers) return 'maplibre-style';
 			if (obj.tilejson && obj.tiles) return 'tilejson';
+			if (obj.type === 'Catalog' && obj.stac_version) return 'stac-catalog';
+			if (obj.type === 'Collection' && obj.stac_version) return 'stac-collection';
+			if (obj.type === 'Feature' && obj.stac_version) return 'stac-item';
 		}
 	} catch {
 		// not valid JSON
@@ -39,7 +49,16 @@ function detectJsonKind(code: string): JsonKind {
 const ext = $derived(`.${tab.extension.toLowerCase()}`);
 const lang = $derived(extensionToShikiLang(ext));
 const jsonKind = $derived(ext === '.json' ? detectJsonKind(rawCode) : null);
+const isStacJson = $derived(jsonKind?.startsWith('stac-') ?? false);
+const stacBadgeKey = $derived<Record<string, string>>({
+	'stac-catalog': 'code.stacCatalog',
+	'stac-collection': 'code.stacCollection',
+	'stac-item': 'code.stacItem'
+});
 const styleUrl = $derived(buildHttpsUrl(tab));
+const stacBrowserSrc = $derived(
+	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
+);
 
 const languageMap: Record<string, string> = {
 	'.js': 'JavaScript',
@@ -136,6 +155,18 @@ async function copyCode() {
 				<Badge variant="outline" class="hidden border-teal-200 text-teal-600 sm:inline-flex dark:border-teal-800 dark:text-teal-300">
 					{t('code.tileJson')}
 				</Badge>
+			{:else if isStacJson && jsonKind}
+				<Badge variant="outline" class="hidden border-emerald-200 text-emerald-600 sm:inline-flex dark:border-emerald-800 dark:text-emerald-300">
+					{t(stacBadgeKey[jsonKind] ?? 'code.stacItem')}
+				</Badge>
+				<Button
+					size="sm"
+					class="h-7 px-2 text-xs {viewMode === 'browse' ? 'text-blue-500' : ''}"
+					variant="ghost"
+					onclick={() => (viewMode = viewMode === 'browse' ? 'code' : 'browse')}
+				>
+					{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
+				</Button>
 			{/if}
 
 			<!-- Desktop controls -->
@@ -163,6 +194,13 @@ async function copyCode() {
 							<DropdownMenu.Item disabled>
 								{t('code.tileJson')}
 							</DropdownMenu.Item>
+						{:else if isStacJson && jsonKind}
+							<DropdownMenu.Item disabled>
+								{t(stacBadgeKey[jsonKind] ?? 'code.stacItem')}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => (viewMode = viewMode === 'browse' ? 'code' : 'browse')}>
+								{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
+							</DropdownMenu.Item>
 						{/if}
 						<DropdownMenu.Item onclick={() => (wordWrap = !wordWrap)}>
 							{wordWrap ? t('code.noWrap') : t('code.wrap')}
@@ -176,23 +214,34 @@ async function copyCode() {
 		</div>
 	</div>
 
-	<div
-		dir="ltr"
-		class="code-viewer flex-1 overflow-auto"
-		class:word-wrap={wordWrap}
-	>
-		{#if loading}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">{t('code.loading')}</p>
-			</div>
-		{:else if error}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-red-400">{error}</p>
-			</div>
-		{:else}
-			{@html html}
-		{/if}
-	</div>
+	{#if viewMode === 'browse'}
+		<div class="flex-1 overflow-hidden">
+			<iframe
+				src={stacBrowserSrc}
+				class="h-full w-full border-0"
+				title="STAC Browser"
+				allow="fullscreen"
+			></iframe>
+		</div>
+	{:else}
+		<div
+			dir="ltr"
+			class="code-viewer flex-1 overflow-auto"
+			class:word-wrap={wordWrap}
+		>
+			{#if loading}
+				<div class="flex h-full items-center justify-center">
+					<p class="text-sm text-zinc-400">{t('code.loading')}</p>
+				</div>
+			{:else if error}
+				<div class="flex h-full items-center justify-center">
+					<p class="text-sm text-red-400">{error}</p>
+				</div>
+			{:else}
+				{@html html}
+			{/if}
+		</div>
+	{/if}
 </div>
 
 {#if showStyleEditor}

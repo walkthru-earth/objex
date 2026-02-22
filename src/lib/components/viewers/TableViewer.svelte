@@ -34,9 +34,12 @@ let error = $state<string | null>(null);
 let schemaVisible = $state(false);
 let historyVisible = $state(false);
 let hasGeo = $state(false);
+let isStac = $state(false);
 // Restore view mode from URL hash if present
 const urlView = getUrlView();
-let viewMode = $state<'table' | 'map'>(urlView === 'map' ? 'map' : 'table');
+let viewMode = $state<'table' | 'map' | 'stac'>(
+	urlView === 'map' ? 'map' : urlView === 'stac' ? 'stac' : 'table'
+);
 let sqlQuery = $state('');
 let customSql = $state('');
 let queryRunning = $state(false);
@@ -120,6 +123,7 @@ async function loadTable() {
 			if (thisGen !== loadGeneration) return;
 			columns = schema.map((f) => f.name);
 			hasGeo = findGeoColumn(schema) !== null;
+			isStac = schema.some((f) => f.name === 'stac_version');
 		}
 
 		// Rebuild SQL now that we know the actual path resolution
@@ -142,6 +146,7 @@ async function loadTable() {
 			}));
 			columns = schema.map((f) => f.name);
 			hasGeo = findGeoColumn(schema) !== null;
+			isStac = schema.some((f) => f.name === 'stac_version');
 		}
 
 		// If schema-only detection missed geo, try content sniffing on actual rows
@@ -327,6 +332,11 @@ function toggleView() {
 	viewMode = viewMode === 'table' ? 'map' : 'table';
 	updateUrlView(viewMode);
 }
+
+function setStacView() {
+	viewMode = viewMode === 'stac' ? 'table' : 'stac';
+	updateUrlView(viewMode);
+}
 </script>
 
 <div class="flex h-full flex-col">
@@ -341,6 +351,7 @@ function toggleView() {
 		{schemaVisible}
 		{historyVisible}
 		{hasGeo}
+		{isStac}
 		{viewMode}
 		onPrevPage={prevPage}
 		onNextPage={nextPage}
@@ -348,6 +359,7 @@ function toggleView() {
 		onToggleSchema={toggleSchema}
 		onToggleHistory={toggleHistory}
 		onToggleView={toggleView}
+		onToggleStac={setStacView}
 		onPageSizeChange={handlePageSizeChange}
 	/>
 
@@ -443,6 +455,13 @@ function toggleView() {
 			{rows}
 			fileName={tab.name}
 		/>
+	{:else if viewMode === 'stac'}
+		<!-- STAC Map mode — full size -->
+		<div class="flex-1 overflow-hidden">
+			{#await import('./StacMapViewer.svelte') then StacMapViewer}
+				<StacMapViewer.default {tab} />
+			{/await}
+		</div>
 	{:else}
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">

@@ -150,6 +150,7 @@ export const ar: Record<string, string> = {
 	'toolbar.copyS3': 'نسخ رابط S3',
 	'toolbar.map': 'خريطة',
 	'toolbar.table': 'جدول',
+	'toolbar.stacMap': 'خريطة STAC',
 	'toolbar.switchToMap': 'التبديل إلى الخريطة',
 	'toolbar.switchToTable': 'التبديل إلى الجدول',
 	'toolbar.history': 'السجل',
@@ -235,6 +236,11 @@ export const ar: Record<string, string> = {
 	'code.copied': 'تم النسخ!',
 	'code.copy': 'نسخ',
 	'code.loading': 'جارٍ التحميل...',
+	'code.stacCatalog': 'كتالوج STAC',
+	'code.stacCollection': 'مجموعة STAC',
+	'code.stacItem': 'عنصر STAC',
+	'code.browseStac': 'تصفح',
+	'code.code': 'كود',
 
 	// Table Status Bar
 	'statusBar.runningQuery': 'جارٍ تنفيذ الاستعلام...',

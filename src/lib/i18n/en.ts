@@ -150,6 +150,7 @@ export const en: Record<string, string> = {
 	'toolbar.copyS3': 'Copy S3 link',
 	'toolbar.map': 'Map',
 	'toolbar.table': 'Table',
+	'toolbar.stacMap': 'STAC Map',
 	'toolbar.switchToMap': 'Switch to Map',
 	'toolbar.switchToTable': 'Switch to Table',
 	'toolbar.history': 'History',
@@ -235,6 +236,11 @@ export const en: Record<string, string> = {
 	'code.copied': 'Copied!',
 	'code.copy': 'Copy',
 	'code.loading': 'Loading...',
+	'code.stacCatalog': 'STAC Catalog',
+	'code.stacCollection': 'STAC Collection',
+	'code.stacItem': 'STAC Item',
+	'code.browseStac': 'Browse',
+	'code.code': 'Code',
 
 	// Table Status Bar
 	'statusBar.runningQuery': 'Running query...',

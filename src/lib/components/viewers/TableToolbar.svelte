@@ -20,13 +20,15 @@ let {
 	schemaVisible = false,
 	historyVisible = false,
 	hasGeo = false,
-	viewMode = 'table' as 'table' | 'map',
+	isStac = false,
+	viewMode = 'table' as 'table' | 'map' | 'stac',
 	onPrevPage,
 	onNextPage,
 	onGoToPage,
 	onToggleSchema,
 	onToggleHistory,
 	onToggleView,
+	onToggleStac,
 	onPageSizeChange
 }: {
 	fileName: string;
@@ -38,13 +40,15 @@ let {
 	schemaVisible?: boolean;
 	historyVisible?: boolean;
 	hasGeo?: boolean;
-	viewMode?: 'table' | 'map';
+	isStac?: boolean;
+	viewMode?: 'table' | 'map' | 'stac';
 	onPrevPage: () => void;
 	onNextPage: () => void;
 	onGoToPage?: (page: number) => void;
 	onToggleSchema: () => void;
 	onToggleHistory?: () => void;
 	onToggleView?: () => void;
+	onToggleStac?: () => void;
 	onPageSizeChange?: (size: number) => void;
 } = $props();
 
@@ -99,7 +103,19 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					class="h-7 px-2 text-xs {viewMode === 'map' ? 'text-blue-500' : ''}"
 					onclick={onToggleView}
 				>
-					{viewMode === 'table' ? t('toolbar.map') : t('toolbar.table')}
+					{viewMode === 'table' || viewMode === 'stac' ? t('toolbar.map') : t('toolbar.table')}
+				</Button>
+				<Separator orientation="vertical" class="!h-4" />
+			{/if}
+
+			{#if isStac && onToggleStac}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="h-7 px-2 text-xs {viewMode === 'stac' ? 'text-blue-500' : ''}"
+					onclick={onToggleStac}
+				>
+					{t('toolbar.stacMap')}
 				</Button>
 				<Separator orientation="vertical" class="!h-4" />
 			{/if}
@@ -219,7 +235,14 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					<!-- Map/Table toggle -->
 					{#if hasGeo && onToggleView}
 						<DropdownMenu.Item onclick={onToggleView}>
-							{viewMode === 'table' ? t('toolbar.switchToMap') : t('toolbar.switchToTable')}
+							{viewMode === 'table' || viewMode === 'stac' ? t('toolbar.switchToMap') : t('toolbar.switchToTable')}
+						</DropdownMenu.Item>
+					{/if}
+
+					<!-- STAC Map toggle -->
+					{#if isStac && onToggleStac}
+						<DropdownMenu.Item onclick={onToggleStac}>
+							{t('toolbar.stacMap')}
 						</DropdownMenu.Item>
 					{/if}
 
