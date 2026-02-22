@@ -5,6 +5,7 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { nord } from '@milkdown/theme-nord';
+import { getDir } from '$lib/i18n/index.svelte.js';
 import '@milkdown/theme-nord/style.css';
 import { onDestroy } from 'svelte';
 
@@ -63,7 +64,7 @@ onDestroy(() => {
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	dir="ltr"
+	dir={getDir()}
 	class="milkdown-wrapper h-full overflow-auto"
 	bind:this={editorEl}
 	onkeydown={handleKeydown}

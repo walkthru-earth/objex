@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @import "@fontsource/cairo/400.css";
 @import "@fontsource/cairo/500.css";
 @import "@fontsource/cairo/600.css";
