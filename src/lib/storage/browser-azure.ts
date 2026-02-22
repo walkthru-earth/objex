@@ -121,7 +121,7 @@ export class BrowserAzureAdapter implements StorageAdapter {
 					is_dir: true,
 					size: 0,
 					modified: 0,
-					extension: dirName.endsWith('.zarr') ? 'zarr' : ''
+					extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
 				});
 			}
 

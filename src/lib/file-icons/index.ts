@@ -1026,6 +1026,16 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		queryable: false,
 		duckdbReadFn: null,
 		mimeType: 'application/octet-stream'
+	},
+	'.zr3': {
+		icon: 'Layers',
+		color: 'text-purple-500 dark:text-purple-400',
+		label: 'Zarr',
+		category: 'data',
+		viewer: 'zarr',
+		queryable: false,
+		duckdbReadFn: null,
+		mimeType: 'application/octet-stream'
 	}
 };
 

@@ -100,7 +100,7 @@ function openFile(entry: FileEntry) {
 }
 
 /** Extensions that represent "virtual files" — directories that open as viewers. */
-const VIEWER_DIR_EXTENSIONS = new Set(['zarr']);
+const VIEWER_DIR_EXTENSIONS = new Set(['zarr', 'zr3']);
 
 function isViewerDir(entry: FileEntry): boolean {
 	return entry.is_dir && VIEWER_DIR_EXTENSIONS.has(entry.extension);

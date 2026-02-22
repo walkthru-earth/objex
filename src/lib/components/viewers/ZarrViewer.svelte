@@ -56,7 +56,7 @@ async function loadZarrMetadata() {
 		let meta: ZarrMetadata | null = await fetchConsolidated(url);
 
 		if (!meta) {
-			meta = await probeWithZarrita(url, tab.name.replace(/\.zarr$/, ''));
+			meta = await probeWithZarrita(url, tab.name.replace(/\.(zarr|zr3)$/, ''));
 		}
 
 		if (meta) {
