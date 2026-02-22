@@ -240,6 +240,8 @@ export const ar: Record<string, string> = {
 	'code.stacCollection': 'مجموعة STAC',
 	'code.stacItem': 'عنصر STAC',
 	'code.browseStac': 'تصفح',
+	'code.keplerGl': 'Kepler.gl',
+	'code.openKepler': 'فتح الخريطة',
 	'code.code': 'كود',
 
 	// Table Status Bar

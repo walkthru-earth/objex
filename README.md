@@ -152,6 +152,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | **STAC Catalog** | `type === "Catalog"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
 | **STAC Collection** | `type === "Collection"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
 | **STAC Item** | `type === "Feature"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) |
+| **Kepler.gl** | `info.app === "kepler.gl"` + `config` | "Open Map" — opens [Kepler.gl](https://kepler.gl/demo) (iframe) |
 
 ### Basemaps & External Services
 
@@ -163,6 +164,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | STAC Map | [Development Seed stac-map](https://developmentseed.org/stac-map) | StacMapViewer |
 | STAC Browser | [Radiant Earth STAC Browser](https://radiantearth.github.io/stac-browser/) | CodeViewer |
 | Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | StyleEditorOverlay |
+| Kepler.gl | [Kepler.gl Demo](https://kepler.gl/demo) | CodeViewer |
 
 ## Quick Start
 

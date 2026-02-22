@@ -19,7 +19,7 @@ let error = $state<string | null>(null);
 let wordWrap = $state(false);
 let copied = $state(false);
 let showStyleEditor = $state(false);
-let viewMode = $state<'code' | 'browse'>('code');
+let viewMode = $state<'code' | 'browse' | 'kepler'>('code');
 
 type JsonKind =
 	| 'maplibre-style'
@@ -27,9 +27,10 @@ type JsonKind =
 	| 'stac-catalog'
 	| 'stac-collection'
 	| 'stac-item'
+	| 'kepler'
 	| null;
 
-/** Detect if JSON is a MapLibre style, TileJSON spec, or STAC object */
+/** Detect if JSON is a MapLibre style, TileJSON, STAC object, or Kepler.gl config */
 function detectJsonKind(code: string): JsonKind {
 	try {
 		const obj = JSON.parse(code);
@@ -39,6 +40,7 @@ function detectJsonKind(code: string): JsonKind {
 			if (obj.type === 'Catalog' && obj.stac_version) return 'stac-catalog';
 			if (obj.type === 'Collection' && obj.stac_version) return 'stac-collection';
 			if (obj.type === 'Feature' && obj.stac_version) return 'stac-item';
+			if (obj.info?.app === 'kepler.gl' && obj.config) return 'kepler';
 		}
 	} catch {
 		// not valid JSON
@@ -59,6 +61,7 @@ const styleUrl = $derived(buildHttpsUrl(tab));
 const stacBrowserSrc = $derived(
 	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
 );
+const keplerSrc = $derived(`https://kepler.gl/demo?mapUrl=${encodeURIComponent(styleUrl)}`);
 
 const languageMap: Record<string, string> = {
 	'.js': 'JavaScript',
@@ -167,6 +170,18 @@ async function copyCode() {
 				>
 					{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
 				</Button>
+			{:else if jsonKind === 'kepler'}
+				<Badge variant="outline" class="hidden border-violet-200 text-violet-600 sm:inline-flex dark:border-violet-800 dark:text-violet-300">
+					{t('code.keplerGl')}
+				</Badge>
+				<Button
+					size="sm"
+					class="h-7 px-2 text-xs {viewMode === 'kepler' ? 'text-blue-500' : ''}"
+					variant="ghost"
+					onclick={() => (viewMode = viewMode === 'kepler' ? 'code' : 'kepler')}
+				>
+					{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
+				</Button>
 			{/if}
 
 			<!-- Desktop controls -->
@@ -201,6 +216,13 @@ async function copyCode() {
 							<DropdownMenu.Item onclick={() => (viewMode = viewMode === 'browse' ? 'code' : 'browse')}>
 								{viewMode === 'browse' ? t('code.code') : t('code.browseStac')}
 							</DropdownMenu.Item>
+						{:else if jsonKind === 'kepler'}
+							<DropdownMenu.Item disabled>
+								{t('code.keplerGl')}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => (viewMode = viewMode === 'kepler' ? 'code' : 'kepler')}>
+								{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
+							</DropdownMenu.Item>
 						{/if}
 						<DropdownMenu.Item onclick={() => (wordWrap = !wordWrap)}>
 							{wordWrap ? t('code.noWrap') : t('code.wrap')}
@@ -220,6 +242,15 @@ async function copyCode() {
 				src={stacBrowserSrc}
 				class="h-full w-full border-0"
 				title="STAC Browser"
+				allow="fullscreen"
+			></iframe>
+		</div>
+	{:else if viewMode === 'kepler'}
+		<div class="flex-1 overflow-hidden">
+			<iframe
+				src={keplerSrc}
+				class="h-full w-full border-0"
+				title="Kepler.gl"
 				allow="fullscreen"
 			></iframe>
 		</div>

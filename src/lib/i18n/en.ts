@@ -240,6 +240,8 @@ export const en: Record<string, string> = {
 	'code.stacCollection': 'STAC Collection',
 	'code.stacItem': 'STAC Item',
 	'code.browseStac': 'Browse',
+	'code.keplerGl': 'Kepler.gl',
+	'code.openKepler': 'Open Map',
 	'code.code': 'Code',
 
 	// Table Status Bar
