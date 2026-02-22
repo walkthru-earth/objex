@@ -35,5 +35,6 @@ export interface QueryEngine {
 	): Promise<MapQueryResult>;
 	getSchema(connId: string, path: string): Promise<SchemaField[]>;
 	getRowCount(connId: string, path: string): Promise<number>;
+	releaseMemory(): Promise<void>;
 	dispose(): Promise<void>;
 }

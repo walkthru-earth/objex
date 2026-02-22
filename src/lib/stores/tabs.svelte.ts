@@ -45,6 +45,21 @@ function createTabsStore() {
 					activeTabId = tabs[newIndex].id;
 				}
 			}
+
+			// Async DuckDB memory cleanup (fire-and-forget)
+			import('$lib/query/index.js')
+				.then(({ getQueryEngine }) => getQueryEngine().then((engine) => engine.releaseMemory()))
+				.catch(() => {});
+		},
+
+		closeOthers(id: string) {
+			tabs = tabs.filter((t) => t.id === id);
+			activeTabId = id;
+
+			// Async DuckDB memory cleanup (fire-and-forget)
+			import('$lib/query/index.js')
+				.then(({ getQueryEngine }) => getQueryEngine().then((engine) => engine.releaseMemory()))
+				.catch(() => {});
 		},
 
 		setActive(id: string) {

@@ -291,5 +291,20 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
-	async dispose(): Promise<void> {}
+	async releaseMemory(): Promise<void> {
+		const db = await getDB();
+		const conn = await db.connect();
+		try {
+			await conn.query('CALL pragma_database_size()');
+			await conn.query('CHECKPOINT');
+		} catch {
+			// Ignore — checkpoint may fail on read-only/in-memory DBs
+		} finally {
+			await conn.close();
+		}
+	}
+
+	async dispose(): Promise<void> {
+		await this.releaseMemory();
+	}
 }

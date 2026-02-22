@@ -11,7 +11,7 @@ import type { SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildDuckDbUrl, buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
+import { buildDuckDbUrl, buildStorageUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import { findGeoColumn, findGeoColumnFromRows } from '$lib/utils/wkb.js';
 import QueryHistoryPanel from './QueryHistoryPanel.svelte';
@@ -37,7 +37,6 @@ let hasGeo = $state(false);
 // Restore view mode from URL hash if present
 const urlView = getUrlView();
 let viewMode = $state<'table' | 'map'>(urlView === 'map' ? 'map' : 'table');
-let copied = $state(false);
 let sqlQuery = $state('');
 let customSql = $state('');
 let queryRunning = $state(false);
@@ -328,17 +327,6 @@ function toggleView() {
 	viewMode = viewMode === 'table' ? 'map' : 'table';
 	updateUrlView(viewMode);
 }
-
-async function copyLink(type: 'https' | 's3') {
-	const url = type === 'https' ? buildHttpsUrl(tab) : buildStorageUrl(tab);
-	try {
-		await navigator.clipboard.writeText(url);
-		copied = true;
-		setTimeout(() => (copied = false), 2000);
-	} catch {
-		// fallback
-	}
-}
 </script>
 
 <div class="flex h-full flex-col">
@@ -354,15 +342,12 @@ async function copyLink(type: 'https' | 's3') {
 		{historyVisible}
 		{hasGeo}
 		{viewMode}
-		httpsUrl={tab.source === 'remote' ? buildHttpsUrl(tab) : ''}
-		storageUrl={tab.source === 'remote' ? buildStorageUrl(tab) : ''}
 		onPrevPage={prevPage}
 		onNextPage={nextPage}
 		onGoToPage={goToPage}
 		onToggleSchema={toggleSchema}
 		onToggleHistory={toggleHistory}
 		onToggleView={toggleView}
-		onCopyLink={copyLink}
 		onPageSizeChange={handlePageSizeChange}
 	/>
 
@@ -409,7 +394,7 @@ async function copyLink(type: 'https' | 's3') {
 		{/if}
 
 		<!-- Content area: loading / table + side panels -->
-		<div class="flex flex-1 overflow-hidden">
+		<div class="relative flex flex-1 overflow-hidden">
 			{#if loading || queryRunning}
 				<div class="flex flex-1 flex-col items-center justify-center gap-3">
 					<Loader2Icon class="size-6 animate-spin text-primary" />
@@ -441,8 +426,12 @@ async function copyLink(type: 'https' | 's3') {
 					onSort={handleSort}
 				/>
 			{/if}
-			<QueryHistoryPanel visible={historyVisible} onSelect={handleHistorySelect} />
-			<SchemaPanel fields={schema} visible={schemaVisible} />
+			<QueryHistoryPanel
+				visible={historyVisible}
+				onSelect={handleHistorySelect}
+				onClose={toggleHistory}
+			/>
+			<SchemaPanel fields={schema} visible={schemaVisible} onClose={toggleSchema} />
 		</div>
 
 		<!-- Status bar — table mode only -->

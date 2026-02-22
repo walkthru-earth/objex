@@ -63,6 +63,10 @@ export const en: Record<string, string> = {
 
 	// Tab Bar
 	'tabBar.closeTab': 'Close tab {name}',
+	'tabBar.copyHttps': 'Copy HTTPS link',
+	'tabBar.copyStorage': 'Copy S3 link',
+	'tabBar.copied': 'Copied!',
+	'tabBar.closeOtherTabs': 'Close other tabs',
 
 	// File Tree Sidebar
 	'fileTree.refresh': 'Refresh',

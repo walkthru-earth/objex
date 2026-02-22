@@ -21,15 +21,12 @@ let {
 	historyVisible = false,
 	hasGeo = false,
 	viewMode = 'table' as 'table' | 'map',
-	httpsUrl = '',
-	storageUrl = '',
 	onPrevPage,
 	onNextPage,
 	onGoToPage,
 	onToggleSchema,
 	onToggleHistory,
 	onToggleView,
-	onCopyLink,
 	onPageSizeChange
 }: {
 	fileName: string;
@@ -42,35 +39,19 @@ let {
 	historyVisible?: boolean;
 	hasGeo?: boolean;
 	viewMode?: 'table' | 'map';
-	httpsUrl?: string;
-	storageUrl?: string;
 	onPrevPage: () => void;
 	onNextPage: () => void;
 	onGoToPage?: (page: number) => void;
 	onToggleSchema: () => void;
 	onToggleHistory?: () => void;
 	onToggleView?: () => void;
-	onCopyLink?: (type: 'https' | 's3') => void;
 	onPageSizeChange?: (size: number) => void;
 } = $props();
 
-let copiedType = $state<string | null>(null);
 let jumpPageEditing = $state(false);
 let jumpPageValue = $state('');
 
 const PAGE_SIZES = [100, 500, 1000, 5000];
-
-async function handleCopy(type: 'https' | 's3') {
-	const url = type === 'https' ? httpsUrl : storageUrl;
-	if (!url) return;
-	try {
-		await navigator.clipboard.writeText(url);
-		copiedType = type;
-		setTimeout(() => (copiedType = null), 2000);
-	} catch {
-		onCopyLink?.(type);
-	}
-}
 
 function handleJumpSubmit() {
 	const page = parseInt(jumpPageValue, 10);
@@ -111,22 +92,6 @@ function handleJumpKeydown(e: KeyboardEvent) {
 	<div class="ms-auto flex items-center gap-1 sm:gap-2">
 		<!-- ===== Desktop-only controls (hidden on mobile) ===== -->
 		<div class="hidden items-center gap-1 sm:flex">
-			<!-- Share / Copy Link buttons -->
-			{#if httpsUrl}
-				<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => handleCopy('https')} title={httpsUrl}>
-					{copiedType === 'https' ? t('toolbar.copied') : t('toolbar.https')}
-				</Button>
-			{/if}
-			{#if storageUrl}
-				<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => handleCopy('s3')} title={storageUrl}>
-					{copiedType === 's3' ? t('toolbar.copied') : t('toolbar.s3')}
-				</Button>
-			{/if}
-
-			{#if httpsUrl || storageUrl}
-				<Separator orientation="vertical" class="!h-4" />
-			{/if}
-
 			{#if hasGeo && onToggleView}
 				<Button
 					variant="ghost"
@@ -139,8 +104,8 @@ function handleJumpKeydown(e: KeyboardEvent) {
 				<Separator orientation="vertical" class="!h-4" />
 			{/if}
 
-			<!-- History toggle -->
-			{#if onToggleHistory}
+			<!-- History toggle — hidden in map mode -->
+			{#if onToggleHistory && viewMode === 'table'}
 				<Button
 					variant="ghost"
 					size="sm"
@@ -152,17 +117,19 @@ function handleJumpKeydown(e: KeyboardEvent) {
 				</Button>
 			{/if}
 
-			<Button
-				variant="ghost"
-				size="sm"
-				class="h-7 px-2 text-xs {schemaVisible ? 'text-blue-500' : ''}"
-				onclick={onToggleSchema}
-			>
-				{t('toolbar.schema')}
-			</Button>
+			{#if viewMode === 'table'}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="h-7 px-2 text-xs {schemaVisible ? 'text-blue-500' : ''}"
+					onclick={onToggleSchema}
+				>
+					{t('toolbar.schema')}
+				</Button>
+			{/if}
 
-			<!-- Page size selector -->
-			{#if onPageSizeChange}
+			<!-- Page size selector — hidden in map mode -->
+			{#if onPageSizeChange && viewMode === 'table'}
 				<Separator orientation="vertical" class="!h-4" />
 				<select
 					class="rounded border border-zinc-200 bg-transparent px-1.5 py-0.5 text-xs text-zinc-500 outline-none dark:border-zinc-700 dark:text-zinc-400"
@@ -249,22 +216,6 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					<EllipsisVerticalIcon class="size-4" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" class="w-48">
-					<!-- Copy links -->
-					{#if httpsUrl}
-						<DropdownMenu.Item onclick={() => handleCopy('https')}>
-							{copiedType === 'https' ? t('toolbar.copied') : t('toolbar.copyHttps')}
-						</DropdownMenu.Item>
-					{/if}
-					{#if storageUrl}
-						<DropdownMenu.Item onclick={() => handleCopy('s3')}>
-							{copiedType === 's3' ? t('toolbar.copied') : t('toolbar.copyS3')}
-						</DropdownMenu.Item>
-					{/if}
-
-					{#if httpsUrl || storageUrl}
-						<DropdownMenu.Separator />
-					{/if}
-
 					<!-- Map/Table toggle -->
 					{#if hasGeo && onToggleView}
 						<DropdownMenu.Item onclick={onToggleView}>
@@ -272,20 +223,22 @@ function handleJumpKeydown(e: KeyboardEvent) {
 						</DropdownMenu.Item>
 					{/if}
 
-					<!-- History toggle -->
-					{#if onToggleHistory}
+					<!-- History toggle — table mode only -->
+					{#if onToggleHistory && viewMode === 'table'}
 						<DropdownMenu.Item onclick={onToggleHistory}>
 							{historyVisible ? t('toolbar.hideHistory') : t('toolbar.showHistory')}
 						</DropdownMenu.Item>
 					{/if}
 
-					<!-- Schema toggle -->
-					<DropdownMenu.Item onclick={onToggleSchema}>
-						{schemaVisible ? t('toolbar.hideSchema') : t('toolbar.showSchema')}
-					</DropdownMenu.Item>
+					<!-- Schema toggle — table mode only -->
+					{#if viewMode === 'table'}
+						<DropdownMenu.Item onclick={onToggleSchema}>
+							{schemaVisible ? t('toolbar.hideSchema') : t('toolbar.showSchema')}
+						</DropdownMenu.Item>
+					{/if}
 
-					<!-- Page size sub-menu -->
-					{#if onPageSizeChange}
+					<!-- Page size sub-menu — table mode only -->
+					{#if onPageSizeChange && viewMode === 'table'}
 						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger>
