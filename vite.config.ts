@@ -9,6 +9,14 @@ export default defineConfig({
 		port: 5173,
 		strictPort: true
 	},
+	optimizeDeps: {
+		include: [
+			'@developmentseed/deck.gl-geotiff > @developmentseed/deck.gl-raster',
+			'@developmentseed/deck.gl-geotiff > @developmentseed/raster-reproject',
+			'@developmentseed/deck.gl-geotiff > geotiff',
+			'@developmentseed/deck.gl-geotiff > proj4'
+		]
+	},
 	resolve: {
 		dedupe: [
 			'@codemirror/state',

@@ -44,6 +44,21 @@ async function onMapReady(map: maplibregl.Map) {
 		const layer = new COGLayer({
 			id: 'cog-layer',
 			geotiff: url,
+			onError: (err: Error) => {
+				const msg = err?.message || String(err);
+				// Detect CORS / network errors and show a helpful message
+				if (
+					msg.includes('Request failed') ||
+					msg.includes('NetworkError') ||
+					msg.includes('Failed to fetch')
+				) {
+					error = t('map.cogCorsError');
+				} else {
+					error = msg;
+				}
+				loading = false;
+				return true; // mark as handled so deck.gl doesn't throw
+			},
 			onGeoTIFFLoad: async (tiff, { geographicBounds }) => {
 				const image = await tiff.getImage();
 				cogInfo = {
@@ -67,9 +82,24 @@ async function onMapReady(map: maplibregl.Map) {
 			}
 		});
 
-		const overlay = new MapboxOverlay({ interleaved: true, layers: [layer] });
+		const overlay = new MapboxOverlay({
+			interleaved: true,
+			layers: [layer],
+			onError: (err: Error) => {
+				if (!error) {
+					error = err?.message || String(err);
+					loading = false;
+				}
+			}
+		});
 		overlayRef = overlay;
-		map.addControl(overlay as any);
+
+		// Wait for map to be fully loaded before adding overlay to avoid viewport null error
+		if (map.loaded()) {
+			map.addControl(overlay as any);
+		} else {
+			map.once('load', () => map.addControl(overlay as any));
+		}
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
@@ -104,7 +134,7 @@ onDestroy(() => {
 
 	{#if error}
 		<div
-			class="absolute left-2 top-2 rounded bg-red-900/80 px-2 py-1 text-xs text-red-200"
+			class="absolute left-2 top-2 max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200"
 		>
 			{error}
 		</div>

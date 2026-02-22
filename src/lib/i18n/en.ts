@@ -268,6 +268,8 @@ export const en: Record<string, string> = {
 	'map.archiveInfo': 'Archive Info',
 	'map.flatgeobufInfo': 'FlatGeobuf Info',
 	'map.cogInfo': 'COG Info',
+	'map.cogCorsError':
+		'Cannot load COG: the server does not allow cross-origin requests (CORS). The file must be hosted with CORS headers enabled.',
 	'map.noGeoColumn': 'No geometry column detected in schema',
 	'map.noData': 'No data available for map view',
 	'map.noFeatures': 'No features found in FlatGeobuf file',

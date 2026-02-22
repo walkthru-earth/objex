@@ -19,6 +19,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger
 } from '$lib/components/ui/tooltip/index.js';
+import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
@@ -38,16 +39,40 @@ let detectedHost = $state<DetectedHost | null>(null);
 let autoConnecting = $state(false);
 
 $effect(() => {
-	connections.load().then(() => {
-		handleAutoDetection();
+	connections.load().then(async () => {
+		await handleAutoDetection();
+		// On first visit (no connections, no URL params), load the demo bucket
+		if (connections.items.length === 0 && !new URL(window.location.href).searchParams.has('url')) {
+			await loadDemoConnection();
+		}
 	});
 });
 
 async function handleAutoDetection() {
+	// Check for direct file URL first — open immediately without creating a connection
+	const url = new URL(window.location.href);
+	const rawUrl = url.searchParams.get('url');
+	if (rawUrl) {
+		const fileName = rawUrl.split('/').pop()?.split('?')[0] || '';
+		const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+		if (ext) {
+			const info = getFileTypeInfo(ext);
+			if (info.viewer !== 'raw') {
+				tabs.open({
+					id: `url:${rawUrl}`,
+					name: fileName,
+					path: rawUrl,
+					source: 'url',
+					extension: ext
+				});
+				return;
+			}
+		}
+	}
+
 	const detected = detectHostBucket();
 	if (!detected) return;
 
-	const url = new URL(window.location.href);
 	const hasUrlParam = url.searchParams.has('url');
 
 	if (hasUrlParam) {
@@ -90,6 +115,23 @@ async function handleAutoDetection() {
 	} else {
 		// Show indicator for hostname-detected bucket
 		detectedHost = detected;
+	}
+}
+
+async function loadDemoConnection() {
+	const id = await connections.save({
+		name: 'Source Cooperative',
+		provider: 's3',
+		endpoint: '',
+		bucket: 'us-west-2.opendata.source.coop',
+		region: 'us-west-2',
+		anonymous: true
+	});
+	if (!id) return;
+	const conn = connections.getById(id);
+	if (conn) {
+		browser.browse(conn);
+		syncUrlParam(conn);
 	}
 }
 
