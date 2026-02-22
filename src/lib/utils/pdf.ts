@@ -1,4 +1,4 @@
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask } from 'pdfjs-dist';
 
 let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
 
@@ -12,25 +12,22 @@ async function getPdfjs() {
 	return pdfjsPromise;
 }
 
-/** Load a PDF from an in-memory buffer. */
-export async function loadPdfDocument(data: Uint8Array): Promise<PDFDocumentProxy> {
+/** Load a PDF from an in-memory buffer. Returns the loading task (cancellable). */
+export async function loadPdfDocument(data: Uint8Array): Promise<PDFDocumentLoadingTask> {
 	const pdfjs = await getPdfjs();
-	const loadingTask = pdfjs.getDocument({ data });
-	return loadingTask.promise;
+	return pdfjs.getDocument({ data });
 }
 
 /**
  * Load a PDF from a URL using HTTP range requests (progressive page rendering).
- * PDF.js fetches only the bytes needed for the requested page — no full download.
- * Requires CORS headers on the server (S3/Azure/GCS support this).
+ * Returns the loading task (cancellable via `.destroy()`).
  */
-export async function loadPdfFromUrl(url: string): Promise<PDFDocumentProxy> {
+export async function loadPdfFromUrl(url: string): Promise<PDFDocumentLoadingTask> {
 	const pdfjs = await getPdfjs();
-	const loadingTask = pdfjs.getDocument({
+	return pdfjs.getDocument({
 		url,
 		disableRange: false,
 		disableStream: false,
 		disableAutoFetch: true
 	});
-	return loadingTask.promise;
 }
