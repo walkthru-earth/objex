@@ -1,0 +1,6 @@
+pre-commit:
+  commands:
+    biome-check:
+      glob: "*.{ts,svelte,js,json}"
+      run: npx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
