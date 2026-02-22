@@ -13,7 +13,8 @@ export default defineConfig({
 		include: [
 			'@developmentseed/deck.gl-geotiff > @developmentseed/deck.gl-raster',
 			'@developmentseed/deck.gl-geotiff > @developmentseed/raster-reproject',
-			'@developmentseed/deck.gl-geotiff > proj4'
+			'@developmentseed/deck.gl-geotiff > proj4',
+			'@developmentseed/deck.gl-geotiff > geotiff'
 		]
 	},
 	resolve: {
@@ -25,8 +26,7 @@ export default defineConfig({
 			'@deck.gl/layers',
 			'@deck.gl/geo-layers',
 			'@deck.gl/mesh-layers',
-			'@luma.gl/core',
-			'geotiff'
+			'@luma.gl/core'
 		]
 	}
 });
