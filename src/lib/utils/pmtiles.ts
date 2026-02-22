@@ -161,6 +161,20 @@ export function buildPmtilesLayers(
 				'line-width': 1.5
 			}
 		} as maplibregl.LayerSpecification);
+
+		layers.push({
+			id: `${layerId}-circle`,
+			type: 'circle',
+			source: sourceId,
+			'source-layer': layerId,
+			filter: ['==', '$type', 'Point'],
+			paint: {
+				'circle-radius': 5,
+				'circle-color': `hsl(${hue}, 70%, 55%)`,
+				'circle-stroke-width': 1.5,
+				'circle-stroke-color': '#fff'
+			}
+		} as maplibregl.LayerSpecification);
 	}
 
 	return layers;

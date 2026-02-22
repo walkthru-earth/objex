@@ -11,6 +11,7 @@ import {
 	type PmtilesMetadata
 } from '$lib/utils/pmtiles';
 import { buildHttpsUrl } from '$lib/utils/url.js';
+import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
 let { tab }: { tab: Tab } = $props();
@@ -19,6 +20,8 @@ let loading = $state(true);
 let error = $state<string | null>(null);
 let metadata = $state<PmtilesMetadata | null>(null);
 let showInfo = $state(false);
+let selectedFeature = $state<Record<string, any> | null>(null);
+let showAttributes = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let pmtilesUrl = $state('');
 
@@ -63,8 +66,28 @@ function onMapReady(map: maplibregl.Map) {
 		});
 
 		const layers = buildPmtilesLayers(sourceId, metadata);
+		const layerIds: string[] = [];
 		for (const layer of layers) {
 			map.addLayer(layer);
+			layerIds.push(layer.id!);
+		}
+
+		// Click + hover handlers for feature inspection
+		for (const layerId of layerIds) {
+			map.on('click', layerId, (e: any) => {
+				if (e.features && e.features.length > 0) {
+					selectedFeature = { ...e.features[0].properties };
+					showAttributes = true;
+				}
+			});
+
+			map.on('mouseenter', layerId, () => {
+				map.getCanvas().style.cursor = 'pointer';
+			});
+
+			map.on('mouseleave', layerId, () => {
+				map.getCanvas().style.cursor = '';
+			});
 		}
 	} else {
 		// Raster tiles (png, jpeg, webp, avif)
@@ -113,7 +136,7 @@ function onMapReady(map: maplibregl.Map) {
 
 		<!-- Floating info toggle -->
 		<button
-			class="absolute right-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+			class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 			class:ring-1={showInfo}
 			class:ring-primary={showInfo}
 			onclick={() => (showInfo = !showInfo)}
@@ -121,9 +144,21 @@ function onMapReady(map: maplibregl.Map) {
 			{t('map.info')}
 		</button>
 
+		<!-- Floating attributes toggle -->
+		{#if selectedFeature}
+			<button
+				class="absolute right-12 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class:ring-1={showAttributes}
+				class:ring-primary={showAttributes}
+				onclick={() => (showAttributes = !showAttributes)}
+			>
+				{t('map.attributes')}
+			</button>
+		{/if}
+
 		{#if showInfo && metadata}
 			<div
-				class="absolute right-2 top-10 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.archiveInfo')}</h3>
 				<dl class="space-y-1.5">
@@ -182,5 +217,11 @@ function onMapReady(map: maplibregl.Map) {
 				</dl>
 			</div>
 		{/if}
+
+		<AttributeTable
+			feature={selectedFeature}
+			visible={showAttributes}
+			onClose={() => (showAttributes = false)}
+		/>
 	{/if}
 </div>
