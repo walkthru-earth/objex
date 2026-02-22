@@ -3,7 +3,7 @@ import { getViewerKind } from '$lib/file-icons/index.js';
 import type { Tab } from '$lib/types';
 import ArchiveViewer from './ArchiveViewer.svelte';
 import CodeViewer from './CodeViewer.svelte';
-import CogViewer from './CogViewer.svelte';
+
 import DatabaseViewer from './DatabaseViewer.svelte';
 import FlatGeobufViewer from './FlatGeobufViewer.svelte';
 import ImageViewer from './ImageViewer.svelte';
@@ -33,7 +33,9 @@ const viewerKind = $derived(getViewerKind(ext));
 {:else if viewerKind === 'code'}
 	<CodeViewer {tab} />
 {:else if viewerKind === 'cog'}
-	<CogViewer {tab} />
+	{#await import('./CogViewer.svelte') then { default: CogViewer }}
+		<CogViewer {tab} />
+	{/await}
 {:else if viewerKind === 'pmtiles'}
 	<PmtilesViewer {tab} />
 {:else if viewerKind === 'flatgeobuf'}

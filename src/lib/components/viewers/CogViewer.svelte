@@ -1,4 +1,6 @@
 <script lang="ts">
+import { MapboxOverlay } from '@deck.gl/mapbox';
+import { COGLayer } from '@developmentseed/deck.gl-geotiff';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import type { Tab } from '$lib/types';
@@ -36,11 +38,6 @@ async function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
 
 	try {
-		const [{ MapboxOverlay }, { COGLayer }] = await Promise.all([
-			import('@deck.gl/mapbox'),
-			import('@developmentseed/deck.gl-geotiff')
-		]);
-
 		const url = buildHttpsUrl(tab);
 
 		const layer = new COGLayer({
