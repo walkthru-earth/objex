@@ -58,6 +58,7 @@ let sortDirection = $state<'asc' | 'desc' | null>(null);
 // Geo column state for unified table+map query
 let geoCol = $state<string | null>(null);
 let geoColType = $state<string>('');
+let sourceCrs = $state<string | null>(null);
 let mapData = $state<MapQueryResult | null>(null);
 
 const totalPages = $derived(totalRows != null ? Math.max(1, Math.ceil(totalRows / pageSize)) : 1);
@@ -83,7 +84,10 @@ function buildDefaultSql(offset = 0): string {
 			upper.includes('POINT') ||
 			upper.includes('LINESTRING') ||
 			upper.includes('POLYGON');
-		const geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+		let geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+		if (sourceCrs) {
+			geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+		}
 		sql = `SELECT * EXCLUDE(${quoted}), ST_AsWKB(${geomExpr}) AS __wkb FROM ${source}`;
 	} else {
 		sql = `SELECT * FROM ${source}`;
@@ -157,6 +161,7 @@ async function loadTable() {
 	error = null;
 	geoCol = null;
 	geoColType = '';
+	sourceCrs = null;
 	mapData = null;
 	loadStage = t('table.preparingQuery');
 
@@ -186,6 +191,9 @@ async function loadTable() {
 			if (detectedGeoCol) {
 				const geoField = schema.find((f) => f.name === detectedGeoCol);
 				geoColType = geoField?.type ?? 'GEOMETRY';
+				// Detect CRS from GeoParquet metadata (non-WGS84 → needs ST_Transform)
+				sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
+				if (thisGen !== loadGeneration) return;
 			}
 			hasGeo = detectedGeoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
@@ -563,7 +571,7 @@ function setStacView() {
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
 			{#await import('./GeoParquetMapViewer.svelte') then GeoParquetMapViewer}
-				<GeoParquetMapViewer.default {tab} {schema} {mapData} />
+				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} />
 			{/await}
 		</div>
 	{/if}

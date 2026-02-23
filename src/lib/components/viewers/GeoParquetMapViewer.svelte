@@ -16,8 +16,14 @@ import MapContainer from './map/MapContainer.svelte';
 let {
 	tab,
 	schema,
-	mapData = null
-}: { tab: Tab; schema: SchemaField[]; mapData?: MapQueryResult | null } = $props();
+	mapData = null,
+	sourceCrs = null
+}: {
+	tab: Tab;
+	schema: SchemaField[];
+	mapData?: MapQueryResult | null;
+	sourceCrs?: string | null;
+} = $props();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -44,7 +50,9 @@ onDestroy(() => {
 	if (overlayRef && mapRef) {
 		try {
 			mapRef.removeControl(overlayRef);
-		} catch { /* already removed */ }
+		} catch {
+			/* already removed */
+		}
 	}
 	overlayRef = null;
 	mapRef = null;
@@ -93,7 +101,14 @@ async function fetchMapData(): Promise<MapQueryResult> {
 	const connId = tab.connectionId ?? '';
 
 	const engine = await getQueryEngine();
-	return engine.queryForMap(connId, baseSql, geoCol, geomColType);
+
+	// Detect CRS if not already provided by parent (standalone map loading)
+	let crs = sourceCrs;
+	if (crs === null) {
+		crs = await engine.detectCrs(connId, fileUrl, geoCol);
+	}
+
+	return engine.queryForMap(connId, baseSql, geoCol, geomColType, crs);
 }
 
 function onMapReady(map: maplibregl.Map) {

@@ -144,7 +144,8 @@ export class WasmQueryEngine implements QueryEngine {
 		connId: string,
 		sql: string,
 		geomCol: string,
-		geomColType: string
+		geomColType: string,
+		sourceCrs?: string | null
 	): Promise<MapQueryResult> {
 		const db = await getDB();
 		const conn = await db.connect();
@@ -165,7 +166,12 @@ export class WasmQueryEngine implements QueryEngine {
 				upper.includes('POINT') ||
 				upper.includes('LINESTRING') ||
 				upper.includes('POLYGON');
-			const geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+			let geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+
+			// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84
+			if (sourceCrs) {
+				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+			}
 
 			// Wrap query: ST_AsWKB for binary geometry, ST_GeometryType for type detection
 			const mapSql = `SELECT *, ST_AsWKB(${geomExpr}) AS __wkb,
@@ -288,6 +294,52 @@ export class WasmQueryEngine implements QueryEngine {
 			await conn.query(`SET s3_url_style = 'path';`);
 		} catch (err) {
 			console.error('[WasmQueryEngine] storage config error:', err);
+		}
+	}
+
+	async detectCrs(connId: string, path: string, geomCol: string): Promise<string | null> {
+		const db = await getDB();
+		const conn = await db.connect();
+		try {
+			if (connId) {
+				await this.configureStorage(conn, connId);
+			}
+
+			// parquet_kv_metadata takes a raw file path/URL
+			const result = await conn.query(
+				`SELECT value FROM parquet_kv_metadata('${path}') WHERE CAST(key AS VARCHAR) = 'geo'`
+			);
+			const rows = result.toArray();
+			if (rows.length === 0) return null;
+
+			// Value is binary (Uint8Array), decode to string
+			const raw = rows[0].value;
+			const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
+			const geo = JSON.parse(text);
+
+			// Find CRS from the target geometry column or the first column available
+			const colMeta =
+				geo.columns?.[geomCol] ?? (geo.columns ? (Object.values(geo.columns) as any[])[0] : null);
+			if (!colMeta?.crs) return null;
+
+			const crs = colMeta.crs;
+
+			// OGC CRS84 is lon/lat WGS84 — no transform needed
+			if (crs?.type === 'name' && crs?.properties?.name?.includes('CRS84')) return null;
+
+			// PROJJSON format: { "id": { "authority": "EPSG", "code": 27700 } }
+			if (crs?.id?.authority === 'EPSG') {
+				const code = crs.id.code;
+				// 4326 and 4979 are WGS84 variants
+				if (code === 4326 || code === 4979) return null;
+				return `EPSG:${code}`;
+			}
+
+			return null; // Can't determine — assume WGS84
+		} catch {
+			return null; // Not a GeoParquet or error reading metadata
+		} finally {
+			await conn.close();
 		}
 	}
 

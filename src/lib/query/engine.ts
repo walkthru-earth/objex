@@ -31,10 +31,13 @@ export interface QueryEngine {
 		connId: string,
 		sql: string,
 		geomCol: string,
-		geomColType: string
+		geomColType: string,
+		sourceCrs?: string | null
 	): Promise<MapQueryResult>;
 	getSchema(connId: string, path: string): Promise<SchemaField[]>;
 	getRowCount(connId: string, path: string): Promise<number>;
+	/** Detect CRS from GeoParquet metadata. Returns e.g. 'EPSG:27700' or null if WGS84/unknown. */
+	detectCrs(connId: string, path: string, geomCol: string): Promise<string | null>;
 	releaseMemory(): Promise<void>;
 	dispose(): Promise<void>;
 }
