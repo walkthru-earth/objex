@@ -1,16 +1,31 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { COGLayer, proj } from '@developmentseed/deck.gl-geotiff';
-import type { GeoTIFF, GeoTIFFImage } from 'geotiff';
+import {
+	COGLayer,
+	GeoTIFFLayer,
+	parseCOGTileMatrixSet,
+	proj
+} from '@developmentseed/deck.gl-geotiff';
 import { fromUrl } from 'geotiff';
 import { toProj4 } from 'geotiff-geokeys-to-proj4';
 import type maplibregl from 'maplibre-gl';
-import proj4 from 'proj4';
+import proj4Lib from 'proj4';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+const SF_LABELS: Record<number, string> = {
+	1: 'uint',
+	2: 'int',
+	3: 'float',
+	4: 'void',
+	5: 'complex int',
+	6: 'complex float'
+};
 
 /**
  * Custom GeoKeys parser using geotiff-geokeys-to-proj4.
@@ -33,9 +48,153 @@ async function geoKeysParser(
 	}
 }
 
+/** Safely clamp a number to a range, treating NaN/Infinity as the fallback. */
+function safeClamp(v: number, lo: number, hi: number, fallback: number): number {
+	return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
+}
+
+/** Clamp geographic bounds to valid MapLibre web-Mercator range. */
+function clampBounds(b: { west: number; south: number; east: number; north: number }) {
+	return {
+		west: safeClamp(b.west, -180, 180, -180),
+		south: safeClamp(b.south, -85.051129, 85.051129, -85.051129),
+		east: safeClamp(b.east, -180, 180, 180),
+		north: safeClamp(b.north, -85.051129, 85.051129, 85.051129)
+	};
+}
+
+/**
+ * Fix metadata from parseCOGTileMatrixSet for projections where corner
+ * reprojection produces NaN/extreme values (Mollweide, global EPSG:4326, etc.).
+ * Clamps wgsBounds and wraps projectTo3857/projectToWgs84 with safe fallbacks.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function patchMetadataBounds(metadata: any) {
+	// Clamp wgsBounds — corners of projections like Mollweide can be
+	// outside the valid domain, producing extreme longitudes (e.g. ±277°)
+	// or latitudes slightly outside [-90,90] (e.g. EPSG:4326 at ±90.002°).
+	// deck.gl's lngLatToWorld asserts lat ∈ [-90,90].
+	const wb = metadata.wgsBounds;
+	if (wb) {
+		metadata.wgsBounds = {
+			lowerLeft: [
+				safeClamp(wb.lowerLeft[0], -180, 180, -180),
+				safeClamp(wb.lowerLeft[1], -85.051129, 85.051129, -85.051129)
+			],
+			upperRight: [
+				safeClamp(wb.upperRight[0], -180, 180, 180),
+				safeClamp(wb.upperRight[1], -85.051129, 85.051129, 85.051129)
+			]
+		};
+	}
+
+	// Wrap projectTo3857 — out-of-domain points produce NaN/Infinity in EPSG:3857
+	const origTo3857 = metadata.projectTo3857;
+	if (origTo3857) {
+		metadata.projectTo3857 = (point: [number, number]) => {
+			const r = origTo3857(point);
+			if (Number.isFinite(r[0]) && Number.isFinite(r[1])) return r;
+			return [0, 0];
+		};
+	}
+
+	// Wrap projectToWgs84 — clamp extreme lon/lat from edge reprojection
+	const origToWgs84 = metadata.projectToWgs84;
+	if (origToWgs84) {
+		metadata.projectToWgs84 = (point: [number, number]) => {
+			const r = origToWgs84(point);
+			return [safeClamp(r[0], -180, 180, 0), safeClamp(r[1], -85.051129, 85.051129, 0)];
+		};
+	}
+}
+
+// ─── Monkey-patch COGLayer._parseGeoTIFF ─────────────────────────
+// The library's inferRenderPipeline throws for PI=0/1 (Gray) and non-uint
+// SampleFormat, preventing setState from ever running. When custom
+// getTileData/renderTile are provided, catch the error and reconstruct
+// the layer state from the v2 GeoTIFF captured in onGeoTIFFLoad.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let capturedV2Geotiff: any = null;
+
+// Guard against HMR re-patching: always reference the true original
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origParse = (COGLayer as any).__origParseGeoTIFF ?? COGLayer.prototype._parseGeoTIFF;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(COGLayer as any).__origParseGeoTIFF = _origParse;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+COGLayer.prototype._parseGeoTIFF = async function (this: any) {
+	try {
+		await _origParse.call(this);
+	} catch (err) {
+		if (this.props.getTileData && this.props.renderTile && capturedV2Geotiff) {
+			// inferRenderPipeline threw but we have a custom pipeline.
+			// Reconstruct the state that _parseGeoTIFF would have set.
+			// All images/metadata are cached in the v2 GeoTIFF so this is cheap.
+			const geotiff = capturedV2Geotiff;
+			const gkParser = this.props.geoKeysParser;
+			const metadata = await parseCOGTileMatrixSet(geotiff, gkParser);
+			patchMetadataBounds(metadata);
+			const image = await geotiff.getImage();
+			const imageCount = await geotiff.getImageCount();
+			let images: unknown[] = [];
+			for (let i = 0; i < imageCount; i++) {
+				images.push(await geotiff.getImage(i));
+			}
+
+			// Skip overviews smaller than tile size — their tile bounds span
+			// most of the globe and produce NaN when projected to Web Mercator.
+			// tileMatrices[0]=coarsest, images[0]=finest (reverse mapping)
+			let firstValidZ = 0;
+			for (let z = 0; z < metadata.tileMatrices.length; z++) {
+				const img = images[images.length - 1 - z] as { getWidth(): number; getHeight(): number };
+				const tm = metadata.tileMatrices[z];
+				if (img.getWidth() >= tm.tileWidth && img.getHeight() >= tm.tileHeight) {
+					firstValidZ = z;
+					break;
+				}
+			}
+			if (firstValidZ > 0) {
+				metadata.tileMatrices = metadata.tileMatrices.slice(firstValidZ);
+				images = images.slice(0, images.length - firstValidZ);
+			}
+
+			const sourceProjection = await gkParser(image.getGeoKeys());
+			if (!sourceProjection) throw new Error('Could not determine source projection');
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const converter = proj4Lib(sourceProjection.def, 'EPSG:4326') as any;
+			// Clamp to valid Web Mercator range — edge tiles in projections like
+			// Mollweide can extend beyond the valid domain producing NaN, and
+			// global EPSG:4326 rasters can reach ±90° which is the Mercator singularity.
+			const forwardReproject = (x: number, y: number) => {
+				const r = converter.forward([x, y], false);
+				const lon = Number.isFinite(r[0]) ? Math.max(-180, Math.min(180, r[0])) : 0;
+				const lat = Number.isFinite(r[1]) ? Math.max(-85.051129, Math.min(85.051129, r[1])) : 0;
+				return [lon, lat];
+			};
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const inverseReproject = (x: number, y: number) => converter.inverse([x, y], false);
+
+			this.setState({
+				metadata,
+				forwardReproject,
+				inverseReproject,
+				images,
+				defaultGetTileData: null,
+				defaultRenderTile: null
+			});
+		} else if (this.props.onError) {
+			this.props.onError(err instanceof Error ? err : new Error(String(err)));
+		}
+	}
+};
+
+// ─── Props & State ───────────────────────────────────────────────
+
 let { tab }: { tab: Tab } = $props();
 
-// ─── State ──────────────────────────────────────────────────────
 let loading = $state(true);
 let error = $state<string | null>(null);
 let showInfo = $state(false);
@@ -48,86 +207,92 @@ let cogInfo = $state<{
 	bounds: { west: number; south: number; east: number; north: number };
 } | null>(null);
 
-/** 'coglayer' = deck.gl COGLayer (RGB/Palette), 'overview' = custom band rendering */
-let mode = $state<'coglayer' | 'overview'>('coglayer');
-let bandCount = $state(0);
-let rBand = $state(1);
-let gBand = $state(1);
-let bBand = $state(1);
-
+let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let overlayRef: any = null;
 
-/** Retained for re-rendering when bands change */
-let overviewCtx: {
-	overviewImage: GeoTIFFImage;
-	wgs84Bounds: { west: number; south: number; east: number; north: number };
-} | null = null;
-
 // ─── Tab change reset ───────────────────────────────────────────
+
 $effect(() => {
 	if (!tab) return;
 	const _tabId = tab.id;
 	untrack(() => {
+		abortController.abort();
+		abortController = new AbortController();
 		loading = true;
 		error = null;
 		cogInfo = null;
 		bounds = undefined;
-		mode = 'coglayer';
-		overviewCtx = null;
 	});
 });
 
 // ─── Map ready ──────────────────────────────────────────────────
+
 async function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
+	const signal = abortController.signal;
 
 	try {
 		const url = buildHttpsUrl(tab);
-		const tiff = await fromUrl(url);
+
+		// Pre-flight: read first IFD with geotiff@3 (single small range request)
+		const tiff = await fromUrl(url, {}, signal);
 		const firstImage = await tiff.getImage();
+		if (signal.aborted) return;
+
+		// ─── v3-compatible metadata access ───
+		const isTiled = firstImage.isTiled;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const ifd = firstImage.fileDirectory as any;
+		const pi = (firstImage as any).fileDirectory?.actualizedFields?.get?.(262) as
+			| number
+			| undefined;
+		const sfVal = firstImage.getSampleFormat();
+		const bandCount = firstImage.getSamplesPerPixel();
+		const bpsVal = firstImage.getBitsPerSample();
 
-		const pi = ifd.PhotometricInterpretation as number | undefined;
-		const sf = ifd.SampleFormat as number[] | undefined;
-		bandCount = firstImage.getSamplesPerPixel();
+		// Routing: default pipeline = uint (SF=1) + PI >= 2 (RGB/Palette/CMYK/YCbCr/CIELab)
+		const isUint = sfVal === 1;
+		const isDefaultPipeline = isUint && pi !== undefined && pi >= 2;
 
-		// COGLayer supports: uint (SampleFormat 1) + RGB(2)/Palette(3)/CMYK(5)/YCbCr(6)/CIELab(8)
-		const isUint = !sf || sf[0] === 1;
-		const hasSupportedPI = pi !== undefined && pi >= 2;
+		// Data type label for info panel
+		const dataType = `${SF_LABELS[sfVal] ?? `sf${sfVal}`}${bpsVal ?? ''}`;
 
-		if (isUint && hasSupportedPI) {
-			await setupCogLayer(map, url);
-		} else {
-			// Auto-select bands: first 3 for multi-band, single band tripled for grayscale
-			if (bandCount >= 3) {
-				rBand = 1;
-				gBand = 2;
-				bBand = 3;
-			} else {
-				rBand = 1;
-				gBand = 1;
-				bBand = 1;
+		// Shared onGeoTIFFLoad callback — populates info panel and fits bounds.
+		// Also captures the library's internal v2 GeoTIFF for the monkey-patch.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const handleGeoTIFFLoad = (
+			v2tiff: any,
+			{
+				geographicBounds
+			}: {
+				projection: unknown;
+				geographicBounds: { west: number; south: number; east: number; north: number };
 			}
-			mode = 'overview';
-			await setupOverview(map, tiff, firstImage, sf);
-		}
-	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
-		loading = false;
-	}
-}
+		) => {
+			capturedV2Geotiff = v2tiff;
+			const clamped = clampBounds(geographicBounds);
+			cogInfo = {
+				width: firstImage.getWidth(),
+				height: firstImage.getHeight(),
+				bandCount,
+				dataType,
+				bounds: clamped
+			};
+			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
+			map.fitBounds(
+				[
+					[clamped.west, clamped.south],
+					[clamped.east, clamped.north]
+				],
+				{ padding: 40, maxZoom: 18, animate: false }
+			);
+			loading = false;
+		};
 
-// ─── Path 1: deck.gl COGLayer (RGB / Palette) ──────────────────
-async function setupCogLayer(map: maplibregl.Map, url: string) {
-	mode = 'coglayer';
-
-	const layer = new COGLayer({
-		id: 'cog-layer',
-		geotiff: url,
-		geoKeysParser,
-		onError: (err: Error) => {
+		// Shared error handler
+		const handleError = (err: Error) => {
+			if (signal.aborted) return true;
 			const msg = err?.message || String(err);
 			if (
 				msg.includes('Request failed') ||
@@ -140,235 +305,218 @@ async function setupCogLayer(map: maplibregl.Map, url: string) {
 			}
 			loading = false;
 			return true;
-		},
-		onGeoTIFFLoad: async (tiff, { geographicBounds }) => {
-			const image = await tiff.getImage();
-			const { west, south, east, north } = geographicBounds;
-			cogInfo = {
-				width: image.getWidth(),
-				height: image.getHeight(),
-				bandCount: image.getSamplesPerPixel(),
-				dataType: 'uint8',
-				bounds: geographicBounds
-			};
-			bounds = [west, south, east, north];
-			map.fitBounds(
-				[
-					[west, south],
-					[east, north]
-				],
-				{ padding: 40, maxZoom: 18, animate: false }
+		};
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let layer: any;
+
+		if (isTiled && isDefaultPipeline) {
+			// ── Tiled COG, default pipeline (RGB / Palette / CMYK / YCbCr / CIELab) ──
+			layer = new COGLayer({
+				id: 'cog-layer',
+				geotiff: url,
+				geoKeysParser,
+				onError: handleError,
+				onGeoTIFFLoad: handleGeoTIFFLoad
+			});
+		} else if (isTiled) {
+			// ── Tiled COG, custom single-band pipeline (Gray / float / int) ──
+			layer = await buildCustomCogLayer(
+				tiff,
+				firstImage,
+				url,
+				signal,
+				handleError,
+				handleGeoTIFFLoad
 			);
-			loading = false;
+			if (!layer) return; // aborted
+		} else {
+			// ── Non-tiled TIFF — pass URL so library uses v2 internally ──
+			layer = new GeoTIFFLayer({
+				id: 'geotiff-layer',
+				geotiff: url,
+				geoKeysParser,
+				onGeoTIFFLoad: handleGeoTIFFLoad
+			});
 		}
-	});
 
-	const overlay = new MapboxOverlay({
-		interleaved: false,
-		layers: [layer],
-		onError: (err: Error) => {
-			if (!error) {
-				error = err?.message || String(err);
-				loading = false;
+		// Attach deck.gl overlay to the map
+		const overlay = new MapboxOverlay({
+			interleaved: false,
+			layers: [layer],
+			onError: (err: Error) => {
+				if (!error && !signal.aborted) {
+					error = err?.message || String(err);
+					loading = false;
+				}
 			}
-		}
-	});
-	overlayRef = overlay;
+		});
+		overlayRef = overlay;
 
-	if (map.loaded()) {
-		map.addControl(overlay as any);
-	} else {
-		map.once('load', () => map.addControl(overlay as any));
+		if (map.loaded()) {
+			map.addControl(overlay as unknown as maplibregl.IControl);
+		} else {
+			map.once('load', () => map.addControl(overlay as unknown as maplibregl.IControl));
+		}
+	} catch (err) {
+		if (signal.aborted) return;
+		error = err instanceof Error ? err.message : String(err);
+		loading = false;
 	}
 }
 
-// ─── Path 2: Overview fallback (grayscale / float / multi-band) ─
-const SAMPLE_FORMAT_LABELS: Record<number, string> = {
-	1: 'uint',
-	2: 'int',
-	3: 'float',
-	4: 'void',
-	5: 'complex int',
-	6: 'complex float'
-};
+// ─── Custom single-band COGLayer builder ────────────────────────
+// Uses our geotiff@3 pre-flight to compute min/max stats for normalization,
+// then passes the URL to COGLayer so the library opens its own v2 GeoTIFF.
+// The monkey-patched _parseGeoTIFF catches inferRenderPipeline's throw
+// and reconstructs state from the captured v2 GeoTIFF.
 
-async function setupOverview(
-	map: maplibregl.Map,
-	tiff: GeoTIFF,
-	firstImage: GeoTIFFImage,
-	sampleFormat: number[] | undefined
+async function buildCustomCogLayer(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	tiff: any,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	firstImage: any,
+	url: string,
+	signal: AbortSignal,
+	onError: (err: Error) => boolean,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	onGeoTIFFLoad: any
 ) {
-	// Find a reasonable overview (256–1024 px wide)
+	// Compute global min/max from a small overview for normalization
 	const imageCount = await tiff.getImageCount();
-	let overviewImage = firstImage;
+	let statsImage = firstImage;
 	for (let i = imageCount - 1; i >= 1; i--) {
 		const img = await tiff.getImage(i);
 		const w = img.getWidth();
-		if (w >= 256 && w <= 1024) {
-			overviewImage = img;
+		if (w >= 64 && w <= 1024) {
+			statsImage = img;
 			break;
 		}
 	}
+	if (signal.aborted) return null;
 
-	// Compute WGS84 bounds from GeoKeys + proj4
-	let west: number, south: number, east: number, north: number;
-	try {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const projDef = toProj4(firstImage.getGeoKeys() as any);
-		const converter = proj4(projDef.proj4, 'EPSG:4326');
-		const bbox = firstImage.getBoundingBox();
-		const sw = converter.forward([bbox[0], bbox[1]]);
-		const ne = converter.forward([bbox[2], bbox[3]]);
-		west = sw[0];
-		south = sw[1];
-		east = ne[0];
-		north = ne[1];
-	} catch {
-		// Fallback: assume native CRS is already WGS84
-		const bbox = firstImage.getBoundingBox();
-		west = bbox[0];
-		south = bbox[1];
-		east = bbox[2];
-		north = bbox[3];
+	const noData = firstImage.getGDALNoData();
+
+	// For large images without a suitable overview, sample a center crop
+	let statsWindow: [number, number, number, number] | undefined;
+	if (statsImage.getWidth() > 1024) {
+		const cx = Math.floor(statsImage.getWidth() / 2);
+		const cy = Math.floor(statsImage.getHeight() / 2);
+		const half = 512;
+		statsWindow = [
+			Math.max(0, cx - half),
+			Math.max(0, cy - half),
+			Math.min(statsImage.getWidth(), cx + half),
+			Math.min(statsImage.getHeight(), cy + half)
+		];
 	}
 
-	overviewCtx = { overviewImage, wgs84Bounds: { west, south, east, north } };
-
-	const sfVal = sampleFormat?.[0] ?? 1;
-	cogInfo = {
-		width: firstImage.getWidth(),
-		height: firstImage.getHeight(),
-		bandCount,
-		dataType: SAMPLE_FORMAT_LABELS[sfVal] ?? `sf${sfVal}`,
-		bounds: { west, south, east, north }
-	};
-	bounds = [west, south, east, north];
-	map.fitBounds(
-		[
-			[west, south],
-			[east, north]
-		],
-		{ padding: 40, maxZoom: 18, animate: false }
-	);
-
-	await renderBands(map);
-	loading = false;
-}
-
-/**
- * Read selected bands from the overview, normalize to 0–255, and display
- * as a MapLibre image source.
- */
-async function renderBands(map: maplibregl.Map) {
-	if (!overviewCtx) return;
-	const { overviewImage, wgs84Bounds } = overviewCtx;
-	const { west, south, east, north } = wgs84Bounds;
-
-	const ow = overviewImage.getWidth();
-	const oh = overviewImage.getHeight();
-
-	// Read 3 selected bands (0-indexed)
-	const samples = [rBand - 1, gBand - 1, bBand - 1];
-	const rasters = await overviewImage.readRasters({
-		samples,
-		interleave: false
+	const rasters = await statsImage.readRasters({
+		samples: [0],
+		window: statsWindow,
+		signal
 	});
+	if (signal.aborted) return null;
 
-	// Normalize each band independently to 0–255
-	const rgba = new Uint8ClampedArray(ow * oh * 4);
-	for (let c = 0; c < 3; c++) {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const statsBand = (rasters as any)[0] as ArrayLike<number>;
+	let min = Infinity;
+	let max = -Infinity;
+	for (let i = 0; i < statsBand.length; i++) {
+		const v = statsBand[i];
+		if (noData !== null && v === noData) continue;
+		if (!Number.isFinite(v)) continue;
+		if (v < min) min = v;
+		if (v > max) max = v;
+	}
+	if (!Number.isFinite(min)) {
+		min = 0;
+		max = 1;
+	}
+	const range = max - min || 1;
+
+	// Lazy cache: v3 images are loaded on-demand per zoom level.
+	// geotiff v3 supports modern codecs (Zstandard 50000, WebP 50001) that
+	// the library's bundled v2 does not. No Pool — avoids worker module
+	// resolution failures in Vite dev that cause the browser to hang.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const v3ImageCache = new Map<string, any>();
+
+	// Pass URL so the library opens its own v2 GeoTIFF for metadata/tile-matrix.
+	// Custom getTileData uses v3 images (which support more compression methods).
+	return new COGLayer({
+		id: 'cog-layer',
+		geotiff: url,
+		geoKeysParser,
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const band = (rasters as any)[c] as ArrayLike<number>;
-		let min = Infinity;
-		let max = -Infinity;
-		for (let i = 0; i < band.length; i++) {
-			const v = band[i];
-			if (Number.isFinite(v)) {
-				if (v < min) min = v;
-				if (v > max) max = v;
+		getTileData: async (image: any, options: any) => {
+			const { window: win, signal: tileSig } = options;
+
+			// Lazily find/cache the matching v3 image by dimensions
+			const key = `${image.getWidth()}x${image.getHeight()}`;
+			let v3Img = v3ImageCache.get(key);
+			if (!v3Img) {
+				const count = await tiff.getImageCount();
+				for (let i = 0; i < count; i++) {
+					const img = await tiff.getImage(i); // cached by geotiff.js
+					const k = `${img.getWidth()}x${img.getHeight()}`;
+					v3ImageCache.set(k, img);
+					if (k === key) {
+						v3Img = img;
+						break;
+					}
+				}
 			}
-		}
-		const range = max - min || 1;
-		for (let i = 0; i < band.length; i++) {
-			rgba[i * 4 + c] = Number.isFinite(band[i]) ? Math.round(((band[i] - min) / range) * 255) : 0;
-		}
-	}
-	for (let i = 0; i < ow * oh; i++) rgba[i * 4 + 3] = 255;
 
-	// Create canvas → data URL
-	const canvas = document.createElement('canvas');
-	canvas.width = ow;
-	canvas.height = oh;
-	const ctx = canvas.getContext('2d')!;
-	ctx.putImageData(new ImageData(rgba, ow, oh), 0, 0);
-	const dataUrl = canvas.toDataURL('image/png');
+			// Read band 0 — no Pool (main-thread async decode avoids worker hangs)
+			const r = await (v3Img || image).readRasters({
+				samples: [0],
+				window: win,
+				signal: tileSig,
+				interleave: false,
+				// Use v2 pool only when falling back to v2 image
+				...(v3Img ? {} : { pool: options.pool })
+			});
 
-	const sourceId = 'cog-overview';
-	const existing = map.getSource(sourceId) as maplibregl.ImageSource | undefined;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const band = (r as any)[0] as ArrayLike<number>;
+			const w = win ? win[2] - win[0] : image.getWidth();
+			const h = win ? win[3] - win[1] : image.getHeight();
+			const rgba = new Uint8ClampedArray(w * h * 4);
 
-	if (existing) {
-		existing.updateImage({
-			url: dataUrl,
-			coordinates: [
-				[west, north],
-				[east, north],
-				[east, south],
-				[west, south]
-			]
-		});
-	} else {
-		map.addSource(sourceId, {
-			type: 'image',
-			url: dataUrl,
-			coordinates: [
-				[west, north],
-				[east, north],
-				[east, south],
-				[west, south]
-			]
-		});
-		map.addLayer({
-			id: 'cog-overview-layer',
-			type: 'raster',
-			source: sourceId,
-			paint: { 'raster-opacity': 1 }
-		});
-	}
-}
+			for (let i = 0; i < band.length; i++) {
+				const v = band[i];
+				const isND = (noData !== null && v === noData) || !Number.isFinite(v);
+				const g = isND ? 0 : Math.round(((v - min) / range) * 255);
+				const idx = i * 4;
+				rgba[idx] = g;
+				rgba[idx + 1] = g;
+				rgba[idx + 2] = g;
+				rgba[idx + 3] = isND ? 0 : 255;
+			}
 
-async function onBandChange() {
-	if (mode !== 'overview' || !mapRef) return;
-	loading = true;
-	try {
-		await renderBands(mapRef);
-	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
-	}
-	loading = false;
+			return { texture: new ImageData(rgba, w, h), width: w, height: h };
+		},
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		renderTile: (data: any) => data.texture,
+		onError,
+		onGeoTIFFLoad
+	});
 }
 
 // ─── Cleanup ────────────────────────────────────────────────────
+
 onDestroy(() => {
-	if (mapRef) {
-		if (overlayRef) {
-			try {
-				mapRef.removeControl(overlayRef);
-			} catch {
-				// map may already be destroyed
-			}
-		}
-		if (mode === 'overview') {
-			try {
-				if (mapRef.getLayer('cog-overview-layer')) mapRef.removeLayer('cog-overview-layer');
-				if (mapRef.getSource('cog-overview')) mapRef.removeSource('cog-overview');
-			} catch {
-				// ignore
-			}
+	abortController.abort();
+	if (mapRef && overlayRef) {
+		try {
+			mapRef.removeControl(overlayRef);
+		} catch {
+			// map may already be destroyed
 		}
 	}
 	mapRef = null;
 	overlayRef = null;
-	overviewCtx = null;
 });
 </script>
 
@@ -377,29 +525,34 @@ onDestroy(() => {
 		<MapContainer {onMapReady} {bounds} />
 	</div>
 
-	{#if loading}
-		<div
-			class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			{t('map.loadingCog')}
-		</div>
-	{/if}
+	<div class="pointer-events-none absolute left-2 top-2 flex flex-col gap-1.5">
+		{#if loading}
+			<div
+				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+			>
+				{t('map.loadingCog')}
+			</div>
+		{/if}
 
-	{#if error}
-		<div
-			class="absolute left-2 top-2 max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200"
-		>
-			{error}
-		</div>
-	{/if}
+		{#if cogInfo}
+			<div
+				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+			>
+				COG {cogInfo.width}&times;{cogInfo.height}, {cogInfo.bandCount}
+				band{cogInfo.bandCount !== 1 ? 's' : ''}, {cogInfo.dataType}
+			</div>
+		{/if}
+
+		{#if error}
+			<div
+				class="pointer-events-auto max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200"
+			>
+				{error}
+			</div>
+		{/if}
+	</div>
 
 	{#if cogInfo}
-		<div
-			class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			COG {cogInfo.width}&times;{cogInfo.height}, {cogInfo.bandCount}
-			band{cogInfo.bandCount !== 1 ? 's' : ''}, {cogInfo.dataType}
-		</div>
 
 		<button
 			class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
@@ -428,49 +581,5 @@ onDestroy(() => {
 				</dl>
 			</div>
 		{/if}
-	{/if}
-
-	<!-- Band selector (overview mode, multi-band) -->
-	{#if mode === 'overview' && cogInfo && bandCount > 1}
-		<div
-			class="absolute bottom-2 left-2 flex items-center gap-2 rounded bg-card/90 px-2 py-1.5 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			<label class="flex items-center gap-1">
-				<span class="font-semibold text-red-400">R</span>
-				<select
-					bind:value={rBand}
-					onchange={onBandChange}
-					class="rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				>
-					{#each Array.from({ length: bandCount }, (_, i) => i + 1) as band}
-						<option value={band}>{band}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex items-center gap-1">
-				<span class="font-semibold text-green-400">G</span>
-				<select
-					bind:value={gBand}
-					onchange={onBandChange}
-					class="rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				>
-					{#each Array.from({ length: bandCount }, (_, i) => i + 1) as band}
-						<option value={band}>{band}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex items-center gap-1">
-				<span class="font-semibold text-blue-400">B</span>
-				<select
-					bind:value={bBand}
-					onchange={onBandChange}
-					class="rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				>
-					{#each Array.from({ length: bandCount }, (_, i) => i + 1) as band}
-						<option value={band}>{band}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
 	{/if}
 </div>
