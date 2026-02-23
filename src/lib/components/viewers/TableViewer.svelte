@@ -196,27 +196,46 @@ async function loadTable() {
 
 		if (cloudNative) {
 			// Cloud-native formats (Parquet): metadata reads are cheap range
-			// requests — separate schema + count queries don't re-download.
+			// requests — combine schema + CRS in a single connection when possible.
 			loadStage = t('table.loadingSchema');
-			schema = await engine.getSchema(connId, fileUrl);
-			if (thisGen !== loadGeneration) return;
-			columns = schema.map((f) => f.name);
-			loadDetails = [...loadDetails, `${columns.length} columns`];
-
-			const detectedGeoCol = findGeoColumn(schema);
-			geoCol = detectedGeoCol;
-			if (detectedGeoCol) {
-				const geoField = schema.find((f) => f.name === detectedGeoCol);
-				geoColType = geoField?.type ?? 'GEOMETRY';
-				loadDetails = [...loadDetails, `Geometry: ${detectedGeoCol} (${geoColType})`];
-				// Detect CRS from GeoParquet metadata (non-WGS84 → needs ST_Transform)
-				sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
+			if (engine.getSchemaAndCrs) {
+				const result = await engine.getSchemaAndCrs(connId, fileUrl, findGeoColumn);
 				if (thisGen !== loadGeneration) return;
-				if (sourceCrs) {
-					loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+				schema = result.schema;
+				columns = schema.map((f) => f.name);
+				loadDetails = [...loadDetails, `${columns.length} columns`];
+
+				geoCol = result.geomCol;
+				if (result.geomCol) {
+					const geoField = schema.find((f) => f.name === result.geomCol);
+					geoColType = geoField?.type ?? 'GEOMETRY';
+					loadDetails = [...loadDetails, `Geometry: ${result.geomCol} (${geoColType})`];
+					sourceCrs = result.crs;
+					if (sourceCrs) {
+						loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+					}
+				}
+			} else {
+				// Fallback: separate queries (non-WASM engines)
+				schema = await engine.getSchema(connId, fileUrl);
+				if (thisGen !== loadGeneration) return;
+				columns = schema.map((f) => f.name);
+				loadDetails = [...loadDetails, `${columns.length} columns`];
+
+				const detectedGeoCol = findGeoColumn(schema);
+				geoCol = detectedGeoCol;
+				if (detectedGeoCol) {
+					const geoField = schema.find((f) => f.name === detectedGeoCol);
+					geoColType = geoField?.type ?? 'GEOMETRY';
+					loadDetails = [...loadDetails, `Geometry: ${detectedGeoCol} (${geoColType})`];
+					sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
+					if (thisGen !== loadGeneration) return;
+					if (sourceCrs) {
+						loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+					}
 				}
 			}
-			hasGeo = detectedGeoCol !== null;
+			hasGeo = geoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
 			if (isStac) {
 				loadDetails = [...loadDetails, 'STAC catalog detected'];

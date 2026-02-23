@@ -15,6 +15,22 @@ const eh_worker = `${CDN_BASE}/duckdb-browser-eh.worker.js`;
 
 const INIT_TIMEOUT_MS = 30_000;
 
+// ─── Performance & diagnostic logging ────────────────────────────────
+
+const LOG_PREFIX = '[DuckDB]';
+
+function log(...args: any[]) {
+	console.log(LOG_PREFIX, ...args);
+}
+
+function logWarn(...args: any[]) {
+	console.warn(LOG_PREFIX, ...args);
+}
+
+function elapsed(start: number): string {
+	return `${(performance.now() - start).toFixed(1)}ms`;
+}
+
 let dbPromise: Promise<any> | null = null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -34,9 +50,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 async function getDB() {
-	if (dbPromise) return dbPromise;
+	if (dbPromise) {
+		log('getDB → cached');
+		return dbPromise;
+	}
 
 	dbPromise = (async () => {
+		const t0 = performance.now();
+		log('getDB → initializing...');
 		const duckdb = await import('@duckdb/duckdb-wasm');
 
 		const MANUAL_BUNDLES: DuckDBBundles = {
@@ -64,19 +85,23 @@ async function getDB() {
 			INIT_TIMEOUT_MS,
 			'DuckDB WASM instantiation'
 		);
+		log(`getDB → instantiated in ${elapsed(t0)}`);
 
 		// Load httpfs for remote file access and spatial for ST_ReadSHP
 		const conn = await db.connect();
 		try {
+			const tExt = performance.now();
 			await withTimeout(
 				conn.query('INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;'),
 				INIT_TIMEOUT_MS,
 				'extension install (httpfs + spatial)'
 			);
+			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
 			await conn.close();
 		}
 
+		log(`getDB → ready (total ${elapsed(t0)})`);
 		return db;
 	})();
 
@@ -187,15 +212,24 @@ async function extractCrsFromLogicalType(
 
 export class WasmQueryEngine implements QueryEngine {
 	async query(connId: string, sql: string): Promise<QueryResult> {
+		const t0 = performance.now();
+		const sqlPreview = sql.length > 120 ? sql.slice(0, 120) + '…' : sql;
+		log(`query → ${sqlPreview}`);
+
 		const db = await getDB();
 		const conn = await db.connect();
+		const tConn = performance.now();
+		log(`query → connected in ${elapsed(t0)}`);
 
 		try {
 			if (connId) {
 				await this.configureStorage(conn, connId);
+				log(`query → storage configured in ${elapsed(tConn)}`);
 			}
 
+			const tQuery = performance.now();
 			const result = await conn.query(sql);
+			log(`query → executed in ${elapsed(tQuery)}, rows: ${result.numRows}`);
 
 			// DuckDB WASM returns an Arrow Table (bundled apache-arrow@17).
 			// Our project uses apache-arrow@21 — cross-version tableToIPC/tableFromIPC
@@ -205,6 +239,7 @@ export class WasmQueryEngine implements QueryEngine {
 			const types = result.schema.fields.map((f: any) => String(f.type));
 
 			if (numRows === 0) {
+				log(`query → done (empty) in ${elapsed(t0)}`);
 				return {
 					columns: cols,
 					types,
@@ -231,7 +266,11 @@ export class WasmQueryEngine implements QueryEngine {
 				arrowBytes = new Uint8Array(0);
 			}
 
+			log(`query → done in ${elapsed(t0)}, ${numRows} rows, ${cols.length} cols`);
 			return { columns: cols, types, rowCount: numRows, arrowBytes, rows };
+		} catch (err) {
+			logWarn(`query → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
+			throw err;
 		} finally {
 			await conn.close();
 		}
@@ -244,6 +283,8 @@ export class WasmQueryEngine implements QueryEngine {
 		geomColType: string,
 		sourceCrs?: string | null
 	): Promise<MapQueryResult> {
+		const t0 = performance.now();
+		log(`queryForMap → geomCol: ${geomCol}, type: ${geomColType}, crs: ${sourceCrs ?? 'WGS84'}`);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -324,13 +365,21 @@ export class WasmQueryEngine implements QueryEngine {
 				});
 			}
 
+			log(
+				`queryForMap → done in ${elapsed(t0)}, ${wkbArrays.length} geometries (${geometryType}), ${attributes.size} attrs`
+			);
 			return { wkbArrays, geometryType, attributes, rowCount: wkbArrays.length };
+		} catch (err) {
+			logWarn(`queryForMap → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
+			throw err;
 		} finally {
 			await conn.close();
 		}
 	}
 
 	async getSchema(connId: string, path: string): Promise<SchemaField[]> {
+		const t0 = performance.now();
+		log('getSchema →', path);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -343,17 +392,24 @@ export class WasmQueryEngine implements QueryEngine {
 			const result = await conn.query(`DESCRIBE SELECT * FROM ${source}`);
 			const rows = result.toArray();
 
-			return rows.map((row: any) => ({
+			const schema = rows.map((row: any) => ({
 				name: row.column_name,
 				type: row.column_type,
 				nullable: row.null === 'YES'
 			}));
+			log(`getSchema → done in ${elapsed(t0)}, ${schema.length} fields`);
+			return schema;
+		} catch (err) {
+			logWarn('getSchema → failed:', (err as Error)?.message ?? err);
+			throw err;
 		} finally {
 			await conn.close();
 		}
 	}
 
 	async getRowCount(connId: string, path: string): Promise<number> {
+		const t0 = performance.now();
+		log('getRowCount →', path);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -362,10 +418,86 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
+			// For Parquet files, try reading row count from file footer metadata first.
+			// This avoids parsing column types (which can fail on exotic geometry types)
+			// and is faster than SELECT COUNT(*) since it reads only footer bytes.
+			const isParquet = /\.parquet$/i.test(path);
+			if (isParquet) {
+				try {
+					const metaResult = await conn.query(
+						`SELECT SUM(num_rows)::BIGINT as cnt FROM parquet_file_metadata('${path}')`
+					);
+					const metaRows = metaResult.toArray();
+					const count = Number(metaRows[0].cnt);
+					log(`getRowCount → ${count} via parquet_file_metadata in ${elapsed(t0)}`);
+					return count;
+				} catch (metaErr) {
+					logWarn(
+						'getRowCount → parquet_file_metadata failed, falling back to COUNT(*):',
+						(metaErr as Error)?.message ?? metaErr
+					);
+				}
+			}
+
 			const source = buildDuckDbSource(path, path);
 			const result = await conn.query(`SELECT COUNT(*) as cnt FROM ${source}`);
 			const rows = result.toArray();
-			return Number(rows[0].cnt);
+			const count = Number(rows[0].cnt);
+			log(`getRowCount → ${count} via COUNT(*) in ${elapsed(t0)}`);
+			return count;
+		} catch (err) {
+			logWarn('getRowCount → failed:', (err as Error)?.message ?? err);
+			throw err;
+		} finally {
+			await conn.close();
+		}
+	}
+
+	async getSchemaAndCrs(
+		connId: string,
+		path: string,
+		findGeoCol: (schema: SchemaField[]) => string | null
+	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }> {
+		const t0 = performance.now();
+		log('getSchemaAndCrs →', path);
+		const db = await getDB();
+		const conn = await db.connect();
+
+		try {
+			if (connId) {
+				await this.configureStorage(conn, connId);
+			}
+
+			// Schema detection
+			const tSchema = performance.now();
+			const source = buildDuckDbSource(path, path);
+			const result = await conn.query(`DESCRIBE SELECT * FROM ${source}`);
+			const schemaRows = result.toArray();
+			const schema: SchemaField[] = schemaRows.map((row: any) => ({
+				name: row.column_name,
+				type: row.column_type,
+				nullable: row.null === 'YES'
+			}));
+			log(`getSchemaAndCrs → schema: ${schema.length} fields in ${elapsed(tSchema)}`);
+
+			// Geo column detection via callback (avoids importing wkb utils here)
+			const geomCol = findGeoCol(schema);
+			if (!geomCol) {
+				log(`getSchemaAndCrs → no geo column, done in ${elapsed(t0)}`);
+				return { schema, geomCol: null, crs: null };
+			}
+
+			// CRS detection reusing the same connection
+			log(`getSchemaAndCrs → geo column: ${geomCol}, detecting CRS...`);
+			const tCrs = performance.now();
+			const crs = await this.detectCrsWithConn(conn, path, geomCol);
+			log(
+				`getSchemaAndCrs → CRS: ${crs ?? 'WGS84/null'} in ${elapsed(tCrs)}, total ${elapsed(t0)}`
+			);
+			return { schema, geomCol, crs };
+		} catch (err) {
+			logWarn('getSchemaAndCrs → failed:', (err as Error)?.message ?? err);
+			throw err;
 		} finally {
 			await conn.close();
 		}
@@ -375,39 +507,61 @@ export class WasmQueryEngine implements QueryEngine {
 		try {
 			// Read connection metadata from localStorage
 			const stored = localStorage.getItem('obstore-explore-connections');
-			if (!stored) return;
+			if (!stored) {
+				log('configureStorage → no connections in localStorage');
+				return;
+			}
 			const connections = JSON.parse(stored);
 			const connection = connections.find((c: any) => c.id === connId);
-			if (!connection) return;
+			if (!connection) {
+				logWarn(`configureStorage → connection "${connId}" not found`);
+				return;
+			}
 
 			// Azure uses direct HTTPS URLs with SAS token — no S3 config needed
-			if (connection.provider === 'azure') return;
+			if (connection.provider === 'azure') {
+				log('configureStorage → Azure provider, skipping S3 config');
+				return;
+			}
+
+			// Batch all SET commands into a single query to minimize web worker round-trips
+			const sets: string[] = [];
 
 			// Set S3 credentials from in-memory credential store
 			const creds = credentialStore.get(connId);
 			if (creds && creds.type === 'sigv4') {
-				await conn.query(`SET s3_access_key_id = '${creds.accessKey}';`);
-				await conn.query(`SET s3_secret_access_key = '${creds.secretKey}';`);
+				sets.push(`SET s3_access_key_id = '${creds.accessKey}'`);
+				sets.push(`SET s3_secret_access_key = '${creds.secretKey}'`);
 			}
 
 			if (connection.region) {
-				await conn.query(`SET s3_region = '${connection.region}';`);
+				sets.push(`SET s3_region = '${connection.region}'`);
 			}
 			if (connection.endpoint) {
 				const endpoint = connection.endpoint.replace(/^https?:\/\//, '');
-				await conn.query(`SET s3_endpoint = '${endpoint}';`);
+				sets.push(`SET s3_endpoint = '${endpoint}'`);
 				if (connection.endpoint.startsWith('http://')) {
-					await conn.query(`SET s3_use_ssl = false;`);
+					sets.push(`SET s3_use_ssl = false`);
 				}
 			}
 			// Always use path-style — virtual-hosted breaks for buckets with dots
-			await conn.query(`SET s3_url_style = 'path';`);
+			sets.push(`SET s3_url_style = 'path'`);
+
+			if (sets.length > 0) {
+				const t0 = performance.now();
+				await conn.query(sets.join('; ') + ';');
+				log(
+					`configureStorage → ${sets.length} SETs batched in ${elapsed(t0)} (provider: ${connection.provider ?? 's3'})`
+				);
+			}
 		} catch (err) {
-			console.error('[WasmQueryEngine] storage config error:', err);
+			console.error(LOG_PREFIX, 'configureStorage error:', err);
 		}
 	}
 
 	async detectCrs(connId: string, path: string, geomCol: string): Promise<string | null> {
+		const t0 = performance.now();
+		log(`detectCrs → standalone call for "${geomCol}"`, path);
 		const db = await getDB();
 		const conn = await db.connect();
 		try {
@@ -415,50 +569,78 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
-			// Strategy 1: GeoParquet file-level metadata (geo key in KV metadata)
-			try {
-				const kvResult = await conn.query(
-					`SELECT value FROM parquet_kv_metadata('${path}') WHERE CAST(key AS VARCHAR) = 'geo'`
-				);
-				const kvRows = kvResult.toArray();
-				if (kvRows.length > 0) {
-					const raw = kvRows[0].value;
-					const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
-					const geo = JSON.parse(text);
-					const colMeta =
-						geo.columns?.[geomCol] ??
-						(geo.columns ? (Object.values(geo.columns) as any[])[0] : null);
-					if (colMeta?.crs) {
-						const epsg = extractEpsgFromProjjson(colMeta.crs);
-						if (epsg) return epsg;
-					}
-				}
-			} catch {
-				/* not GeoParquet or no KV metadata */
-			}
-
-			// Strategy 2: Native Parquet GEOMETRY type (Parquet Format 2.11+)
-			// CRS is in the schema logical_type: GeometryType(crs=...)
-			try {
-				const schemaResult = await conn.query(
-					`SELECT logical_type FROM parquet_schema('${path}') WHERE name = '${geomCol}'`
-				);
-				const schemaRows = schemaResult.toArray();
-				if (schemaRows.length > 0) {
-					const logicalType = String(schemaRows[0].logical_type ?? '');
-					const epsg = await extractCrsFromLogicalType(logicalType, conn, path);
-					if (epsg) return epsg;
-				}
-			} catch {
-				/* not a Parquet file or schema read failed */
-			}
-
-			return null;
-		} catch {
+			const crs = await this.detectCrsWithConn(conn, path, geomCol);
+			log(`detectCrs → ${crs ?? 'WGS84/null'} in ${elapsed(t0)}`);
+			return crs;
+		} catch (err) {
+			logWarn('detectCrs → failed:', err);
 			return null;
 		} finally {
 			await conn.close();
 		}
+	}
+
+	private async detectCrsWithConn(
+		conn: any,
+		path: string,
+		geomCol: string
+	): Promise<string | null> {
+		// Strategy 1: GeoParquet file-level metadata (geo key in KV metadata)
+		try {
+			const t1 = performance.now();
+			const kvResult = await conn.query(
+				`SELECT value FROM parquet_kv_metadata('${path}') WHERE CAST(key AS VARCHAR) = 'geo'`
+			);
+			const kvRows = kvResult.toArray();
+			log(`detectCrs strategy 1 (kv_metadata) → ${kvRows.length} rows in ${elapsed(t1)}`);
+			if (kvRows.length > 0) {
+				const raw = kvRows[0].value;
+				const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
+				const geo = JSON.parse(text);
+				const colMeta =
+					geo.columns?.[geomCol] ?? (geo.columns ? (Object.values(geo.columns) as any[])[0] : null);
+				if (colMeta) {
+					// GeoParquet "geo" metadata is authoritative:
+					// has crs → extract EPSG; no crs or crs: null → WGS84 per spec
+					const result = colMeta.crs ? extractEpsgFromProjjson(colMeta.crs) : null;
+					log(
+						`detectCrs strategy 1 → authoritative: ${result ?? 'WGS84/null'} (skipping strategy 2)`
+					);
+					return result;
+				}
+				log('detectCrs strategy 1 → "geo" key found but no column metadata for', geomCol);
+			}
+		} catch (err) {
+			log(
+				'detectCrs strategy 1 → skipped (not GeoParquet or no KV metadata):',
+				(err as Error)?.message ?? err
+			);
+		}
+
+		// Strategy 2: Native Parquet GEOMETRY type (Parquet Format 2.11+)
+		// CRS is in the schema logical_type: GeometryType(crs=...)
+		try {
+			const t2 = performance.now();
+			const schemaResult = await conn.query(
+				`SELECT logical_type FROM parquet_schema('${path}') WHERE name = '${geomCol}'`
+			);
+			const schemaRows = schemaResult.toArray();
+			log(`detectCrs strategy 2 (parquet_schema) → ${schemaRows.length} rows in ${elapsed(t2)}`);
+			if (schemaRows.length > 0) {
+				const logicalType = String(schemaRows[0].logical_type ?? '');
+				log(`detectCrs strategy 2 → logical_type: "${logicalType}"`);
+				const epsg = await extractCrsFromLogicalType(logicalType, conn, path);
+				if (epsg) {
+					log(`detectCrs strategy 2 → found: ${epsg}`);
+					return epsg;
+				}
+			}
+		} catch (err) {
+			log('detectCrs strategy 2 → skipped:', (err as Error)?.message ?? err);
+		}
+
+		log('detectCrs → no CRS found, assuming WGS84');
+		return null;
 	}
 
 	async releaseMemory(): Promise<void> {

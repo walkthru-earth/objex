@@ -38,6 +38,12 @@ export interface QueryEngine {
 	getRowCount(connId: string, path: string): Promise<number>;
 	/** Detect CRS from GeoParquet metadata. Returns e.g. 'EPSG:27700' or null if WGS84/unknown. */
 	detectCrs(connId: string, path: string, geomCol: string): Promise<string | null>;
+	/** Combined schema + CRS detection in a single connection (fewer web worker round-trips). */
+	getSchemaAndCrs?(
+		connId: string,
+		path: string,
+		findGeoCol: (schema: SchemaField[]) => string | null
+	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }>;
 	releaseMemory(): Promise<void>;
 	dispose(): Promise<void>;
 }
