@@ -1,16 +1,33 @@
 <script lang="ts">
+import CheckIcon from '@lucide/svelte/icons/check';
 import ChevronFirstIcon from '@lucide/svelte/icons/chevron-first';
 import ChevronLastIcon from '@lucide/svelte/icons/chevron-last';
 import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import LinkIcon from '@lucide/svelte/icons/link';
+import MapIcon from '@lucide/svelte/icons/map';
+import TableIcon from '@lucide/svelte/icons/table';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { Separator } from '$lib/components/ui/separator/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
+import { connections } from '$lib/stores/connections.svelte.js';
+import type { Tab } from '$lib/types';
+import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
+
+const PROVIDER_LABELS: Record<string, string> = {
+	s3: 'S3',
+	gcs: 'GCS',
+	r2: 'R2',
+	minio: 'MinIO',
+	azure: 'Azure',
+	storj: 'Storj'
+};
 
 let {
+	tab,
 	fileName,
 	columnCount = 0,
 	rowCount = 0,
@@ -31,6 +48,7 @@ let {
 	onToggleStac,
 	onPageSizeChange
 }: {
+	tab: Tab;
 	fileName: string;
 	columnCount?: number;
 	rowCount?: number;
@@ -54,8 +72,29 @@ let {
 
 let jumpPageEditing = $state(false);
 let jumpPageValue = $state('');
+let copiedType = $state<string | null>(null);
 
 const PAGE_SIZES = [100, 500, 1000, 5000];
+
+const providerLabel = $derived.by(() => {
+	if (!tab.connectionId) return null;
+	const conn = connections.getById(tab.connectionId);
+	return conn ? (PROVIDER_LABELS[conn.provider] ?? conn.provider) : null;
+});
+
+const hasProviderLink = $derived(tab.source === 'remote' && !!providerLabel);
+
+async function handleCopy(type: 'https' | 'provider') {
+	const url = type === 'https' ? buildHttpsUrl(tab) : buildStorageUrl(tab);
+	if (!url) return;
+	try {
+		await navigator.clipboard.writeText(url);
+		copiedType = type;
+		setTimeout(() => (copiedType = null), 2000);
+	} catch {
+		// clipboard API may fail in some contexts
+	}
+}
 
 function handleJumpSubmit() {
 	const page = parseInt(jumpPageValue, 10);
@@ -96,27 +135,71 @@ function handleJumpKeydown(e: KeyboardEvent) {
 	<div class="ms-auto flex items-center gap-1 sm:gap-2">
 		<!-- ===== Desktop-only controls (hidden on mobile) ===== -->
 		<div class="hidden items-center gap-1 sm:flex">
+			<!-- Copy URL dropdown -->
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button variant="ghost" size="sm" class="h-7 gap-1 px-2 text-xs" {...props}>
+							<LinkIcon class="size-3" />
+							{t('toolbar.copyUrl')}
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="start" class="w-48">
+					<DropdownMenu.Item onclick={() => handleCopy('https')}>
+						{#if copiedType === 'https'}
+							<CheckIcon class="mr-2 size-3 text-green-500" />
+							{t('toolbar.copied')}
+						{:else}
+							{t('toolbar.copyHttpsLink')}
+						{/if}
+					</DropdownMenu.Item>
+					{#if hasProviderLink}
+						<DropdownMenu.Item onclick={() => handleCopy('provider')}>
+							{#if copiedType === 'provider'}
+								<CheckIcon class="mr-2 size-3 text-green-500" />
+								{t('toolbar.copied')}
+							{:else}
+								{t('toolbar.copyProviderLink').replace('{provider}', providerLabel!)}
+							{/if}
+						</DropdownMenu.Item>
+					{/if}
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+
+			<Separator orientation="vertical" class="!h-4" />
+
+			<!-- Viewer mode buttons — segmented style -->
 			{#if hasGeo && onToggleView}
 				<Button
-					variant="ghost"
+					variant={viewMode === 'map' ? 'default' : 'outline'}
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'map' ? 'text-blue-500' : ''}"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'map' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 					onclick={onToggleView}
 				>
-					{viewMode === 'table' || viewMode === 'stac' ? t('toolbar.map') : t('toolbar.table')}
+					{#if viewMode === 'table' || viewMode === 'stac'}
+						<MapIcon class="size-3" />
+						{t('toolbar.map')}
+					{:else}
+						<TableIcon class="size-3" />
+						{t('toolbar.table')}
+					{/if}
 				</Button>
-				<Separator orientation="vertical" class="!h-4" />
 			{/if}
 
 			{#if isStac && onToggleStac}
 				<Button
-					variant="ghost"
+					variant={viewMode === 'stac' ? 'default' : 'outline'}
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'stac' ? 'text-blue-500' : ''}"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 					onclick={onToggleStac}
 				>
+					<MapIcon class="size-3" />
 					{t('toolbar.stacMap')}
 				</Button>
+			{/if}
+
+			{#if (hasGeo && onToggleView) || (isStac && onToggleStac)}
 				<Separator orientation="vertical" class="!h-4" />
 			{/if}
 
@@ -163,64 +246,78 @@ function handleJumpKeydown(e: KeyboardEvent) {
 		{#if totalPages > 1}
 			<Separator orientation="vertical" class="!h-4 hidden sm:block" />
 
-			<!-- First page — desktop only -->
-			<Button
-				variant="ghost"
-				size="sm"
-				class="hidden h-7 px-1.5 sm:inline-flex"
-				onclick={() => onGoToPage?.(1)}
-				disabled={currentPage <= 1}
-				title={t('toolbar.firstPage')}
-			>
-				<ChevronFirstIcon class="size-3.5" />
-			</Button>
-
-			<!-- Prev button: icon on mobile, text on desktop -->
-			<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={onPrevPage} disabled={currentPage <= 1}>
-				<ChevronLeftIcon class="size-3.5 sm:hidden" />
-				<span class="hidden sm:inline">{t('toolbar.prev')}</span>
-			</Button>
-
-			<!-- Clickable page indicator / jump to page -->
-			{#if jumpPageEditing}
-				<!-- svelte-ignore a11y_autofocus -->
-				<input
-					type="number"
-					class="w-12 rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-center text-xs outline-none sm:w-16 sm:px-1.5 dark:border-zinc-600"
-					bind:value={jumpPageValue}
-					onkeydown={handleJumpKeydown}
-					onblur={handleJumpSubmit}
-					min="1"
-					max={totalPages}
-					autofocus
-				/>
-			{:else}
-				<button
-					class="rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-					onclick={() => { jumpPageEditing = true; jumpPageValue = String(currentPage); }}
-					title={t('toolbar.jumpToPage')}
+			<div class="inline-flex -space-x-px">
+				<!-- First page — desktop only -->
+				<Button
+					variant="outline"
+					size="sm"
+					class="hidden h-7 rounded-e-none px-1.5 shadow-none sm:inline-flex"
+					onclick={() => onGoToPage?.(1)}
+					disabled={currentPage <= 1}
+					title={t('toolbar.firstPage')}
 				>
-					{currentPage} / {totalPages}
-				</button>
-			{/if}
+					<ChevronFirstIcon class="size-3.5" />
+				</Button>
 
-			<!-- Next button: icon on mobile, text on desktop -->
-			<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={onNextPage} disabled={currentPage >= totalPages}>
-				<ChevronRightIcon class="size-3.5 sm:hidden" />
-				<span class="hidden sm:inline">{t('toolbar.next')}</span>
-			</Button>
+				<!-- Prev -->
+				<Button
+					variant="outline"
+					size="sm"
+					class="h-7 rounded-none px-1.5 shadow-none sm:first:rounded-none"
+					onclick={onPrevPage}
+					disabled={currentPage <= 1}
+				>
+					<ChevronLeftIcon class="size-3.5" />
+				</Button>
 
-			<!-- Last page — desktop only -->
-			<Button
-				variant="ghost"
-				size="sm"
-				class="hidden h-7 px-1.5 sm:inline-flex"
-				onclick={() => onGoToPage?.(totalPages)}
-				disabled={currentPage >= totalPages}
-				title={t('toolbar.lastPage')}
-			>
-				<ChevronLastIcon class="size-3.5" />
-			</Button>
+				<!-- Page indicator / jump -->
+				{#if jumpPageEditing}
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						type="number"
+						class="h-7 w-14 border border-zinc-200 bg-transparent px-1 text-center text-xs outline-none dark:border-zinc-700 dark:bg-zinc-900"
+						bind:value={jumpPageValue}
+						onkeydown={handleJumpKeydown}
+						onblur={handleJumpSubmit}
+						min="1"
+						max={totalPages}
+						autofocus
+					/>
+				{:else}
+					<Button
+						variant="outline"
+						size="sm"
+						class="h-7 rounded-none px-2.5 font-normal tabular-nums shadow-none"
+						onclick={() => { jumpPageEditing = true; jumpPageValue = String(currentPage); }}
+						title={t('toolbar.jumpToPage')}
+					>
+						{currentPage} / {totalPages}
+					</Button>
+				{/if}
+
+				<!-- Next -->
+				<Button
+					variant="outline"
+					size="sm"
+					class="h-7 rounded-none px-1.5 shadow-none"
+					onclick={onNextPage}
+					disabled={currentPage >= totalPages}
+				>
+					<ChevronRightIcon class="size-3.5" />
+				</Button>
+
+				<!-- Last page — desktop only -->
+				<Button
+					variant="outline"
+					size="sm"
+					class="hidden h-7 rounded-s-none px-1.5 shadow-none sm:inline-flex"
+					onclick={() => onGoToPage?.(totalPages)}
+					disabled={currentPage >= totalPages}
+					title={t('toolbar.lastPage')}
+				>
+					<ChevronLastIcon class="size-3.5" />
+				</Button>
+			</div>
 		{/if}
 
 		<!-- ===== Mobile overflow menu (visible below sm) ===== -->
@@ -232,6 +329,30 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					<EllipsisVerticalIcon class="size-4" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" class="w-48">
+					<!-- Copy URL options -->
+					<DropdownMenu.Item onclick={() => handleCopy('https')}>
+						{#if copiedType === 'https'}
+							<CheckIcon class="mr-2 size-3 text-green-500" />
+							{t('toolbar.copied')}
+						{:else}
+							<LinkIcon class="mr-2 size-3" />
+							{t('toolbar.copyHttpsLink')}
+						{/if}
+					</DropdownMenu.Item>
+					{#if hasProviderLink}
+						<DropdownMenu.Item onclick={() => handleCopy('provider')}>
+							{#if copiedType === 'provider'}
+								<CheckIcon class="mr-2 size-3 text-green-500" />
+								{t('toolbar.copied')}
+							{:else}
+								<LinkIcon class="mr-2 size-3" />
+								{t('toolbar.copyProviderLink').replace('{provider}', providerLabel!)}
+							{/if}
+						</DropdownMenu.Item>
+					{/if}
+
+					<DropdownMenu.Separator />
+
 					<!-- Map/Table toggle -->
 					{#if hasGeo && onToggleView}
 						<DropdownMenu.Item onclick={onToggleView}>

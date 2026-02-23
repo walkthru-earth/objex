@@ -460,6 +460,7 @@ function setStacView() {
 <div class="flex h-full flex-col">
 	<!-- Toolbar — always visible -->
 	<TableToolbar
+		{tab}
 		fileName={tab.name}
 		columnCount={displayColumns.length}
 		rowCount={totalRows ?? 0}
