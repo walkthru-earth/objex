@@ -88,6 +88,103 @@ async function getDB() {
 	return dbPromise;
 }
 
+// ─── CRS detection helpers ───────────────────────────────────────────
+
+const WGS84_CODES = new Set([4326, 4979]);
+
+/** Extract EPSG code from a PROJJSON object. Returns null for WGS84/CRS84. */
+function extractEpsgFromProjjson(crs: any): string | null {
+	if (!crs) return null;
+	// OGC CRS84 is lon/lat WGS84
+	if (crs.type === 'name' && crs.properties?.name?.includes('CRS84')) return null;
+	// PROJJSON: { "id": { "authority": "EPSG", "code": 27700 } }
+	if (crs.id?.authority === 'EPSG') {
+		const code = crs.id.code;
+		if (WGS84_CODES.has(code)) return null;
+		return `EPSG:${code}`;
+	}
+	return null;
+}
+
+/**
+ * Extract CRS from Parquet Format 2.11+ logical_type string.
+ * Handles these patterns:
+ *   GeometryType(crs={...PROJJSON...})          — inline PROJJSON
+ *   GeometryType(crs=projjson:key_name)         — reference to KV metadata key
+ *   GeometryType(crs=srid:5070)                 — direct SRID
+ *   GeometryType(crs=<null>)                    — no CRS (WGS84)
+ */
+async function extractCrsFromLogicalType(
+	logicalType: string,
+	conn: any,
+	path: string
+): Promise<string | null> {
+	if (!logicalType.startsWith('GeometryType(') && !logicalType.startsWith('GeographyType('))
+		return null;
+
+	// Extract the crs= value from inside the parentheses
+	const crsMatch = logicalType.match(/crs=(.+?)(?:,\s*\w+=|\))/s);
+	if (!crsMatch) return null;
+	const crsValue = crsMatch[1].trim();
+
+	// Null CRS — assume WGS84
+	if (crsValue === '<null>' || crsValue === 'null') return null;
+
+	// Pattern: srid:NNNN — direct SRID
+	const sridMatch = crsValue.match(/^srid:(\d+)$/);
+	if (sridMatch) {
+		const code = Number(sridMatch[1]);
+		if (WGS84_CODES.has(code)) return null;
+		return `EPSG:${code}`;
+	}
+
+	// Pattern: projjson:key_name — reference to a KV metadata key
+	const refMatch = crsValue.match(/^projjson:(.+)$/);
+	if (refMatch) {
+		try {
+			const kvResult = await conn.query(
+				`SELECT value FROM parquet_kv_metadata('${path}') WHERE decode(key) = '${refMatch[1]}'`
+			);
+			const kvRows = kvResult.toArray();
+			if (kvRows.length > 0) {
+				const raw = kvRows[0].value;
+				const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
+				return extractEpsgFromProjjson(JSON.parse(text));
+			}
+		} catch {
+			/* metadata lookup failed */
+		}
+		return null;
+	}
+
+	// Pattern: {... PROJJSON ...} — inline JSON (find balanced braces)
+	if (crsValue.startsWith('{')) {
+		const jsonStart = logicalType.indexOf('{');
+		if (jsonStart === -1) return null;
+		let depth = 0;
+		let jsonEnd = -1;
+		for (let i = jsonStart; i < logicalType.length; i++) {
+			if (logicalType[i] === '{') depth++;
+			else if (logicalType[i] === '}') {
+				depth--;
+				if (depth === 0) {
+					jsonEnd = i;
+					break;
+				}
+			}
+		}
+		if (jsonEnd === -1) return null;
+		try {
+			const crs = JSON.parse(logicalType.substring(jsonStart, jsonEnd + 1));
+			return extractEpsgFromProjjson(crs);
+		} catch {
+			return null;
+		}
+	}
+
+	return null;
+}
+
 export class WasmQueryEngine implements QueryEngine {
 	async query(connId: string, sql: string): Promise<QueryResult> {
 		const db = await getDB();
@@ -305,39 +402,47 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
-			// parquet_kv_metadata takes a raw file path/URL
-			const result = await conn.query(
-				`SELECT value FROM parquet_kv_metadata('${path}') WHERE CAST(key AS VARCHAR) = 'geo'`
-			);
-			const rows = result.toArray();
-			if (rows.length === 0) return null;
-
-			// Value is binary (Uint8Array), decode to string
-			const raw = rows[0].value;
-			const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
-			const geo = JSON.parse(text);
-
-			// Find CRS from the target geometry column or the first column available
-			const colMeta =
-				geo.columns?.[geomCol] ?? (geo.columns ? (Object.values(geo.columns) as any[])[0] : null);
-			if (!colMeta?.crs) return null;
-
-			const crs = colMeta.crs;
-
-			// OGC CRS84 is lon/lat WGS84 — no transform needed
-			if (crs?.type === 'name' && crs?.properties?.name?.includes('CRS84')) return null;
-
-			// PROJJSON format: { "id": { "authority": "EPSG", "code": 27700 } }
-			if (crs?.id?.authority === 'EPSG') {
-				const code = crs.id.code;
-				// 4326 and 4979 are WGS84 variants
-				if (code === 4326 || code === 4979) return null;
-				return `EPSG:${code}`;
+			// Strategy 1: GeoParquet file-level metadata (geo key in KV metadata)
+			try {
+				const kvResult = await conn.query(
+					`SELECT value FROM parquet_kv_metadata('${path}') WHERE CAST(key AS VARCHAR) = 'geo'`
+				);
+				const kvRows = kvResult.toArray();
+				if (kvRows.length > 0) {
+					const raw = kvRows[0].value;
+					const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
+					const geo = JSON.parse(text);
+					const colMeta =
+						geo.columns?.[geomCol] ??
+						(geo.columns ? (Object.values(geo.columns) as any[])[0] : null);
+					if (colMeta?.crs) {
+						const epsg = extractEpsgFromProjjson(colMeta.crs);
+						if (epsg) return epsg;
+					}
+				}
+			} catch {
+				/* not GeoParquet or no KV metadata */
 			}
 
-			return null; // Can't determine — assume WGS84
+			// Strategy 2: Native Parquet GEOMETRY type (Parquet Format 2.11+)
+			// CRS is in the schema logical_type: GeometryType(crs=...)
+			try {
+				const schemaResult = await conn.query(
+					`SELECT logical_type FROM parquet_schema('${path}') WHERE name = '${geomCol}'`
+				);
+				const schemaRows = schemaResult.toArray();
+				if (schemaRows.length > 0) {
+					const logicalType = String(schemaRows[0].logical_type ?? '');
+					const epsg = await extractCrsFromLogicalType(logicalType, conn, path);
+					if (epsg) return epsg;
+				}
+			} catch {
+				/* not a Parquet file or schema read failed */
+			}
+
+			return null;
 		} catch {
-			return null; // Not a GeoParquet or error reading metadata
+			return null;
 		} finally {
 			await conn.close();
 		}
