@@ -254,8 +254,11 @@ function isGeoJSONGeometry(value: unknown): value is { type: GeoType; coordinate
  */
 export function findGeoColumn(schema: { name: string; type: string }[]): string | null {
 	// Priority 1: column type contains a geometry keyword
+	// Skip STRUCT/MAP/LIST types — their field names can false-positive
+	// (e.g. STRUCT(... Geometry VARCHAR ...) matches 'geometry')
 	for (const f of schema) {
 		const t = f.type.toLowerCase();
+		if (t.startsWith('struct') || t.startsWith('map') || t.startsWith('list')) continue;
 		if (GEO_TYPE_KEYWORDS.some((kw) => t.includes(kw))) return f.name;
 	}
 
