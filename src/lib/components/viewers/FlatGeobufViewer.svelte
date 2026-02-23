@@ -35,6 +35,7 @@ let overlay: any = null;
 let mapRef: maplibregl.Map | null = null;
 let features: GeoJSON.Feature[] = [];
 let abortController: AbortController | null = null;
+let activeStreamCancel: (() => void) | null = null;
 let resolveMapReady: (() => void) | null = null;
 let mapReadyPromise: Promise<void> | null = null;
 
@@ -86,6 +87,9 @@ function cleanup() {
 	resolveMapReady?.();
 	resolveMapReady = null;
 	hasMore = false;
+	// Force-close any active stream + HTTP connection
+	activeStreamCancel?.();
+	activeStreamCancel = null;
 	if (abortController) {
 		abortController.abort();
 		abortController = null;
@@ -115,7 +119,7 @@ $effect(() => {
 onDestroy(cleanup);
 
 async function loadFlatGeobuf() {
-	console.log('[FGB] loadFlatGeobuf() start');
+	console.log('[FGB]', 'loadFlatGeobuf() start');
 	cleanup();
 
 	loading = true;
@@ -133,31 +137,26 @@ async function loadFlatGeobuf() {
 			resolveMapReady = r;
 		});
 
-		console.log('[FGB] loading deck modules...');
 		deckModules = await loadDeckModules();
-		console.log('[FGB] deck modules loaded, waiting for map ready...');
 		loading = false;
 		streaming = true;
 
 		await mapReadyPromise;
-		console.log('[FGB] map ready, overlay=', !!overlay);
 		if (!overlay) return;
 
-		// Try reading header via range requests (fast: 1-2 small requests)
-		// This gets us metadata + feature offset to skip the spatial index
-		console.log('[FGB] reading header...');
+		// Read header via range requests (fast: 1-2 small requests)
+		// Gets metadata + feature offset to skip the spatial index
 		await readHeaderWithRangeRequests();
 
 		// Stream features (skips index if header was read, else sequential)
-		console.log('[FGB] streaming preview...');
 		await streamFeatures(PREVIEW_SIZE);
 	} catch (err) {
-		console.error('[FGB] loadFlatGeobuf error:', err);
+		console.error('[FGB]', 'loadFlatGeobuf error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	} finally {
-		console.log('[FGB] loadFlatGeobuf() done, features:', features.length, 'error:', error);
+		console.log('[FGB]', 'done, features:', features.length);
 		streaming = false;
 	}
 }
@@ -165,35 +164,33 @@ async function loadFlatGeobuf() {
 /**
  * Read header via range requests (fast: 1-2 small requests).
  * Stores header + feature offset for the composite stream approach.
- * Returns true if header was read successfully.
  */
 async function readHeaderWithRangeRequests(): Promise<boolean> {
 	const url = buildHttpsUrl(tab);
-	console.log('[FGB:header] opening HttpReader for', url);
 
 	let reader: HttpReader;
 	try {
 		reader = await HttpReader.open(url, false);
 	} catch (e) {
-		console.warn('[FGB:header] HttpReader.open failed:', e);
+		console.warn('[FGB]', 'HttpReader.open failed:', e);
 		return false;
 	}
 
 	const header = reader.header;
-	console.log('[FGB:header] header:', {
+	console.log('[FGB]', 'header:', {
 		geometryType: header.geometryType,
 		featuresCount: header.featuresCount,
 		indexNodeSize: header.indexNodeSize,
 		envelope: header.envelope ? Array.from(header.envelope) : null,
-		columns: header.columns?.length,
-		crs: header.crs
+		columns: header.columns?.length
 	});
 	populateHeaderInfo(header);
 
 	storedHeader = header;
 	storedFeatureOffset = reader.lengthBeforeFeatures();
 	console.log(
-		'[FGB:header] featureOffset:',
+		'[FGB]',
+		'featureOffset:',
 		storedFeatureOffset,
 		'(index ~',
 		((storedFeatureOffset - 12) / 1024 / 1024).toFixed(1),
@@ -202,11 +199,8 @@ async function readHeaderWithRangeRequests(): Promise<boolean> {
 	return true;
 }
 
-/**
- * Load all features — skips the spatial index using a Range request.
- */
+/** Load all features — skips the spatial index using a Range request. */
 async function loadAllFeatures() {
-	console.log('[FGB] loadAllFeatures() start, overlay=', !!overlay);
 	if (!overlay) return;
 	hasMore = false;
 	streaming = true;
@@ -216,11 +210,11 @@ async function loadAllFeatures() {
 		featureCount = 0;
 		await streamFeatures();
 	} catch (err) {
-		console.error('[FGB] loadAllFeatures error:', err);
+		console.error('[FGB]', 'loadAllFeatures error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
-		console.log('[FGB] loadAllFeatures() done, features:', features.length);
+		console.log('[FGB]', 'loadAllFeatures done, features:', features.length);
 		streaming = false;
 	}
 }
@@ -230,42 +224,28 @@ async function loadAllFeatures() {
  * If storedHeader is available, skips the index with a Range request + composite stream.
  */
 async function streamFeatures(limit?: number) {
-	console.log(
-		'[FGB:stream] streamFeatures() start, limit=',
-		limit,
-		'storedHeader=',
-		!!storedHeader,
-		'storedFeatureOffset=',
-		storedFeatureOffset
-	);
 	const ac = new AbortController();
 	abortController = ac;
 	const url = buildHttpsUrl(tab);
 	const t0 = performance.now();
 
 	let iter: AsyncGenerator;
+	activeStreamCancel = null;
 
 	if (storedHeader && storedFeatureOffset > 0) {
-		// Build a fake header with indexNodeSize=0 so deserializeStream skips the index
 		const fakeHeaderBytes = fgbBuildHeader({
 			...storedHeader,
 			indexNodeSize: 0,
 			envelope: null
 		});
-		console.log(
-			'[FGB:stream] built fake header:',
-			fakeHeaderBytes.length,
-			'bytes, fetching Range:',
-			storedFeatureOffset
-		);
 
-		// Fetch only the feature data (skip header + index)
 		const featureResp = await fetch(url, {
 			headers: { Range: `bytes=${storedFeatureOffset}-` },
 			signal: ac.signal
 		});
 		console.log(
-			'[FGB:stream] Range fetch status:',
+			'[FGB]',
+			'Range fetch:',
 			featureResp.status,
 			featureResp.headers.get('content-range')
 		);
@@ -273,83 +253,68 @@ async function streamFeatures(limit?: number) {
 			throw new Error(`HTTP ${featureResp.status}: ${featureResp.statusText}`);
 		if (!featureResp.body) throw new Error('No response body');
 
-		// Composite stream: magic + fake header (no index) + real feature data
-		const compositeStream = createCompositeStream(fakeHeaderBytes, featureResp.body);
-		iter = fgbGeojson.deserialize(compositeStream, undefined, (h: any) => {
-			console.log('[FGB:stream] headerMetaFn called from composite stream');
-			populateHeaderInfo(h);
-		}) as AsyncGenerator;
+		const composite = createCompositeStream(fakeHeaderBytes, featureResp.body);
+		activeStreamCancel = composite.cancel;
+		iter = fgbGeojson.deserialize(composite.stream, undefined, (h: any) =>
+			populateHeaderInfo(h)
+		) as AsyncGenerator;
 	} else {
-		// Regular sequential stream (non-indexed files — no index to skip)
-		console.log('[FGB:stream] regular fetch (no stored header)');
 		const response = await fetch(url, { signal: ac.signal });
 		if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 		if (!response.body) throw new Error('No response body');
-		iter = fgbGeojson.deserialize(response.body, undefined, (h: any) => {
-			console.log('[FGB:stream] headerMetaFn called from regular stream');
-			populateHeaderInfo(h);
-		}) as AsyncGenerator;
+		iter = fgbGeojson.deserialize(response.body, undefined, (h: any) =>
+			populateHeaderInfo(h)
+		) as AsyncGenerator;
 	}
 
 	let batchCount = 0;
 	let lastUpdateTime = Date.now();
 	let flewToFeatures = false;
+	let hitLimit = false;
 
-	console.log('[FGB:stream] starting iteration...');
-	for await (const feature of iter) {
-		if (ac.signal.aborted) return;
-
-		const f = feature as GeoJSON.Feature;
-		if (features.length === 0) {
-			console.log(
-				'[FGB:stream] first feature after',
-				(performance.now() - t0).toFixed(0),
-				'ms, type:',
-				f.geometry?.type,
-				'coords sample:',
-				JSON.stringify(
-					(f.geometry as any)?.coordinates?.[0]?.[0] ?? (f.geometry as any)?.coordinates?.[0]
-				).slice(0, 80)
-			);
-		}
-		features.push(f);
-		batchCount++;
-
-		const now = Date.now();
-		if (batchCount >= BATCH_SIZE || now - lastUpdateTime > 200) {
-			console.log(
-				'[FGB:stream] batch update: features=',
-				features.length,
-				'elapsed=',
-				(performance.now() - t0).toFixed(0),
-				'ms'
-			);
-			featureCount = features.length;
-			updateLayer();
-			if (!flewToFeatures) {
-				flyToFeaturesBounds();
-				flewToFeatures = true;
-			}
-			batchCount = 0;
-			lastUpdateTime = now;
-			await new Promise((r) => setTimeout(r, 0));
+	try {
+		for await (const feature of iter) {
 			if (ac.signal.aborted) return;
-		}
 
-		if (limit && features.length >= limit) {
-			console.log('[FGB:stream] hit limit', limit, '— aborting fetch to stop download');
-			ac.abort();
-			break;
+			features.push(feature as GeoJSON.Feature);
+			batchCount++;
+
+			const now = Date.now();
+			if (batchCount >= BATCH_SIZE || now - lastUpdateTime > 200) {
+				featureCount = features.length;
+				updateLayer();
+				if (!flewToFeatures) {
+					flyToFeaturesBounds();
+					flewToFeatures = true;
+				}
+				batchCount = 0;
+				lastUpdateTime = now;
+				await new Promise((r) => setTimeout(r, 0));
+				if (ac.signal.aborted) return;
+			}
+
+			if (limit && features.length >= limit) {
+				hitLimit = true;
+				break;
+			}
+			if (features.length >= FEATURE_LIMIT) {
+				hitLimit = true;
+				break;
+			}
 		}
-		if (features.length >= FEATURE_LIMIT) {
-			console.log('[FGB:stream] hit FEATURE_LIMIT', FEATURE_LIMIT, '— aborting fetch');
+	} finally {
+		// Force-close the HTTP connection. break from for-await doesn't release
+		// the flatgeobuf library's internal stream reader, so the browser keeps
+		// downloading gigabytes in the background unless we explicitly cancel.
+		if (hitLimit) {
+			activeStreamCancel?.();
+			activeStreamCancel = null;
 			ac.abort();
-			break;
+			console.log('[FGB]', 'force-closed connection after', features.length, 'features');
 		}
 	}
 
 	if (features.length === 0) {
-		console.warn('[FGB:stream] no features found!');
 		error = 'No features found in FlatGeobuf file';
 		return;
 	}
@@ -358,14 +323,15 @@ async function streamFeatures(limit?: number) {
 	updateLayer();
 	if (!flewToFeatures) flyToFeaturesBounds();
 	console.log(
-		'[FGB:stream] done: features=',
+		'[FGB]',
+		'stream done:',
 		features.length,
-		'elapsed=',
+		'features in',
 		(performance.now() - t0).toFixed(0),
 		'ms'
 	);
 
-	if (limit && features.length >= limit) {
+	if (hitLimit) {
 		hasMore = totalFeatures != null && totalFeatures > features.length;
 	} else {
 		hasMore = false;
@@ -374,10 +340,7 @@ async function streamFeatures(limit?: number) {
 
 /** Compute bounding box of current features and fly the map to it. */
 function flyToFeaturesBounds() {
-	if (!mapRef || features.length === 0) {
-		console.warn('[FGB:flyTo] skipped — mapRef=', !!mapRef, 'features=', features.length);
-		return;
-	}
+	if (!mapRef || features.length === 0) return;
 	let minLng = Infinity,
 		minLat = Infinity,
 		maxLng = -Infinity,
@@ -401,22 +364,20 @@ function flyToFeaturesBounds() {
 
 	if (minLng !== Infinity) {
 		bounds = [minLng, minLat, maxLng, maxLat];
-		console.log('[FGB:flyTo] flying to bounds:', bounds);
 		mapRef.fitBounds(bounds, { padding: 40 });
-	} else {
-		console.warn('[FGB:flyTo] no valid coordinates found in', features.length, 'features');
 	}
 }
 
-/** Create a ReadableStream: magic bytes + header bytes + feature data stream. */
+/** Create a ReadableStream: magic bytes + header bytes + feature data stream.
+ *  Returns both the stream and a cancel() handle to force-close the connection. */
 function createCompositeStream(
 	headerBytes: Uint8Array,
 	featureStream: ReadableStream<Uint8Array>
-): ReadableStream<Uint8Array> {
+): { stream: ReadableStream<Uint8Array>; cancel: () => void } {
 	const featureReader = featureStream.getReader();
 	let headerSent = false;
 
-	return new ReadableStream({
+	const stream = new ReadableStream({
 		pull(controller) {
 			if (!headerSent) {
 				controller.enqueue(new Uint8Array(magicbytes));
@@ -436,14 +397,21 @@ function createCompositeStream(
 			featureReader.cancel();
 		}
 	});
+
+	return {
+		stream,
+		cancel: () => {
+			try {
+				featureReader.cancel();
+			} catch {
+				/* already released */
+			}
+		}
+	};
 }
 
 function updateLayer() {
-	if (!overlay || !deckModules) {
-		console.warn('[FGB:updateLayer] skipped — overlay=', !!overlay, 'deckModules=', !!deckModules);
-		return;
-	}
-	console.log('[FGB:updateLayer] rendering', features.length, 'features');
+	if (!overlay || !deckModules) return;
 
 	const { GeoJsonLayer } = deckModules;
 	overlay.setProps({
@@ -477,7 +445,6 @@ function updateLayer() {
 }
 
 function onMapReady(map: maplibregl.Map) {
-	console.log('[FGB] onMapReady, deckModules=', !!deckModules);
 	if (!deckModules) return;
 	mapRef = map;
 
@@ -487,7 +454,6 @@ function onMapReady(map: maplibregl.Map) {
 		layers: []
 	});
 	map.addControl(overlay as any);
-	console.log('[FGB] overlay created, resolving mapReady, bounds=', bounds);
 	resolveMapReady?.();
 
 	if (bounds) map.fitBounds(bounds, { padding: 40 });
