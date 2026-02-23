@@ -118,6 +118,17 @@ const languageMap: Record<string, string> = {
 
 const language = $derived(languageMap[ext] ?? 'Plain Text');
 
+// Reset iframe view mode when tab changes (component reuse across code-type tabs)
+let prevTabId = '';
+$effect(() => {
+	const id = tab.id;
+	if (prevTabId && prevTabId !== id) {
+		viewMode = 'code';
+		updateUrlView('');
+	}
+	prevTabId = id;
+});
+
 $effect(() => {
 	if (!tab) return;
 	loadCode();

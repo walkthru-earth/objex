@@ -31,6 +31,17 @@ let zarrVersion = $state<number | null>(null);
 const mapVars = $derived(variables.filter((v) => v.shape.length >= 2));
 const hasMapVars = $derived(mapVars.length > 0);
 
+// Reset view mode when tab changes (component reuse across zarr-type tabs)
+let prevTabId = '';
+$effect(() => {
+	const id = tab.id;
+	if (prevTabId && prevTabId !== id) {
+		viewMode = 'inspect';
+		updateUrlView('');
+	}
+	prevTabId = id;
+});
+
 $effect(() => {
 	if (!tab) return;
 	const _tabId = tab.id;

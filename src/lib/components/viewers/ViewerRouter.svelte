@@ -1,6 +1,7 @@
 <script lang="ts">
 import { getViewerKind } from '$lib/file-icons/index.js';
 import type { Tab } from '$lib/types';
+import { updateUrlView } from '$lib/utils/url-state.js';
 import ArchiveViewer from './ArchiveViewer.svelte';
 import CodeViewer from './CodeViewer.svelte';
 
@@ -20,6 +21,16 @@ let { tab }: { tab: Tab } = $props();
 
 const ext = $derived(tab?.extension ?? '');
 const viewerKind = $derived(getViewerKind(ext));
+
+// Clear stale URL hash when switching tabs (skip initial mount to preserve shareable links)
+let prevTabId = '';
+$effect(() => {
+	const id = tab?.id ?? '';
+	if (prevTabId && prevTabId !== id) {
+		updateUrlView('');
+	}
+	prevTabId = id;
+});
 </script>
 
 {#if viewerKind === 'table'}

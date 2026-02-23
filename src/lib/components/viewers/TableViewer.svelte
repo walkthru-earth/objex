@@ -135,6 +135,9 @@ $effect(() => {
 	untrack(() => {
 		if (tabId !== lastLoadedTabId) {
 			lastLoadedTabId = tabId;
+			// Reset view mode on tab switch to avoid stale iframe/map views
+			viewMode = 'table';
+			updateUrlView('');
 			loadTable();
 		}
 	});
