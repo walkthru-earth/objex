@@ -1,5 +1,9 @@
 <script lang="ts">
 import { geojson as fgbGeojson } from 'flatgeobuf';
+import { magicbytes } from 'flatgeobuf/lib/mjs/constants.js';
+import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featurecollection.js';
+import type { HeaderMeta } from 'flatgeobuf/lib/mjs/header-meta.js';
+import { HttpReader } from 'flatgeobuf/lib/mjs/http-reader.js';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -13,6 +17,7 @@ let { tab }: { tab: Tab } = $props();
 
 const FEATURE_LIMIT = 100_000;
 const BATCH_SIZE = 1000;
+const PREVIEW_SIZE = 1000;
 
 let loading = $state(true);
 let streaming = $state(false);
@@ -23,12 +28,19 @@ let selectedFeature = $state<Record<string, any> | null>(null);
 let showAttributes = $state(false);
 let showInfo = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
+let hasMore = $state(false);
 
 let deckModules: { MapboxOverlay: any; GeoJsonLayer: any } | null = null;
 let overlay: any = null;
 let mapRef: maplibregl.Map | null = null;
 let features: GeoJSON.Feature[] = [];
 let abortController: AbortController | null = null;
+let resolveMapReady: (() => void) | null = null;
+let mapReadyPromise: Promise<void> | null = null;
+
+// Stored from preview for load-all (skip index)
+let storedHeader: HeaderMeta | null = null;
+let storedFeatureOffset = 0;
 
 // Header metadata from FlatGeobuf
 let headerInfo = $state<{
@@ -41,8 +53,39 @@ let headerInfo = $state<{
 	hasIndex: boolean;
 } | null>(null);
 
-/** Abort in-flight fetch + streaming and release resources. */
+const GEOM_TYPE_NAMES: Record<number, string> = {
+	0: 'Unknown',
+	1: 'Point',
+	2: 'LineString',
+	3: 'Polygon',
+	4: 'MultiPoint',
+	5: 'MultiLineString',
+	6: 'MultiPolygon',
+	7: 'GeometryCollection'
+};
+
+function populateHeaderInfo(header: HeaderMeta) {
+	totalFeatures = header.featuresCount;
+	headerInfo = {
+		geometryType: GEOM_TYPE_NAMES[header.geometryType] ?? `Type ${header.geometryType}`,
+		featuresCount: header.featuresCount,
+		columns: (header.columns ?? []).map((c) => ({ name: c.name, type: c.type })),
+		crs: header.crs ? { org: header.crs.org, code: header.crs.code, name: header.crs.name } : null,
+		title: header.title,
+		description: header.description,
+		hasIndex: header.indexNodeSize > 0
+	};
+
+	if (header.envelope && header.envelope.length >= 4) {
+		bounds = [header.envelope[0], header.envelope[1], header.envelope[2], header.envelope[3]];
+		mapRef?.fitBounds(bounds, { padding: 40 });
+	}
+}
+
 function cleanup() {
+	resolveMapReady?.();
+	resolveMapReady = null;
+	hasMore = false;
 	if (abortController) {
 		abortController.abort();
 		abortController = null;
@@ -57,6 +100,8 @@ function cleanup() {
 	overlay = null;
 	mapRef = null;
 	features = [];
+	storedHeader = null;
+	storedFeatureOffset = 0;
 }
 
 $effect(() => {
@@ -69,19 +114,8 @@ $effect(() => {
 
 onDestroy(cleanup);
 
-const GEOM_TYPE_NAMES: Record<number, string> = {
-	0: 'Unknown',
-	1: 'Point',
-	2: 'LineString',
-	3: 'Polygon',
-	4: 'MultiPoint',
-	5: 'MultiLineString',
-	6: 'MultiPolygon',
-	7: 'GeometryCollection'
-};
-
 async function loadFlatGeobuf() {
-	// Abort any previous in-flight stream before resetting state
+	console.log('[FGB] loadFlatGeobuf() start');
 	cleanup();
 
 	loading = true;
@@ -92,105 +126,262 @@ async function loadFlatGeobuf() {
 	totalFeatures = null;
 	headerInfo = null;
 	bounds = undefined;
+	hasMore = false;
 
 	try {
+		mapReadyPromise = new Promise<void>((r) => {
+			resolveMapReady = r;
+		});
+
+		console.log('[FGB] loading deck modules...');
 		deckModules = await loadDeckModules();
-		// Show map immediately — features will stream in
+		console.log('[FGB] deck modules loaded, waiting for map ready...');
 		loading = false;
 		streaming = true;
-		await streamFeatures();
+
+		await mapReadyPromise;
+		console.log('[FGB] map ready, overlay=', !!overlay);
+		if (!overlay) return;
+
+		// Try reading header via range requests (fast: 1-2 small requests)
+		// This gets us metadata + feature offset to skip the spatial index
+		console.log('[FGB] reading header...');
+		await readHeaderWithRangeRequests();
+
+		// Stream features (skips index if header was read, else sequential)
+		console.log('[FGB] streaming preview...');
+		await streamFeatures(PREVIEW_SIZE);
 	} catch (err) {
-		// Silently ignore cancellation (tab closed / tab changed)
+		console.error('[FGB] loadFlatGeobuf error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	} finally {
+		console.log('[FGB] loadFlatGeobuf() done, features:', features.length, 'error:', error);
 		streaming = false;
 	}
 }
 
-async function streamFeatures() {
+/**
+ * Read header via range requests (fast: 1-2 small requests).
+ * Stores header + feature offset for the composite stream approach.
+ * Returns true if header was read successfully.
+ */
+async function readHeaderWithRangeRequests(): Promise<boolean> {
+	const url = buildHttpsUrl(tab);
+	console.log('[FGB:header] opening HttpReader for', url);
+
+	let reader: HttpReader;
+	try {
+		reader = await HttpReader.open(url, false);
+	} catch (e) {
+		console.warn('[FGB:header] HttpReader.open failed:', e);
+		return false;
+	}
+
+	const header = reader.header;
+	console.log('[FGB:header] header:', {
+		geometryType: header.geometryType,
+		featuresCount: header.featuresCount,
+		indexNodeSize: header.indexNodeSize,
+		envelope: header.envelope ? Array.from(header.envelope) : null,
+		columns: header.columns?.length,
+		crs: header.crs
+	});
+	populateHeaderInfo(header);
+
+	storedHeader = header;
+	storedFeatureOffset = reader.lengthBeforeFeatures();
+	console.log(
+		'[FGB:header] featureOffset:',
+		storedFeatureOffset,
+		'(index ~',
+		((storedFeatureOffset - 12) / 1024 / 1024).toFixed(1),
+		'MB skipped)'
+	);
+	return true;
+}
+
+/**
+ * Load all features — skips the spatial index using a Range request.
+ */
+async function loadAllFeatures() {
+	console.log('[FGB] loadAllFeatures() start, overlay=', !!overlay);
+	if (!overlay) return;
+	hasMore = false;
+	streaming = true;
+
+	try {
+		features = [];
+		featureCount = 0;
+		await streamFeatures();
+	} catch (err) {
+		console.error('[FGB] loadAllFeatures error:', err);
+		if (err instanceof DOMException && err.name === 'AbortError') return;
+		error = err instanceof Error ? err.message : String(err);
+	} finally {
+		console.log('[FGB] loadAllFeatures() done, features:', features.length);
+		streaming = false;
+	}
+}
+
+/**
+ * Stream features sequentially.
+ * If storedHeader is available, skips the index with a Range request + composite stream.
+ */
+async function streamFeatures(limit?: number) {
+	console.log(
+		'[FGB:stream] streamFeatures() start, limit=',
+		limit,
+		'storedHeader=',
+		!!storedHeader,
+		'storedFeatureOffset=',
+		storedFeatureOffset
+	);
 	const ac = new AbortController();
 	abortController = ac;
-
 	const url = buildHttpsUrl(tab);
+	const t0 = performance.now();
 
-	let minLng = Infinity,
-		minLat = Infinity,
-		maxLng = -Infinity,
-		maxLat = -Infinity;
+	let iter: AsyncGenerator;
 
-	const response = await fetch(url, { signal: ac.signal });
-	if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-	if (!response.body) throw new Error('No response body');
+	if (storedHeader && storedFeatureOffset > 0) {
+		// Build a fake header with indexNodeSize=0 so deserializeStream skips the index
+		const fakeHeaderBytes = fgbBuildHeader({
+			...storedHeader,
+			indexNodeSize: 0,
+			envelope: null
+		});
+		console.log(
+			'[FGB:stream] built fake header:',
+			fakeHeaderBytes.length,
+			'bytes, fetching Range:',
+			storedFeatureOffset
+		);
 
-	const iter = fgbGeojson.deserialize(response.body, undefined, (header) => {
-		totalFeatures = header.featuresCount;
-		headerInfo = {
-			geometryType: GEOM_TYPE_NAMES[header.geometryType] ?? `Type ${header.geometryType}`,
-			featuresCount: header.featuresCount,
-			columns: (header.columns ?? []).map((c: any) => ({ name: c.name, type: c.type })),
-			crs: header.crs
-				? { org: header.crs.org, code: header.crs.code, name: header.crs.name }
-				: null,
-			title: header.title,
-			description: header.description,
-			hasIndex: header.indexNodeSize > 0
-		};
+		// Fetch only the feature data (skip header + index)
+		const featureResp = await fetch(url, {
+			headers: { Range: `bytes=${storedFeatureOffset}-` },
+			signal: ac.signal
+		});
+		console.log(
+			'[FGB:stream] Range fetch status:',
+			featureResp.status,
+			featureResp.headers.get('content-range')
+		);
+		if (!featureResp.ok && featureResp.status !== 206)
+			throw new Error(`HTTP ${featureResp.status}: ${featureResp.statusText}`);
+		if (!featureResp.body) throw new Error('No response body');
 
-		// Use envelope from header if available — zoom map immediately
-		if (header.envelope && header.envelope.length >= 4) {
-			minLng = header.envelope[0];
-			minLat = header.envelope[1];
-			maxLng = header.envelope[2];
-			maxLat = header.envelope[3];
-			bounds = [minLng, minLat, maxLng, maxLat];
-		}
-	});
+		// Composite stream: magic + fake header (no index) + real feature data
+		const compositeStream = createCompositeStream(fakeHeaderBytes, featureResp.body);
+		iter = fgbGeojson.deserialize(compositeStream, undefined, (h: any) => {
+			console.log('[FGB:stream] headerMetaFn called from composite stream');
+			populateHeaderInfo(h);
+		}) as AsyncGenerator;
+	} else {
+		// Regular sequential stream (non-indexed files — no index to skip)
+		console.log('[FGB:stream] regular fetch (no stored header)');
+		const response = await fetch(url, { signal: ac.signal });
+		if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		if (!response.body) throw new Error('No response body');
+		iter = fgbGeojson.deserialize(response.body, undefined, (h: any) => {
+			console.log('[FGB:stream] headerMetaFn called from regular stream');
+			populateHeaderInfo(h);
+		}) as AsyncGenerator;
+	}
 
 	let batchCount = 0;
+	let lastUpdateTime = Date.now();
+	let flewToFeatures = false;
 
+	console.log('[FGB:stream] starting iteration...');
 	for await (const feature of iter) {
 		if (ac.signal.aborted) return;
 
-		features.push(feature as GeoJSON.Feature);
+		const f = feature as GeoJSON.Feature;
+		if (features.length === 0) {
+			console.log(
+				'[FGB:stream] first feature after',
+				(performance.now() - t0).toFixed(0),
+				'ms, type:',
+				f.geometry?.type,
+				'coords sample:',
+				JSON.stringify(
+					(f.geometry as any)?.coordinates?.[0]?.[0] ?? (f.geometry as any)?.coordinates?.[0]
+				).slice(0, 80)
+			);
+		}
+		features.push(f);
 		batchCount++;
 
-		if (batchCount >= BATCH_SIZE) {
+		const now = Date.now();
+		if (batchCount >= BATCH_SIZE || now - lastUpdateTime > 200) {
+			console.log(
+				'[FGB:stream] batch update: features=',
+				features.length,
+				'elapsed=',
+				(performance.now() - t0).toFixed(0),
+				'ms'
+			);
 			featureCount = features.length;
 			updateLayer();
+			if (!flewToFeatures) {
+				flyToFeaturesBounds();
+				flewToFeatures = true;
+			}
 			batchCount = 0;
-			// Yield to the macrotask queue so:
-			// 1. The map's `load` event can fire (creates the overlay)
-			// 2. deck.gl gets an animation frame to render the current batch
-			// 3. The browser can paint the feature-count badge
+			lastUpdateTime = now;
 			await new Promise((r) => setTimeout(r, 0));
 			if (ac.signal.aborted) return;
 		}
 
-		if (features.length >= FEATURE_LIMIT) break;
+		if (limit && features.length >= limit) {
+			console.log('[FGB:stream] hit limit', limit, '— aborting fetch to stop download');
+			ac.abort();
+			break;
+		}
+		if (features.length >= FEATURE_LIMIT) {
+			console.log('[FGB:stream] hit FEATURE_LIMIT', FEATURE_LIMIT, '— aborting fetch');
+			ac.abort();
+			break;
+		}
 	}
 
-	if (ac.signal.aborted) return;
-
 	if (features.length === 0) {
+		console.warn('[FGB:stream] no features found!');
 		error = 'No features found in FlatGeobuf file';
 		return;
 	}
 
-	// Compute bounds from features if header had no envelope
-	if (minLng === Infinity) {
-		for (const f of features) {
-			processCoords((f.geometry as any)?.coordinates);
-		}
-		if (minLng !== Infinity) {
-			bounds = [minLng, minLat, maxLng, maxLat];
-		}
-	}
-
-	// Final update with all features
 	featureCount = features.length;
 	updateLayer();
+	if (!flewToFeatures) flyToFeaturesBounds();
+	console.log(
+		'[FGB:stream] done: features=',
+		features.length,
+		'elapsed=',
+		(performance.now() - t0).toFixed(0),
+		'ms'
+	);
+
+	if (limit && features.length >= limit) {
+		hasMore = totalFeatures != null && totalFeatures > features.length;
+	} else {
+		hasMore = false;
+	}
+}
+
+/** Compute bounding box of current features and fly the map to it. */
+function flyToFeaturesBounds() {
+	if (!mapRef || features.length === 0) {
+		console.warn('[FGB:flyTo] skipped — mapRef=', !!mapRef, 'features=', features.length);
+		return;
+	}
+	let minLng = Infinity,
+		minLat = Infinity,
+		maxLng = -Infinity,
+		maxLat = -Infinity;
 
 	function processCoords(coords: any) {
 		if (!coords) return;
@@ -203,10 +394,56 @@ async function streamFeatures() {
 			for (const c of coords) processCoords(c);
 		}
 	}
+
+	for (const f of features) {
+		processCoords((f.geometry as any)?.coordinates);
+	}
+
+	if (minLng !== Infinity) {
+		bounds = [minLng, minLat, maxLng, maxLat];
+		console.log('[FGB:flyTo] flying to bounds:', bounds);
+		mapRef.fitBounds(bounds, { padding: 40 });
+	} else {
+		console.warn('[FGB:flyTo] no valid coordinates found in', features.length, 'features');
+	}
+}
+
+/** Create a ReadableStream: magic bytes + header bytes + feature data stream. */
+function createCompositeStream(
+	headerBytes: Uint8Array,
+	featureStream: ReadableStream<Uint8Array>
+): ReadableStream<Uint8Array> {
+	const featureReader = featureStream.getReader();
+	let headerSent = false;
+
+	return new ReadableStream({
+		pull(controller) {
+			if (!headerSent) {
+				controller.enqueue(new Uint8Array(magicbytes));
+				controller.enqueue(headerBytes);
+				headerSent = true;
+				return;
+			}
+			return featureReader.read().then(({ value, done }) => {
+				if (done) {
+					controller.close();
+				} else {
+					controller.enqueue(value);
+				}
+			});
+		},
+		cancel() {
+			featureReader.cancel();
+		}
+	});
 }
 
 function updateLayer() {
-	if (!overlay || !deckModules) return;
+	if (!overlay || !deckModules) {
+		console.warn('[FGB:updateLayer] skipped — overlay=', !!overlay, 'deckModules=', !!deckModules);
+		return;
+	}
+	console.log('[FGB:updateLayer] rendering', features.length, 'features');
 
 	const { GeoJsonLayer } = deckModules;
 	overlay.setProps({
@@ -236,11 +473,11 @@ function updateLayer() {
 			})
 		]
 	});
-	// Explicitly tell MapLibre to composite the deck.gl canvas on the next frame
 	mapRef?.triggerRepaint();
 }
 
 function onMapReady(map: maplibregl.Map) {
+	console.log('[FGB] onMapReady, deckModules=', !!deckModules);
 	if (!deckModules) return;
 	mapRef = map;
 
@@ -250,12 +487,9 @@ function onMapReady(map: maplibregl.Map) {
 		layers: []
 	});
 	map.addControl(overlay as any);
+	console.log('[FGB] overlay created, resolving mapReady, bounds=', bounds);
+	resolveMapReady?.();
 
-	// If features already streamed before map was ready, render them
-	if (features.length > 0) updateLayer();
-
-	// If bounds arrived from the header before the map loaded,
-	// MapContainer's load handler may have missed them — apply now
 	if (bounds) map.fitBounds(bounds, { padding: 40 });
 }
 </script>
@@ -274,50 +508,60 @@ function onMapReady(map: maplibregl.Map) {
 			<MapContainer {onMapReady} {bounds} />
 		</div>
 
-		<!-- Floating feature count badge -->
-		<div
-			class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			{#if streaming}
-				<span class="animate-pulse">
-					{featureCount.toLocaleString()} features...
-				</span>
-			{:else if featureCount > 0}
-				{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= FEATURE_LIMIT}
-					<span class="text-amber-300">
-						of {totalFeatures.toLocaleString()} (limit)
+		<!-- Floating feature count badge + load-all button -->
+		<div class="absolute left-2 top-2 flex flex-col gap-1">
+			<div
+				class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+			>
+				{#if streaming}
+					<span class="animate-pulse">
+						{featureCount.toLocaleString()} features...
 					</span>
+				{:else if featureCount > 0}
+					{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= FEATURE_LIMIT}
+						<span class="text-amber-300">
+							of {totalFeatures.toLocaleString()} (limit)
+						</span>
+					{/if}
 				{/if}
+			</div>
+			{#if hasMore && !streaming}
+				<button
+					class="rounded bg-primary/90 px-2 py-1 text-xs text-primary-foreground backdrop-blur-sm hover:bg-primary"
+					onclick={loadAllFeatures}
+				>
+					Stream up to {Math.min(totalFeatures ?? FEATURE_LIMIT, FEATURE_LIMIT).toLocaleString()}
+				</button>
 			{/if}
 		</div>
 
-		<!-- Floating info toggle -->
-		{#if headerInfo}
-			<button
-				class="absolute right-12 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showInfo}
-				class:ring-primary={showInfo}
-				onclick={() => (showInfo = !showInfo)}
-			>
-				{t('map.info')}
-			</button>
-		{/if}
-
-		<!-- Floating attributes toggle -->
-		{#if selectedFeature}
-			<button
-				class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showAttributes}
-				class:ring-primary={showAttributes}
-				onclick={() => (showAttributes = !showAttributes)}
-			>
-				{t('map.attributes')}
-			</button>
-		{/if}
+		<!-- Floating toggle buttons -->
+		<div class="absolute right-2 top-2 flex gap-1">
+			{#if headerInfo}
+				<button
+					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class:ring-1={showInfo}
+					class:ring-primary={showInfo}
+					onclick={() => (showInfo = !showInfo)}
+				>
+					{t('map.info')}
+				</button>
+			{/if}
+			{#if selectedFeature}
+				<button
+					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class:ring-1={showAttributes}
+					class:ring-primary={showAttributes}
+					onclick={() => (showAttributes = !showAttributes)}
+				>
+					{t('map.attributes')}
+				</button>
+			{/if}
+		</div>
 
 		{#if showInfo && headerInfo}
 			<div
-				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.flatgeobufInfo')}</h3>
 				<dl class="space-y-1.5">
