@@ -273,9 +273,11 @@ export class WasmQueryEngine implements QueryEngine {
 					? `ST_GeomFromWKB(${quoted})`
 					: `ST_GeomFromGeoJSON(${quoted})`;
 
-			// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84
+			// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84.
+			// always_xy := true forces lon/lat (x/y) axis order for both source and
+			// target, matching the GeoParquet convention regardless of CRS authority.
 			if (sourceCrs) {
-				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
 			}
 
 			// wkbExpr: skip WKB→GEOM→WKB round-trip when column is already WKB and no transform

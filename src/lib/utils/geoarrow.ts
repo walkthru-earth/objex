@@ -310,64 +310,16 @@ function buildMultiPolygonData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 	});
 }
 
-// ─── Main entry point ────────────────────────────────────────────────
+// ─── Build a single GeoArrow table for one type group ────────────────
 
-/**
- * Build an Arrow v21 Table with GeoArrow extension metadata from raw WKB arrays
- * and attribute columns extracted from DuckDB query results.
- */
-export function buildGeoArrowTable(
-	wkbArrays: Uint8Array[],
-	geometryType: string,
+/** Build attribute columns for a subset of rows identified by indices. */
+function buildAttributeColumns(
+	indices: number[],
 	attributes: Map<string, { values: any[]; type: string }>
-): GeoArrowResult {
-	const geomType = normalizeGeomType(geometryType);
-	const b = newBounds();
-	const n = wkbArrays.length;
-
-	// Build geometry column Arrow Data
-	let geomData: Data;
-	switch (geomType) {
-		case 'point':
-			geomData = buildPointData(wkbArrays, b);
-			break;
-		case 'linestring':
-			geomData = buildLineStringData(wkbArrays, b);
-			break;
-		case 'polygon':
-			geomData = buildPolygonData(wkbArrays, b);
-			break;
-		case 'multipoint':
-			geomData = buildMultiPointData(wkbArrays, b);
-			break;
-		case 'multilinestring':
-			geomData = buildMultiLineStringData(wkbArrays, b);
-			break;
-		case 'multipolygon':
-			geomData = buildMultiPolygonData(wkbArrays, b);
-			break;
-	}
-
-	// Create geometry field with GeoArrow extension metadata
-	const extensionName = EXTENSION_NAMES[geomType];
-	const geomMetadata = new Map<string, string>([
-		['ARROW:extension:name', extensionName],
-		[
-			'ARROW:extension:metadata',
-			JSON.stringify({
-				crs: {
-					type: 'name',
-					properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' }
-				}
-			})
-		]
-	]);
-
-	const geomField = new Field('geometry', geomData.type, false, geomMetadata);
-
-	// Build attribute columns
-	const fields: Field[] = [geomField];
-	const childrenData: Data[] = [geomData];
+): { fields: Field[]; data: Data[] } {
+	const n = indices.length;
+	const fields: Field[] = [];
+	const dataArr: Data[] = [];
 
 	for (const [name, col] of attributes) {
 		const { values } = col;
@@ -375,7 +327,7 @@ export function buildGeoArrowTable(
 		// Detect whether values are numeric or string
 		let isNumeric = true;
 		for (let i = 0; i < Math.min(n, 100); i++) {
-			if (values[i] != null && typeof values[i] !== 'number') {
+			if (values[indices[i]] != null && typeof values[indices[i]] !== 'number') {
 				isNumeric = false;
 				break;
 			}
@@ -383,12 +335,11 @@ export function buildGeoArrowTable(
 
 		if (isNumeric) {
 			const arr = new Float64Array(n);
-			for (let i = 0; i < n; i++) arr[i] = values[i] ?? NaN;
+			for (let i = 0; i < n; i++) arr[i] = values[indices[i]] ?? NaN;
 			const data = makeData({ type: new Float64(), length: n, data: arr });
 			fields.push(new Field(name, new Float64(), true));
-			childrenData.push(data);
+			dataArr.push(data);
 		} else {
-			// String column — use Utf8
 			const encoder = new TextEncoder();
 			const strParts: Uint8Array[] = [];
 			const offsets = new Int32Array(n + 1);
@@ -396,7 +347,7 @@ export function buildGeoArrowTable(
 
 			for (let i = 0; i < n; i++) {
 				offsets[i] = totalBytes;
-				const s = values[i] != null ? String(values[i]) : '';
+				const s = values[indices[i]] != null ? String(values[indices[i]]) : '';
 				const encoded = encoder.encode(s);
 				strParts.push(encoded);
 				totalBytes += encoded.length;
@@ -417,12 +368,71 @@ export function buildGeoArrowTable(
 				data: valueBuffer
 			});
 			fields.push(new Field(name, new Utf8(), true));
-			childrenData.push(data);
+			dataArr.push(data);
 		}
 	}
 
+	return { fields, data: dataArr };
+}
+
+/** Build a single GeoArrow table for one geometry type group. */
+function buildSingleTable(
+	geomType: GeoArrowGeomType,
+	wkbs: Uint8Array[],
+	indices: number[],
+	attributes: Map<string, { values: any[]; type: string }>,
+	b: BoundsTracker
+): GeoArrowResult {
+	const n = wkbs.length;
+
+	// Build geometry column Arrow Data
+	let geomData: Data;
+	switch (geomType) {
+		case 'point':
+			geomData = buildPointData(wkbs, b);
+			break;
+		case 'linestring':
+			geomData = buildLineStringData(wkbs, b);
+			break;
+		case 'polygon':
+			geomData = buildPolygonData(wkbs, b);
+			break;
+		case 'multipoint':
+			geomData = buildMultiPointData(wkbs, b);
+			break;
+		case 'multilinestring':
+			geomData = buildMultiLineStringData(wkbs, b);
+			break;
+		case 'multipolygon':
+			geomData = buildMultiPolygonData(wkbs, b);
+			break;
+	}
+
+	// Create geometry field with GeoArrow extension metadata
+	const extensionName = EXTENSION_NAMES[geomType];
+	const geomMetadata = new Map<string, string>([
+		['ARROW:extension:name', extensionName],
+		[
+			'ARROW:extension:metadata',
+			JSON.stringify({
+				crs: {
+					type: 'name',
+					properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' }
+				}
+			})
+		]
+	]);
+
+	const geomField = new Field('geometry', geomData.type, false, geomMetadata);
+
+	// Build attribute columns (sliced to this group's indices)
+	const attrCols = buildAttributeColumns(indices, attributes);
+
+	const fields: Field[] = [geomField, ...attrCols.fields];
+	const childrenData: Data[] = [geomData, ...attrCols.data];
+
 	// Assemble Table via RecordBatch
-	const schema = new Schema(fields);
+	const arrowSchema = new Schema(fields);
 	const structType = new Struct(fields);
 	const structData = makeData({
 		type: structType,
@@ -430,12 +440,102 @@ export function buildGeoArrowTable(
 		nullCount: 0,
 		children: childrenData
 	});
-	const batch = new RecordBatch(schema, structData);
-	const table = new Table(schema, batch);
+	const batch = new RecordBatch(arrowSchema, structData);
+	const table = new Table(arrowSchema, batch);
 
 	return {
 		table,
 		geometryType: geomType,
 		bounds: [b.minX, b.minY, b.maxX, b.maxY]
 	};
+}
+
+// ─── Main entry point ────────────────────────────────────────────────
+
+/** Map a WKB-parsed type name to GeoArrowGeomType, or null if unsupported. */
+function wkbTypeToGeoArrow(type: string): GeoArrowGeomType | null {
+	switch (type) {
+		case 'Point':
+			return 'point';
+		case 'LineString':
+			return 'linestring';
+		case 'Polygon':
+			return 'polygon';
+		case 'MultiPoint':
+			return 'multipoint';
+		case 'MultiLineString':
+			return 'multilinestring';
+		case 'MultiPolygon':
+			return 'multipolygon';
+		default:
+			return null; // Unknown, GeometryCollection — skip
+	}
+}
+
+/**
+ * Build GeoArrow tables from raw WKB arrays, automatically splitting by geometry type.
+ * Returns one GeoArrowResult per non-empty type group, with shared merged bounds.
+ */
+export function buildGeoArrowTables(
+	wkbArrays: Uint8Array[],
+	attributes: Map<string, { values: any[]; type: string }>
+): GeoArrowResult[] {
+	// Classify each WKB by geometry type
+	const groups = new Map<GeoArrowGeomType, { wkbs: Uint8Array[]; indices: number[] }>();
+
+	for (let i = 0; i < wkbArrays.length; i++) {
+		const parsed = parseWKB(wkbArrays[i]);
+		if (!parsed) continue;
+		const geomType = wkbTypeToGeoArrow(parsed.type);
+		if (!geomType) continue; // skip Unknown / GeometryCollection
+
+		let group = groups.get(geomType);
+		if (!group) {
+			group = { wkbs: [], indices: [] };
+			groups.set(geomType, group);
+		}
+		group.wkbs.push(wkbArrays[i]);
+		group.indices.push(i);
+	}
+
+	if (groups.size === 0) return [];
+
+	// Build a table per group with shared bounds
+	const globalBounds = newBounds();
+	const results: GeoArrowResult[] = [];
+
+	for (const [geomType, { wkbs, indices }] of groups) {
+		const result = buildSingleTable(geomType, wkbs, indices, attributes, globalBounds);
+		results.push(result);
+	}
+
+	// Stamp shared bounds across all results
+	const mergedBounds: [number, number, number, number] = [
+		globalBounds.minX,
+		globalBounds.minY,
+		globalBounds.maxX,
+		globalBounds.maxY
+	];
+	for (const r of results) r.bounds = mergedBounds;
+
+	return results;
+}
+
+/**
+ * Build a single GeoArrow table (legacy convenience wrapper).
+ * Delegates to buildGeoArrowTables and returns the first result,
+ * or falls back to the specified geometryType if classification yields nothing.
+ */
+export function buildGeoArrowTable(
+	wkbArrays: Uint8Array[],
+	geometryType: string,
+	attributes: Map<string, { values: any[]; type: string }>
+): GeoArrowResult {
+	const results = buildGeoArrowTables(wkbArrays, attributes);
+	if (results.length > 0) return results[0];
+
+	// Fallback: build empty table with the declared type
+	const geomType = normalizeGeomType(geometryType);
+	const b = newBounds();
+	return buildSingleTable(geomType, [], [], attributes, b);
 }

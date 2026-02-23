@@ -85,34 +85,26 @@ export async function loadGeoArrowModules() {
 
 export interface GeoArrowOverlayOptions {
 	layerId: string;
-	geoArrow: GeoArrowResult;
+	geoArrowResults: GeoArrowResult[];
 	fillColor?: [number, number, number, number];
 	lineColor?: [number, number, number, number];
 	onClick?: (properties: Record<string, any>) => void;
 }
 
-/**
- * Create MapboxOverlay with the appropriate GeoArrow layer
- * (scatterplot for points, polygon for polygons, path for lines).
- */
-export function createGeoArrowOverlay(
+/** Create a single deck.gl layer for one GeoArrowResult. */
+function createLayerForResult(
 	modules: Record<string, any>,
-	options: GeoArrowOverlayOptions
-) {
-	const { MapboxOverlay, GeoArrowScatterplotLayer, GeoArrowPathLayer, GeoArrowPolygonLayer } =
-		modules;
-	const {
-		layerId,
-		geoArrow,
-		fillColor = [232, 121, 61, 110],
-		lineColor = [230, 81, 0, 220],
-		onClick
-	} = options;
-	const { table, geometryType } = geoArrow;
+	result: GeoArrowResult,
+	layerId: string,
+	fillColor: [number, number, number, number],
+	lineColor: [number, number, number, number],
+	onClick?: (properties: Record<string, any>) => void
+): any {
+	const { GeoArrowScatterplotLayer, GeoArrowPathLayer, GeoArrowPolygonLayer } = modules;
+	const { table, geometryType } = result;
 
-	let layer: any;
 	if (geometryType === 'point' || geometryType === 'multipoint') {
-		layer = new GeoArrowScatterplotLayer({
+		return new GeoArrowScatterplotLayer({
 			id: layerId,
 			data: table,
 			getFillColor: fillColor,
@@ -127,7 +119,7 @@ export function createGeoArrowOverlay(
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
 	} else if (geometryType === 'linestring' || geometryType === 'multilinestring') {
-		layer = new GeoArrowPathLayer({
+		return new GeoArrowPathLayer({
 			id: layerId,
 			data: table,
 			getColor: lineColor,
@@ -141,7 +133,7 @@ export function createGeoArrowOverlay(
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
 	} else {
-		layer = new GeoArrowPolygonLayer({
+		return new GeoArrowPolygonLayer({
 			id: layerId,
 			data: table,
 			getFillColor: fillColor,
@@ -155,8 +147,37 @@ export function createGeoArrowOverlay(
 			onClick: (info: any) => onClick?.(extractPickedProps(info))
 		});
 	}
+}
 
-	return new MapboxOverlay({ interleaved: false, layers: [layer] });
+/**
+ * Create MapboxOverlay with GeoArrow layers — one per geometry type group.
+ * Accepts an array of GeoArrowResults and renders them all in a single overlay.
+ */
+export function createGeoArrowOverlay(
+	modules: Record<string, any>,
+	options: GeoArrowOverlayOptions
+) {
+	const { MapboxOverlay } = modules;
+	const {
+		layerId,
+		geoArrowResults,
+		fillColor = [232, 121, 61, 110],
+		lineColor = [230, 81, 0, 220],
+		onClick
+	} = options;
+
+	const layers = geoArrowResults.map((result) =>
+		createLayerForResult(
+			modules,
+			result,
+			`${layerId}-${result.geometryType}`,
+			fillColor,
+			lineColor,
+			onClick
+		)
+	);
+
+	return new MapboxOverlay({ interleaved: false, layers });
 }
 
 /** Convert GeoArrow picking result to plain object (skip geometry column). */

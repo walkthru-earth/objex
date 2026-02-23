@@ -7,7 +7,7 @@ import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import type { Tab } from '$lib/types';
 import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
-import { buildGeoArrowTable, type GeoArrowResult } from '$lib/utils/geoarrow.js';
+import { buildGeoArrowTables, type GeoArrowResult } from '$lib/utils/geoarrow.js';
 import { buildDuckDbUrl } from '$lib/utils/url.js';
 import { findGeoColumn } from '$lib/utils/wkb.js';
 import AttributeTable from './map/AttributeTable.svelte';
@@ -34,7 +34,7 @@ let bounds = $state<[number, number, number, number] | undefined>();
 
 let geoArrowState: {
 	modules: Record<string, any>;
-	geoArrow: GeoArrowResult;
+	geoArrowResults: GeoArrowResult[];
 } | null = null;
 let overlayRef: any = null;
 let mapRef: maplibregl.Map | null = null;
@@ -75,12 +75,18 @@ async function loadGeoData() {
 
 		const modules = await loadGeoArrowModules();
 
-		// Convert WKB → GeoArrow Arrow Table
-		const geoArrow = buildGeoArrowTable(result.wkbArrays, result.geometryType, result.attributes);
+		// Convert WKB → GeoArrow Arrow Tables (one per geometry type group)
+		const geoArrowResults = buildGeoArrowTables(result.wkbArrays, result.attributes);
 
-		geoArrowState = { modules, geoArrow };
-		featureCount = result.rowCount;
-		bounds = geoArrow.bounds;
+		if (geoArrowResults.length === 0) {
+			error = t('map.noData');
+			loading = false;
+			return;
+		}
+
+		geoArrowState = { modules, geoArrowResults };
+		featureCount = geoArrowResults.reduce((sum, r) => sum + r.table.numRows, 0);
+		bounds = geoArrowResults[0].bounds; // shared merged bounds
 		loading = false;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
@@ -117,7 +123,7 @@ function onMapReady(map: maplibregl.Map) {
 
 	const overlay = createGeoArrowOverlay(geoArrowState.modules, {
 		layerId: 'geoarrow-data',
-		geoArrow: geoArrowState.geoArrow,
+		geoArrowResults: geoArrowState.geoArrowResults,
 		onClick: (props) => {
 			selectedFeature = props;
 			showAttributes = true;

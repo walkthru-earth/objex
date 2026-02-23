@@ -97,7 +97,7 @@ function buildDefaultSql(offset = 0): string {
 					? `ST_GeomFromWKB(${quoted})`
 					: `ST_GeomFromGeoJSON(${quoted})`;
 			if (sourceCrs) {
-				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
 			}
 			wkbExpr = `ST_AsWKB(${geomExpr}) AS __wkb`;
 		}
