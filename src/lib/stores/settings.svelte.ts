@@ -6,22 +6,27 @@ const SETTINGS_KEY = 'obstore-explore-settings';
 interface PersistedSettings {
 	theme: Theme;
 	locale: Locale;
+	featureLimit: number;
 }
 
 function loadSettings(): PersistedSettings {
 	if (typeof window === 'undefined') {
-		return { theme: 'system', locale: 'en' };
+		return { theme: 'system', locale: 'en', featureLimit: 100 };
 	}
 	try {
 		const raw = localStorage.getItem(SETTINGS_KEY);
 		if (raw) {
 			const parsed = JSON.parse(raw);
-			return { theme: parsed.theme ?? 'system', locale: parsed.locale ?? 'en' };
+			return {
+				theme: parsed.theme ?? 'system',
+				locale: parsed.locale ?? 'en',
+				featureLimit: parsed.featureLimit ?? 100
+			};
 		}
 	} catch {
 		// ignore parse errors
 	}
-	return { theme: 'system', locale: 'en' };
+	return { theme: 'system', locale: 'en', featureLimit: 100 };
 }
 
 function persistSettings(settings: PersistedSettings): void {
@@ -43,15 +48,20 @@ function createSettingsStore() {
 	const initial = loadSettings();
 	let theme = $state<Theme>(initial.theme);
 	let locale = $state<Locale>(initial.locale);
+	let featureLimit = $state<number>(initial.featureLimit);
 	let resolved = $state<'light' | 'dark'>(resolveTheme(initial.theme));
 
 	// Sync i18n module with persisted locale
 	setLocale(initial.locale);
 
+	function persist() {
+		persistSettings({ theme, locale, featureLimit });
+	}
+
 	function applyTheme(t: Theme) {
 		theme = t;
 		resolved = resolveTheme(t);
-		persistSettings({ theme: t, locale });
+		persist();
 
 		if (typeof document !== 'undefined') {
 			document.documentElement.classList.toggle('dark', resolved === 'dark');
@@ -61,7 +71,7 @@ function createSettingsStore() {
 	function applyLocale(l: Locale) {
 		locale = l;
 		setLocale(l);
-		persistSettings({ theme, locale: l });
+		persist();
 	}
 
 	// Listen for system preference changes when theme is 'system'
@@ -86,11 +96,18 @@ function createSettingsStore() {
 		get locale() {
 			return locale;
 		},
+		get featureLimit() {
+			return featureLimit;
+		},
 		setTheme(t: Theme) {
 			applyTheme(t);
 		},
 		setLocale(l: Locale) {
 			applyLocale(l);
+		},
+		setFeatureLimit(n: number) {
+			featureLimit = n;
+			persist();
 		}
 	};
 }

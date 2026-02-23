@@ -1,11 +1,6 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import {
-	COGLayer,
-	GeoTIFFLayer,
-	parseCOGTileMatrixSet,
-	proj
-} from '@developmentseed/deck.gl-geotiff';
+import { COGLayer, parseCOGTileMatrixSet, proj } from '@developmentseed/deck.gl-geotiff';
 import { fromUrl } from 'geotiff';
 import { toProj4 } from 'geotiff-geokeys-to-proj4';
 import type maplibregl from 'maplibre-gl';
@@ -248,6 +243,24 @@ let mapRef: maplibregl.Map | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let overlayRef: any = null;
 
+// Native MapLibre image source for non-tiled GeoTIFFs (bypasses deck.gl)
+const BITMAP_SOURCE = 'geotiff-bitmap-src';
+const BITMAP_LAYER = 'geotiff-bitmap-layer';
+
+function cleanupNativeBitmap() {
+	if (!mapRef) return;
+	try {
+		if (mapRef.getLayer(BITMAP_LAYER)) mapRef.removeLayer(BITMAP_LAYER);
+	} catch {
+		/* already removed */
+	}
+	try {
+		if (mapRef.getSource(BITMAP_SOURCE)) mapRef.removeSource(BITMAP_SOURCE);
+	} catch {
+		/* already removed */
+	}
+}
+
 // ─── Tab change reset ───────────────────────────────────────────
 
 $effect(() => {
@@ -256,7 +269,8 @@ $effect(() => {
 	untrack(() => {
 		abortController.abort();
 		abortController = new AbortController();
-		// Remove previous overlay from map before loading new COG
+		// Remove previous overlay/sources from map before loading new COG
+		cleanupNativeBitmap();
 		if (mapRef && overlayRef) {
 			try {
 				mapRef.removeControl(overlayRef);
@@ -299,6 +313,10 @@ async function loadCog(map: maplibregl.Map) {
 		if (signal.aborted) return;
 
 		// ─── v3-compatible metadata access ───
+		// Load deferred GDAL_NODATA tag (42113) — geotiff v3 defers large/custom
+		// TIFF tags and throws if accessed synchronously before loading.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		await (firstImage as any).fileDirectory?.loadValue?.(42113);
 		const isTiled = firstImage.isTiled;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const pi = (firstImage as any).fileDirectory?.actualizedFields?.get?.(262) as
@@ -436,32 +454,117 @@ async function loadCog(map: maplibregl.Map) {
 			);
 			if (!layer) return; // aborted
 		} else {
-			// ── Non-tiled TIFF — pass URL so library uses v2 internally ──
-			layer = new GeoTIFFLayer({
-				id: 'geotiff-layer',
-				geotiff: url,
-				geoKeysParser,
-				onGeoTIFFLoad: handleGeoTIFFLoad
+			// ── Non-tiled TIFF — render as bitmap ──
+			// GeoTIFFLayer is broken: it passes `texture` to RasterLayer but
+			// RasterLayer expects `renderPipeline`, causing a Symbol.iterator
+			// crash in MeshTextureLayer. Read the raster ourselves instead.
+			if (!preFlightBounds) {
+				throw new Error('Cannot determine geographic bounds for non-tiled GeoTIFF');
+			}
+
+			const noData = firstImage.getGDALNoData();
+			const rasters = await firstImage.readRasters({ samples: [0], signal });
+			if (signal.aborted) return;
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const band = (rasters as any)[0] as ArrayLike<number>;
+			let bMin = Infinity;
+			let bMax = -Infinity;
+			for (let i = 0; i < band.length; i++) {
+				const v = band[i];
+				if (noData !== null && v === noData) continue;
+				if (!Number.isFinite(v)) continue;
+				if (v < bMin) bMin = v;
+				if (v > bMax) bMax = v;
+			}
+			if (!Number.isFinite(bMin)) {
+				bMin = 0;
+				bMax = 1;
+			}
+			const bRange = bMax - bMin || 1;
+			console.log('[COG] non-tiled band 0 stats:', {
+				bMin,
+				bMax,
+				bRange,
+				noData,
+				len: band.length
 			});
+
+			const imgW = firstImage.getWidth();
+			const imgH = firstImage.getHeight();
+			const rgba = new Uint8ClampedArray(imgW * imgH * 4);
+			for (let i = 0; i < band.length; i++) {
+				const v = band[i];
+				const isND = (noData !== null && v === noData) || !Number.isFinite(v);
+				const g = isND ? 0 : Math.round(((v - bMin) / bRange) * 255);
+				const idx = i * 4;
+				rgba[idx] = g;
+				rgba[idx + 1] = g;
+				rgba[idx + 2] = g;
+				rgba[idx + 3] = isND ? 0 : 255;
+			}
+
+			// Render via MapLibre native image source — bypasses deck.gl
+			// entirely, avoiding WebGL texture upload issues in Firefox.
+			const canvas = document.createElement('canvas');
+			canvas.width = imgW;
+			canvas.height = imgH;
+			const ctx = canvas.getContext('2d')!;
+			ctx.putImageData(new ImageData(rgba, imgW, imgH), 0, 0);
+			const dataUrl = canvas.toDataURL();
+
+			const clamped = preFlightBounds;
+			cogInfo = { width: imgW, height: imgH, bandCount, dataType, bounds: clamped };
+			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
+			map.fitBounds(
+				[
+					[clamped.west, clamped.south],
+					[clamped.east, clamped.north]
+				],
+				{ padding: 40, maxZoom: 18, speed: 1.2, maxDuration: 2000 }
+			);
+
+			cleanupNativeBitmap();
+			map.addSource(BITMAP_SOURCE, {
+				type: 'image',
+				url: dataUrl,
+				coordinates: [
+					[clamped.west, clamped.north], // top-left
+					[clamped.east, clamped.north], // top-right
+					[clamped.east, clamped.south], // bottom-right
+					[clamped.west, clamped.south] // bottom-left
+				]
+			});
+			map.addLayer({
+				id: BITMAP_LAYER,
+				source: BITMAP_SOURCE,
+				type: 'raster',
+				paint: { 'raster-opacity': 1 }
+			});
+
+			loading = false;
+			layer = null; // no deck.gl layer needed
 		}
 
-		// Attach deck.gl overlay to the map
-		const overlay = new MapboxOverlay({
-			interleaved: false,
-			layers: [layer],
-			onError: (err: Error) => {
-				if (!error && !signal.aborted) {
-					error = err?.message || String(err);
-					loading = false;
+		// Attach deck.gl overlay to the map (skip for native bitmap path)
+		if (layer) {
+			const overlay = new MapboxOverlay({
+				interleaved: false,
+				layers: [layer],
+				onError: (err: Error) => {
+					if (!error && !signal.aborted) {
+						error = err?.message || String(err);
+						loading = false;
+					}
 				}
-			}
-		});
-		overlayRef = overlay;
+			});
+			overlayRef = overlay;
 
-		if (map.loaded()) {
-			map.addControl(overlay as unknown as maplibregl.IControl);
-		} else {
-			map.once('load', () => map.addControl(overlay as unknown as maplibregl.IControl));
+			if (map.loaded()) {
+				map.addControl(overlay as unknown as maplibregl.IControl);
+			} else {
+				map.once('load', () => map.addControl(overlay as unknown as maplibregl.IControl));
+			}
 		}
 	} catch (err) {
 		if (signal.aborted) return;
@@ -621,6 +724,7 @@ async function buildCustomCogLayer(
 
 onDestroy(() => {
 	abortController.abort();
+	cleanupNativeBitmap();
 	if (mapRef && overlayRef) {
 		try {
 			mapRef.removeControl(overlayRef);

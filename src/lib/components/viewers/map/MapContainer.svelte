@@ -57,7 +57,14 @@ $effect(() => {
 
 		map.on('load', () => {
 			if (bounds && map) {
-				map.fitBounds(bounds, { padding: 40 });
+				const [minX, minY, maxX, maxY] = bounds;
+				// Validate bounds are within WGS84 range — projected CRS coordinates
+				// (e.g. shapefiles without .prj) would crash MapLibre's fitBounds.
+				if (minX >= -180 && maxX <= 180 && minY >= -90 && maxY <= 90) {
+					map.fitBounds(bounds, { padding: 40 });
+				} else {
+					console.warn('[MapContainer] Bounds outside WGS84 range, skipping fitBounds:', bounds);
+				}
 			}
 			if (map) onMapReady(map);
 		});

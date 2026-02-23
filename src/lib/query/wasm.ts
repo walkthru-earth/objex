@@ -295,34 +295,49 @@ export class WasmQueryEngine implements QueryEngine {
 
 			// Build geometry expression based on column type:
 			// - Native spatial types (GEOMETRY, WKB_BLOB, POINT, etc.) → use directly
-			// - BLOB/BINARY → WKB binary, use ST_GeomFromWKB for type detection
+			// - BLOB/BINARY → DuckDB implicitly casts BLOB→GEOMETRY, use directly
 			// - Everything else (VARCHAR, JSON, STRUCT, ...) → GeoJSON text
 			const quoted = `"${geomCol}"`;
 			const upper = geomColType.toUpperCase();
+			// Spatial types that ST_AsWKB accepts directly (GEOMETRY, WKB_BLOB, etc.).
+			// Includes Arrow "Binary"/"LargeBinary" — DuckDB GEOMETRY columns from
+			// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
 			const isSpatialType =
 				upper === 'GEOMETRY' ||
 				upper === 'WKB_BLOB' ||
 				upper.includes('POINT') ||
 				upper.includes('LINESTRING') ||
-				upper.includes('POLYGON');
-			const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
+				upper.includes('POLYGON') ||
+				upper.includes('BINARY'); // Arrow serialization of DuckDB GEOMETRY
+			// Actual WKB BLOB columns (e.g. GeoParquet) need explicit ST_GeomFromWKB
+			// because DuckDB has no implicit BLOB→GEOMETRY cast.
+			const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
-			// geomExpr: GEOMETRY value needed for ST_GeometryType (and ST_Transform)
-			let geomExpr = isSpatialType
-				? quoted
-				: isBinaryType
-					? `ST_GeomFromWKB(${quoted})`
-					: `ST_GeomFromGeoJSON(${quoted})`;
+			let wkbExpr: string;
+			let geomExpr: string;
 
-			// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84.
-			// always_xy := true forces lon/lat (x/y) axis order for both source and
-			// target, matching the GeoParquet convention regardless of CRS authority.
-			if (sourceCrs) {
-				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+			if (isWkbBlob && !sourceCrs) {
+				// Already WKB — use directly, no conversion needed
+				wkbExpr = quoted;
+				geomExpr = `ST_GeomFromWKB(${quoted})`;
+			} else {
+				geomExpr = isSpatialType
+					? quoted
+					: isWkbBlob
+						? `ST_GeomFromWKB(${quoted})`
+						: `ST_GeomFromGeoJSON(${quoted})`;
+
+				// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84.
+				// always_xy := true forces lon/lat (x/y) axis order for both source and
+				// target, matching the GeoParquet convention regardless of CRS authority.
+				if (sourceCrs) {
+					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+				}
+
+				// ST_AsWKB needed — DuckDB GEOMETRY columns (from ST_ReadSHP, ST_Read)
+				// use an internal binary format, not WKB, even though Arrow reports Binary type.
+				wkbExpr = `ST_AsWKB(${geomExpr})`;
 			}
-
-			// wkbExpr: skip WKB→GEOM→WKB round-trip when column is already WKB and no transform
-			const wkbExpr = isBinaryType && !sourceCrs ? quoted : `ST_AsWKB(${geomExpr})`;
 
 			// Wrap query: WKB for binary geometry, ST_GeometryType for type detection
 			const mapSql = `SELECT *, ${wkbExpr} AS __wkb,

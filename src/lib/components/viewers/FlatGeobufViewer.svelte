@@ -5,8 +5,10 @@ import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featur
 import type { HeaderMeta } from 'flatgeobuf/lib/mjs/header-meta.js';
 import { HttpReader } from 'flatgeobuf/lib/mjs/http-reader.js';
 import type maplibregl from 'maplibre-gl';
+import proj4 from 'proj4';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { settings } from '$lib/stores/settings.svelte.js';
 import type { Tab } from '$lib/types';
 import { geojsonFillColor, geojsonLineColor, loadDeckModules } from '$lib/utils/deck.js';
 import { buildHttpsUrl } from '$lib/utils/url.js';
@@ -15,9 +17,7 @@ import MapContainer from './map/MapContainer.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
-const FEATURE_LIMIT = 100_000;
 const BATCH_SIZE = 1000;
-const PREVIEW_SIZE = 1000;
 
 let loading = $state(true);
 let streaming = $state(false);
@@ -43,6 +43,9 @@ let mapReadyPromise: Promise<void> | null = null;
 let storedHeader: HeaderMeta | null = null;
 let storedFeatureOffset = 0;
 
+// proj4 converter for reprojecting from source CRS → WGS84
+let proj4Forward: ((coord: [number, number]) => [number, number]) | null = null;
+
 // Header metadata from FlatGeobuf
 let headerInfo = $state<{
 	geometryType: string;
@@ -54,6 +57,71 @@ let headerInfo = $state<{
 	hasIndex: boolean;
 } | null>(null);
 
+const WGS84_CODES = new Set([4326, 4979, 4267, 4269]);
+const CRS84_NAMES = ['CRS84', 'CRS 84', 'OGC:CRS84'];
+
+/** Returns true if the header CRS is WGS84/CRS84 or absent (assumed WGS84). */
+function isWgs84Crs(crs: HeaderMeta['crs']): boolean {
+	if (!crs) return true; // no CRS declared → assume WGS84
+	if (crs.code && WGS84_CODES.has(crs.code)) return true;
+	if (crs.name && CRS84_NAMES.some((n) => crs.name!.includes(n))) return true;
+	return false;
+}
+
+/** Fetch a proj4 definition string from epsg.io for the given EPSG code. */
+async function fetchProj4Def(code: number): Promise<string> {
+	const resp = await fetch(`https://epsg.io/${code}.proj4`);
+	if (!resp.ok) throw new Error(`Failed to fetch proj4 definition for EPSG:${code}`);
+	const text = (await resp.text()).trim();
+	if (!text || text.startsWith('<')) throw new Error(`Invalid proj4 definition for EPSG:${code}`);
+	return text;
+}
+
+/** Recursively transform all coordinates in a GeoJSON geometry in-place. */
+function reprojectGeometry(
+	geometry: GeoJSON.Geometry,
+	forward: (coord: [number, number]) => [number, number]
+) {
+	if (!geometry) return;
+	if (geometry.type === 'GeometryCollection') {
+		for (const g of geometry.geometries) reprojectGeometry(g, forward);
+		return;
+	}
+	reprojectCoords((geometry as any).coordinates, forward);
+}
+
+function reprojectCoords(coords: any, forward: (coord: [number, number]) => [number, number]) {
+	if (!coords) return;
+	if (typeof coords[0] === 'number' && coords.length >= 2) {
+		const [x, y] = forward([coords[0], coords[1]]);
+		coords[0] = x;
+		coords[1] = y;
+	} else if (Array.isArray(coords[0])) {
+		for (const c of coords) reprojectCoords(c, forward);
+	}
+}
+
+/** Map exotic OGC/ISO geometry types to standard GeoJSON equivalents.
+ *  deck.gl only understands the 7 GeoJSON types. */
+const GEOJSON_TYPE_MAP: Record<string, string> = {
+	MultiSurface: 'MultiPolygon',
+	CurvePolygon: 'Polygon',
+	Surface: 'Polygon',
+	CompoundCurve: 'LineString',
+	CircularString: 'LineString',
+	Curve: 'LineString',
+	MultiCurve: 'MultiLineString',
+	PolyhedralSurface: 'MultiPolygon',
+	TIN: 'MultiPolygon',
+	Triangle: 'Polygon'
+};
+
+/** Normalize a feature's geometry type to valid GeoJSON if needed. */
+function normalizeGeometryType(geometry: GeoJSON.Geometry) {
+	const mapped = GEOJSON_TYPE_MAP[geometry.type];
+	if (mapped) (geometry as any).type = mapped;
+}
+
 const GEOM_TYPE_NAMES: Record<number, string> = {
 	0: 'Unknown',
 	1: 'Point',
@@ -62,7 +130,17 @@ const GEOM_TYPE_NAMES: Record<number, string> = {
 	4: 'MultiPoint',
 	5: 'MultiLineString',
 	6: 'MultiPolygon',
-	7: 'GeometryCollection'
+	7: 'GeometryCollection',
+	8: 'CircularString',
+	9: 'CompoundCurve',
+	10: 'CurvePolygon',
+	11: 'MultiCurve',
+	12: 'MultiSurface',
+	13: 'Curve',
+	14: 'Surface',
+	15: 'PolyhedralSurface',
+	16: 'TIN',
+	17: 'Triangle'
 };
 
 function populateHeaderInfo(header: HeaderMeta) {
@@ -78,8 +156,14 @@ function populateHeaderInfo(header: HeaderMeta) {
 	};
 
 	if (header.envelope && header.envelope.length >= 4) {
-		bounds = [header.envelope[0], header.envelope[1], header.envelope[2], header.envelope[3]];
-		mapRef?.fitBounds(bounds, { padding: 40 });
+		const [minX, minY, maxX, maxY] = header.envelope;
+		// Only use envelope for fitBounds if coordinates are within WGS84 range.
+		// Projected CRS files (e.g. EPSG:3310) have envelope in meters — skip fitBounds
+		// and let flyToFeaturesBounds() handle it after features are streamed.
+		if (minX >= -180 && maxX <= 180 && minY >= -90 && maxY <= 90) {
+			bounds = [minX, minY, maxX, maxY];
+			mapRef?.fitBounds(bounds, { padding: 40 });
+		}
 	}
 }
 
@@ -106,6 +190,7 @@ function cleanup() {
 	features = [];
 	storedHeader = null;
 	storedFeatureOffset = 0;
+	proj4Forward = null;
 }
 
 $effect(() => {
@@ -148,8 +233,40 @@ async function loadFlatGeobuf() {
 		// Gets metadata + feature offset to skip the spatial index
 		await readHeaderWithRangeRequests();
 
+		// Set up on-the-fly reprojection if the file uses a non-WGS84 CRS
+		proj4Forward = null;
+		if (storedHeader?.crs && !isWgs84Crs(storedHeader.crs)) {
+			const code = storedHeader.crs.code;
+			const crsLabel =
+				storedHeader.crs.org && code
+					? `${storedHeader.crs.org}:${code}`
+					: (storedHeader.crs.name ?? 'unknown');
+			console.log('[FGB]', 'Projected CRS detected:', crsLabel, '→ fetching proj4 definition');
+
+			try {
+				const proj4Def = await fetchProj4Def(code);
+				const converter = proj4(proj4Def, 'EPSG:4326') as any;
+				proj4Forward = (coord) => converter.forward(coord);
+				console.log('[FGB]', 'Reprojection ready:', crsLabel, '→ WGS84');
+
+				// Reproject envelope bounds so fitBounds works
+				if (storedHeader.envelope && storedHeader.envelope.length >= 4) {
+					const [x0, y0, x1, y1] = storedHeader.envelope;
+					const sw = proj4Forward([x0, y0]);
+					const ne = proj4Forward([x1, y1]);
+					bounds = [sw[0], sw[1], ne[0], ne[1]];
+					mapRef?.fitBounds(bounds, { padding: 40 });
+				}
+			} catch (err) {
+				console.error('[FGB]', 'Failed to set up reprojection:', err);
+				error = `Cannot reproject CRS ${crsLabel} → WGS84: ${err instanceof Error ? err.message : err}`;
+				streaming = false;
+				return;
+			}
+		}
+
 		// Stream features (skips index if header was read, else sequential)
-		await streamFeatures(PREVIEW_SIZE);
+		await streamFeatures(settings.featureLimit);
 	} catch (err) {
 		console.error('[FGB]', 'loadFlatGeobuf error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -255,9 +372,10 @@ async function streamFeatures(limit?: number) {
 
 		const composite = createCompositeStream(fakeHeaderBytes, featureResp.body);
 		activeStreamCancel = composite.cancel;
-		iter = fgbGeojson.deserialize(composite.stream, undefined, (h: any) =>
-			populateHeaderInfo(h)
-		) as AsyncGenerator;
+		// Don't pass populateHeaderInfo — we already have the real header from
+		// readHeaderWithRangeRequests(). The composite stream has a fake header
+		// (indexNodeSize: 0, envelope: null) that would overwrite the real metadata.
+		iter = fgbGeojson.deserialize(composite.stream) as AsyncGenerator;
 	} else {
 		const response = await fetch(url, { signal: ac.signal });
 		if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -276,7 +394,16 @@ async function streamFeatures(limit?: number) {
 		for await (const feature of iter) {
 			if (ac.signal.aborted) return;
 
-			features.push(feature as GeoJSON.Feature);
+			const f = feature as GeoJSON.Feature;
+			if (f.geometry) {
+				normalizeGeometryType(f.geometry);
+				if (proj4Forward) reprojectGeometry(f.geometry, proj4Forward);
+			}
+			// Detect actual geometry type from first feature when header says Unknown
+			if (features.length === 0 && f.geometry && headerInfo?.geometryType === 'Unknown') {
+				headerInfo = { ...headerInfo, geometryType: f.geometry.type };
+			}
+			features.push(f);
 			batchCount++;
 
 			const now = Date.now();
@@ -297,7 +424,7 @@ async function streamFeatures(limit?: number) {
 				hitLimit = true;
 				break;
 			}
-			if (features.length >= FEATURE_LIMIT) {
+			if (features.length >= settings.featureLimit) {
 				hitLimit = true;
 				break;
 			}
@@ -362,7 +489,7 @@ function flyToFeaturesBounds() {
 		processCoords((f.geometry as any)?.coordinates);
 	}
 
-	if (minLng !== Infinity) {
+	if (minLng !== Infinity && minLng >= -180 && maxLng <= 180 && minLat >= -90 && maxLat <= 90) {
 		bounds = [minLng, minLat, maxLng, maxLat];
 		mapRef.fitBounds(bounds, { padding: 40 });
 	}
@@ -484,7 +611,7 @@ function onMapReady(map: maplibregl.Map) {
 						{featureCount.toLocaleString()} features...
 					</span>
 				{:else if featureCount > 0}
-					{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= FEATURE_LIMIT}
+					{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= settings.featureLimit}{' '}
 						<span class="text-amber-300">
 							of {totalFeatures.toLocaleString()} (limit)
 						</span>
@@ -496,7 +623,7 @@ function onMapReady(map: maplibregl.Map) {
 					class="rounded bg-primary/90 px-2 py-1 text-xs text-primary-foreground backdrop-blur-sm hover:bg-primary"
 					onclick={loadAllFeatures}
 				>
-					Stream up to {Math.min(totalFeatures ?? FEATURE_LIMIT, FEATURE_LIMIT).toLocaleString()}
+					Stream all {(totalFeatures ?? 0).toLocaleString()}
 				</button>
 			{/if}
 		</div>

@@ -5,6 +5,7 @@ import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
+import { settings } from '$lib/stores/settings.svelte.js';
 import type { Tab } from '$lib/types';
 import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
 import { buildGeoArrowTables, type GeoArrowResult } from '$lib/utils/geoarrow.js';
@@ -38,8 +39,6 @@ let geoArrowState: {
 } | null = null;
 let overlayRef: any = null;
 let mapRef: maplibregl.Map | null = null;
-
-const MAP_FEATURE_LIMIT = 100_000;
 
 $effect(() => {
 	if (!tab || schema.length === 0) return;
@@ -103,7 +102,7 @@ async function fetchMapData(): Promise<MapQueryResult> {
 
 	const fileUrl = buildDuckDbUrl(tab);
 	const source = buildDuckDbSource(tab.path, fileUrl);
-	const baseSql = `SELECT * FROM ${source} LIMIT ${MAP_FEATURE_LIMIT}`;
+	const baseSql = `SELECT * FROM ${source} LIMIT ${settings.featureLimit}`;
 	const connId = tab.connectionId ?? '';
 
 	const engine = await getQueryEngine();
@@ -154,7 +153,7 @@ function onMapReady(map: maplibregl.Map) {
 			<div
 				class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
-				{featureCount.toLocaleString()} features{#if featureCount >= MAP_FEATURE_LIMIT}
+				{featureCount.toLocaleString()} features{#if featureCount >= settings.featureLimit}
 					<span class="text-amber-300">(limit)</span>{/if}
 			</div>
 		{/if}

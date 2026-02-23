@@ -11,6 +11,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
+import { settings } from '$lib/stores/settings.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildDuckDbUrl, buildStorageUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
@@ -23,7 +24,7 @@ import TableToolbar from './TableToolbar.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
-let pageSize = $state(1000);
+let pageSize = $state(settings.featureLimit);
 
 let schema = $state<SchemaField[]>([]);
 let columns = $state<string[]>([]);
@@ -80,22 +81,28 @@ function buildDefaultSql(offset = 0): string {
 	if (geoCol) {
 		const quoted = `"${geoCol}"`;
 		const upper = geoColType.toUpperCase();
+		// Spatial types that ST_AsWKB accepts directly (GEOMETRY, WKB_BLOB, etc.).
+		// Includes Arrow "Binary"/"LargeBinary" — DuckDB GEOMETRY columns from
+		// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
 		const isSpatialType =
 			upper === 'GEOMETRY' ||
 			upper === 'WKB_BLOB' ||
 			upper.includes('POINT') ||
 			upper.includes('LINESTRING') ||
-			upper.includes('POLYGON');
-		const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
+			upper.includes('POLYGON') ||
+			upper.includes('BINARY'); // Arrow serialization of DuckDB GEOMETRY
+		// Actual WKB BLOB columns (e.g. GeoParquet) need explicit ST_GeomFromWKB
+		// because DuckDB has no implicit BLOB→GEOMETRY cast.
+		const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 		let wkbExpr: string;
-		if (isBinaryType && !sourceCrs) {
-			// Already WKB binary, no transform needed — just alias
+		if (isWkbBlob && !sourceCrs) {
+			// Already WKB — use directly, no conversion needed
 			wkbExpr = `${quoted} AS __wkb`;
 		} else {
 			let geomExpr = isSpatialType
 				? quoted
-				: isBinaryType
+				: isWkbBlob
 					? `ST_GeomFromWKB(${quoted})`
 					: `ST_GeomFromGeoJSON(${quoted})`;
 			if (sourceCrs) {
@@ -444,6 +451,7 @@ function handleHistorySelect(sql: string) {
 
 function handlePageSizeChange(size: number) {
 	pageSize = size;
+	settings.setFeatureLimit(size);
 	currentPage = 1;
 	const sql = buildDefaultSql(0);
 	sqlQuery = sql;
