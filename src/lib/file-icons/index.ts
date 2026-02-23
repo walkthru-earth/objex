@@ -42,7 +42,7 @@ export type ViewerKind =
 	| 'zarr'
 	| 'raw';
 
-export type DuckDbReadFn = 'read_parquet' | 'read_csv' | 'read_json' | 'ST_ReadSHP' | 'ST_Read';
+export type DuckDbReadFn = 'read_parquet' | 'read_csv' | 'read_json' | 'ST_Read';
 
 export interface FileTypeInfo {
 	/** Lucide icon name */
@@ -839,6 +839,16 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		duckdbReadFn: null,
 		mimeType: 'application/gzip'
 	},
+	'.tgz': {
+		icon: 'Archive',
+		color: 'text-amber-600 dark:text-amber-400',
+		label: 'TGZ Archive',
+		category: 'archive',
+		viewer: 'archive',
+		queryable: false,
+		duckdbReadFn: null,
+		mimeType: 'application/gzip'
+	},
 	'.7z': {
 		icon: 'Archive',
 		color: 'text-amber-600 dark:text-amber-400',
@@ -918,7 +928,7 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		category: 'geo',
 		viewer: 'table',
 		queryable: true,
-		duckdbReadFn: 'ST_ReadSHP',
+		duckdbReadFn: 'ST_Read',
 		mimeType: 'application/x-esri-shape'
 	},
 	'.gpkg': {
@@ -1070,7 +1080,7 @@ export function getDuckDbReadFn(pathOrExt: string): string {
 export function buildDuckDbSource(pathOrExt: string, url: string): string {
 	const ext = pathOrExt.includes('.') ? `.${pathOrExt.split('.').pop()!.toLowerCase()}` : '';
 	if (ext === '.geojson') {
-		return `(SELECT unnest(feature.properties), to_json(feature.geometry)::VARCHAR AS geometry FROM (SELECT unnest(features) AS feature FROM read_json_auto('${url}', maximum_object_size=1073741824)))`;
+		return `(SELECT unnest(feature.properties), to_json(feature.geometry)::VARCHAR AS geometry FROM (SELECT unnest(features) AS feature FROM read_json_auto('${url}', maximum_object_size=1073741824, ignore_errors=true)))`;
 	}
 	const readFn = EXTENSIONS[ext]?.duckdbReadFn ?? 'read_parquet';
 	return `${readFn}('${url}')`;

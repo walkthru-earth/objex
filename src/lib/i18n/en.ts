@@ -222,9 +222,12 @@ export const en: Record<string, string> = {
 	'archive.badge': 'Archive',
 	'archive.entries': 'entries',
 	'archive.streamed': 'Streamed',
+	'archive.fullDownload': 'Full Download',
 	'archive.loading': 'Loading archive...',
-	'archive.extracting': 'Extracting...',
-	'archive.selectFile': 'Select a file to preview',
+	'archive.scanning': 'Scanning...',
+	'archive.scanningProgress': 'Scanning archive... {count} entries found',
+	'archive.empty': 'Empty directory',
+	'archive.unsupported': 'Unsupported archive format',
 
 	// Raw Viewer
 	'raw.loading': 'Loading hex dump...',

@@ -1,4 +1,9 @@
-import { BlobReader, type Entry, HttpReader, ZipReader } from '@zip.js/zip.js';
+import { BlobReader, configure, type Entry, HttpReader, ZipReader } from '@zip.js/zip.js';
+
+// Enable web workers for non-blocking ZIP parsing
+configure({ useWebWorkers: true });
+
+// ── Types ──────────────────────────────────────────────────────────────
 
 export interface ArchiveEntry {
 	filename: string;
@@ -6,41 +11,70 @@ export interface ArchiveEntry {
 	compressedSize: number;
 	uncompressedSize: number;
 	lastModified: Date;
+	/** TAR only: byte offset of the file data within the archive */
+	dataOffset?: number;
 }
 
-export interface FileTreeNode {
-	name: string;
-	path: string;
-	isDir: boolean;
-	size: number;
-	children: FileTreeNode[];
+export type ArchiveFormat = 'zip' | 'tar' | 'tar.gz' | 'unsupported';
+
+// ── Format Detection ───────────────────────────────────────────────────
+
+export function detectArchiveFormat(filename: string): ArchiveFormat {
+	const lower = filename.toLowerCase();
+	if (lower.endsWith('.zip')) return 'zip';
+	if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) return 'tar.gz';
+	if (lower.endsWith('.tar')) return 'tar';
+	if (lower.endsWith('.gz')) return 'tar.gz';
+	return 'unsupported';
 }
+
+// ── ZIP (streaming) ────────────────────────────────────────────────────
+
+const ZIP_BATCH_SIZE = 500;
 
 /**
- * Read ZIP entries from a URL using HTTP range requests.
- * Only fetches the central directory — does NOT download the full file.
+ * Stream ZIP entries from a URL using HTTP range requests.
+ * Uses getEntriesGenerator() so the UI can render progressively.
  */
-export async function readZipEntriesFromUrl(
-	url: string
-): Promise<{ entries: Entry[]; entryList: ArchiveEntry[] }> {
+export async function* streamZipEntriesFromUrl(
+	url: string,
+	signal?: AbortSignal
+): AsyncGenerator<{ zipEntries: Entry[]; archiveEntries: ArchiveEntry[] }> {
 	const httpReader = new HttpReader(url, { forceRangeRequests: true });
 	const reader = new ZipReader(httpReader);
-	const entries = await reader.getEntries();
 
-	const entryList: ArchiveEntry[] = entries.map((e) => ({
-		filename: e.filename,
-		directory: e.directory,
-		compressedSize: e.compressedSize,
-		uncompressedSize: e.uncompressedSize,
-		lastModified: e.lastModDate
-	}));
+	let zBatch: Entry[] = [];
+	let aBatch: ArchiveEntry[] = [];
 
-	return { entries, entryList };
+	try {
+		for await (const entry of reader.getEntriesGenerator()) {
+			if (signal?.aborted) return;
+
+			zBatch.push(entry);
+			aBatch.push({
+				filename: entry.filename,
+				directory: entry.directory,
+				compressedSize: entry.compressedSize,
+				uncompressedSize: entry.uncompressedSize,
+				lastModified: entry.lastModDate
+			});
+
+			if (zBatch.length >= ZIP_BATCH_SIZE) {
+				yield { zipEntries: zBatch, archiveEntries: aBatch };
+				zBatch = [];
+				aBatch = [];
+			}
+		}
+		if (zBatch.length > 0) {
+			yield { zipEntries: zBatch, archiveEntries: aBatch };
+		}
+	} finally {
+		await reader.close();
+	}
 }
 
 /**
- * Read ZIP entries from an in-memory buffer.
- * Used as fallback when HTTP range requests aren't supported.
+ * Read ZIP entries from an in-memory buffer (non-streaming, fast).
  */
 export async function readZipEntriesFromBuffer(
 	data: Uint8Array
@@ -48,61 +82,228 @@ export async function readZipEntriesFromBuffer(
 	const blob = new Blob([data as unknown as BlobPart]);
 	const reader = new ZipReader(new BlobReader(blob));
 	const entries = await reader.getEntries();
-
-	const entryList: ArchiveEntry[] = entries.map((e) => ({
-		filename: e.filename,
-		directory: e.directory,
-		compressedSize: e.compressedSize,
-		uncompressedSize: e.uncompressedSize,
-		lastModified: e.lastModDate
-	}));
-
-	return { entries, entryList };
+	return {
+		entries,
+		entryList: entries.map((e) => ({
+			filename: e.filename,
+			directory: e.directory,
+			compressedSize: e.compressedSize,
+			uncompressedSize: e.uncompressedSize,
+			lastModified: e.lastModDate
+		}))
+	};
 }
 
-export async function extractEntry(entry: Entry): Promise<Uint8Array> {
-	if (!('getData' in entry) || !entry.getData) throw new Error('Cannot extract directory');
-	const blob = await (entry as any).getData(new (await import('@zip.js/zip.js')).BlobWriter());
-	const buffer = await blob.arrayBuffer();
-	return new Uint8Array(buffer);
+// ── TAR (streaming) ────────────────────────────────────────────────────
+
+const TAR_HEADER_SIZE = 512;
+const TAR_CHUNK_SIZE = 256 * 1024; // 256 KB per range request
+
+/**
+ * Parse a single 512-byte TAR header.
+ * Returns null for end-of-archive (all-zero block).
+ */
+function parseTarHeader(header: Uint8Array): ArchiveEntry | null {
+	if (header.every((b) => b === 0)) return null;
+
+	const dec = new TextDecoder('ascii');
+	const name = dec.decode(header.slice(0, 100)).replace(/\0+$/, '');
+	const prefix = dec.decode(header.slice(345, 500)).replace(/\0+$/, '');
+	const fullName = prefix ? `${prefix}/${name}` : name;
+
+	const sizeStr = dec.decode(header.slice(124, 136)).replace(/\0+$/, '').trim();
+	const size = parseInt(sizeStr, 8) || 0;
+
+	const mtimeStr = dec.decode(header.slice(136, 148)).replace(/\0+$/, '').trim();
+	const mtime = new Date((parseInt(mtimeStr, 8) || 0) * 1000);
+
+	const typeFlag = String.fromCharCode(header[156]);
+	const isDir = typeFlag === '5' || fullName.endsWith('/');
+
+	return {
+		filename: fullName,
+		directory: isDir,
+		compressedSize: size,
+		uncompressedSize: size,
+		lastModified: mtime,
+		dataOffset: 0
+	};
 }
 
-export function buildFileTree(entryList: ArchiveEntry[]): FileTreeNode[] {
-	const root: FileTreeNode = { name: '', path: '', isDir: true, size: 0, children: [] };
+/**
+ * Stream TAR entries from a URL using batched HTTP range requests.
+ * Yields a batch of entries after each chunk is processed,
+ * so the UI can render progressively while scanning continues.
+ */
+export async function* streamTarEntriesFromUrl(
+	url: string,
+	signal?: AbortSignal
+): AsyncGenerator<ArchiveEntry[]> {
+	const head = await fetch(url, { method: 'HEAD', signal });
+	const totalSize = Number(head.headers.get('content-length'));
+	if (!totalSize || totalSize <= 0) throw new Error('Cannot determine TAR file size');
+
+	let offset = 0;
+
+	while (offset < totalSize) {
+		if (signal?.aborted) return;
+
+		const end = Math.min(offset + TAR_CHUNK_SIZE - 1, totalSize - 1);
+		const res = await fetch(url, {
+			headers: { Range: `bytes=${offset}-${end}` },
+			signal
+		});
+		const chunk = new Uint8Array(await res.arrayBuffer());
+		const batch: ArchiveEntry[] = [];
+		let localOffset = 0;
+
+		while (localOffset + TAR_HEADER_SIZE <= chunk.length) {
+			const header = chunk.slice(localOffset, localOffset + TAR_HEADER_SIZE);
+			const entry = parseTarHeader(header);
+			if (!entry) {
+				// End-of-archive — yield remaining batch and stop
+				if (batch.length > 0) yield batch;
+				return;
+			}
+
+			entry.dataOffset = offset + localOffset + TAR_HEADER_SIZE;
+			batch.push(entry);
+
+			const dataBlocks = Math.ceil(entry.uncompressedSize / TAR_HEADER_SIZE);
+			const entryTotalSize = TAR_HEADER_SIZE + dataBlocks * TAR_HEADER_SIZE;
+
+			if (localOffset + entryTotalSize > chunk.length) {
+				// Next header is beyond this chunk — re-fetch from there
+				offset += localOffset + entryTotalSize;
+				localOffset = chunk.length;
+			} else {
+				localOffset += entryTotalSize;
+			}
+		}
+
+		if (batch.length > 0) yield batch;
+
+		if (localOffset <= chunk.length) {
+			offset += localOffset || TAR_CHUNK_SIZE;
+		}
+	}
+}
+
+/**
+ * Read TAR entries from an in-memory buffer (non-streaming, fast).
+ */
+export function readTarEntriesFromBuffer(data: Uint8Array): { entryList: ArchiveEntry[] } {
+	const entries: ArchiveEntry[] = [];
+	let offset = 0;
+
+	while (offset + TAR_HEADER_SIZE <= data.length) {
+		const header = data.slice(offset, offset + TAR_HEADER_SIZE);
+		const entry = parseTarHeader(header);
+		if (!entry) break;
+
+		entry.dataOffset = offset + TAR_HEADER_SIZE;
+		entries.push(entry);
+
+		const dataBlocks = Math.ceil(entry.uncompressedSize / TAR_HEADER_SIZE);
+		offset += TAR_HEADER_SIZE + dataBlocks * TAR_HEADER_SIZE;
+	}
+
+	return { entryList: entries };
+}
+
+// ── TAR.GZ ─────────────────────────────────────────────────────────────
+
+/**
+ * Decompress gzip data using the browser's DecompressionStream.
+ * Requires full download — gzip does not support random access.
+ */
+export async function decompressGzip(data: Uint8Array): Promise<Uint8Array> {
+	const ds = new DecompressionStream('gzip');
+	const decompressedStream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(ds);
+	const buf = await new Response(decompressedStream).arrayBuffer();
+	return new Uint8Array(buf);
+}
+
+// ── Listing (universal) ────────────────────────────────────────────────
+
+const MAX_BROWSE_DEPTH = 10;
+
+/**
+ * List directory contents at a given prefix.
+ * Returns immediate children: directories (as path strings) and files.
+ */
+export function listContents(
+	entryList: ArchiveEntry[],
+	prefix: string
+): { directories: string[]; files: ArchiveEntry[] } {
+	const canonical = prefix.length > 0 && !prefix.endsWith('/') ? `${prefix}/` : prefix;
+
+	const files: ArchiveEntry[] = [];
+	const directories = new Set<string>();
 
 	for (const entry of entryList) {
-		const parts = entry.filename.split('/').filter(Boolean);
-		let current = root;
+		if (!entry.filename.startsWith(canonical)) continue;
 
-		for (let i = 0; i < parts.length; i++) {
-			const part = parts[i];
-			const isLast = i === parts.length - 1;
-			const path = parts.slice(0, i + 1).join('/');
+		const remainder = entry.filename.slice(canonical.length);
+		if (remainder.length === 0) continue;
 
-			let child = current.children.find((c) => c.name === part);
-			if (!child) {
-				child = {
-					name: part,
-					path,
-					isDir: isLast ? entry.directory : true,
-					size: isLast ? entry.uncompressedSize : 0,
-					children: []
-				};
-				current.children.push(child);
-			}
-			current = child;
+		const slashIndex = remainder.indexOf('/');
+		if (slashIndex === -1) {
+			if (!entry.directory) files.push(entry);
+		} else {
+			const dirName = remainder.slice(0, slashIndex);
+			const dirPath = `${canonical}${dirName}`;
+			if (dirName.length > 0) directories.add(dirPath);
 		}
 	}
 
-	// Sort: directories first, then alphabetical
-	function sortTree(node: FileTreeNode) {
-		node.children.sort((a, b) => {
-			if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-			return a.name.localeCompare(b.name);
-		});
-		for (const child of node.children) sortTree(child);
-	}
+	return {
+		directories: [...directories].sort(),
+		files: files.sort((a, b) => a.filename.localeCompare(b.filename))
+	};
+}
 
-	sortTree(root);
-	return root.children;
+export function clampPrefix(prefix: string, maxDepth: number = MAX_BROWSE_DEPTH): string {
+	const parts = prefix.split('/').filter(Boolean);
+	if (parts.length <= maxDepth) return prefix;
+	return parts.slice(0, maxDepth).join('/');
+}
+
+// ── Download ───────────────────────────────────────────────────────────
+
+export async function downloadZipEntry(entry: Entry): Promise<void> {
+	if (entry.directory || !entry.getData) return;
+	const { BlobWriter, getMimeType } = await import('@zip.js/zip.js');
+	const mimeType = getMimeType(entry.filename);
+	const blob: Blob = await entry.getData(new BlobWriter(mimeType));
+	triggerBlobDownload(blob, entry.filename.split('/').pop() || 'file');
+}
+
+export async function downloadTarEntryFromUrl(url: string, entry: ArchiveEntry): Promise<void> {
+	if (entry.directory || entry.dataOffset == null) return;
+	const res = await fetch(url, {
+		headers: {
+			Range: `bytes=${entry.dataOffset}-${entry.dataOffset + entry.uncompressedSize - 1}`
+		}
+	});
+	const blob = await res.blob();
+	triggerBlobDownload(blob, entry.filename.split('/').pop() || 'file');
+}
+
+export function downloadTarEntryFromBuffer(data: Uint8Array, entry: ArchiveEntry): void {
+	if (entry.directory || entry.dataOffset == null) return;
+	const slice = data.slice(entry.dataOffset, entry.dataOffset + entry.uncompressedSize);
+	const blob = new Blob([slice]);
+	triggerBlobDownload(blob, entry.filename.split('/').pop() || 'file');
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = filename;
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
