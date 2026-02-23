@@ -1,7 +1,7 @@
 # COG Viewer Architecture & Lessons Learned
 
 > Comprehensive reference for the CogViewer.svelte rewrite using `@developmentseed/deck.gl-geotiff`.
-> Last updated: 2026-02-23
+> Last updated: 2026-02-24
 
 ---
 
@@ -29,6 +29,8 @@ CogViewer.svelte
   |
   |-- Pre-flight (geotiff v3)
   |     Read first IFD -> extract metadata (PI, SF, bands, tiled?)
+  |     Compute edge-sampled geographic bounds (20 sample points)
+  |     Store v3 tiff as monkey-patch fallback (currentV3Tiff)
   |     Route to: Default Pipeline | Custom Pipeline | GeoTIFFLayer
   |
   |-- Default Pipeline (RGB/Palette/CMYK/YCbCr/CIELab, uint)
@@ -125,11 +127,16 @@ device.createTexture({ format: 'rgba8unorm', width, height, data: imageData.data
 | Pool | `new Pool()` with `pool.bindParameters()` | `new Pool()` with different Worker structure |
 | Compression | LZW, JPEG, Deflate, PackBits, Adobe Deflate | + ZSTD (50000), WebP (50001), LERC (34887) |
 
-### Critical rule: NEVER pass v3 objects to library functions
+### Critical rule: NEVER pass v3 objects to library functions (with one exception)
 
 Passing v3 GeoTIFF/Pool objects to the library causes `pool.bindParameters is not a function` because the Pool APIs differ between versions.
 
 **Solution:** Always pass URL strings to `COGLayer`/`GeoTIFFLayer`. The library opens its own v2 GeoTIFF internally.
+
+**Exception:** `parseCOGTileMatrixSet(v3Tiff, geoKeysParser)` is safe. It only calls
+standard methods (`getImage`, `getImageCount`, `getGeoKeys`, `getBoundingBox`, `getWidth`,
+`getHeight`, `getTileWidth`, `getTileHeight`, `isTiled`) that are identical in v2 and v3.
+This is used as a fallback when the v2 capture fails (see Monkey-Patch Strategy).
 
 ### v3 metadata access patterns
 
@@ -164,12 +171,16 @@ COGLayer.prototype._parseGeoTIFF = async function() {
   try {
     await _origParse.call(this);
   } catch (err) {
-    if (this.props.getTileData && this.props.renderTile && capturedV2Geotiff) {
-      // Reconstruct state from captured v2 GeoTIFF
-      const metadata = await parseCOGTileMatrixSet(capturedV2Geotiff, gkParser);
-      patchMetadataBounds(metadata);  // Fix NaN/extreme coords
-      // ... load images, skip oversized overviews, create reprojectors ...
-      this.setState({ metadata, forwardReproject, inverseReproject, images, ... });
+    const geotiff = capturedV2Geotiff || currentV3Tiff;  // v3 fallback
+    if (this.props.getTileData && this.props.renderTile && geotiff) {
+      try {
+        const metadata = await parseCOGTileMatrixSet(geotiff, gkParser);
+        patchMetadataBounds(metadata);
+        // ... load images, skip oversized overviews, cap zoom levels ...
+        this.setState({ metadata, forwardReproject, inverseReproject, images, ... });
+      } catch (reconstructErr) {
+        if (this.props.onError) this.props.onError(reconstructErr);
+      }
     } else if (this.props.onError) {
       this.props.onError(err);
     }
@@ -177,11 +188,24 @@ COGLayer.prototype._parseGeoTIFF = async function() {
 };
 ```
 
-### `capturedV2Geotiff` lifecycle
+### `capturedV2Geotiff` + `currentV3Tiff` lifecycle
 
-- Set in `handleGeoTIFFLoad` callback (called by library's `_parseGeoTIFF` at step 6)
-- Used in catch handler to reconstruct state
-- Module-level variable (shared across instances -- potential race with multiple tabs)
+Two module-level variables provide the geotiff object for reconstruction:
+
+- **`capturedV2Geotiff`**: Set in `handleGeoTIFFLoad` callback (step 6 of `_parseGeoTIFF`).
+  May be **null** if `_origParse` throws BEFORE reaching `onGeoTIFFLoad` (e.g.,
+  `parseCOGTileMatrixSet` fails for the CRS).
+- **`currentV3Tiff`**: Set in `onMapReady` before creating the COGLayer. Always available
+  when the custom pipeline is used. Acts as fallback when `capturedV2Geotiff` is null.
+- Both are cleared on tab switch to prevent stale references.
+
+### Why v3 tiff works with `parseCOGTileMatrixSet`
+
+Despite the "never pass v3 objects to library functions" rule, `parseCOGTileMatrixSet`
+is safe because it only calls standard methods that work identically in v2 and v3:
+`getImage()`, `getImageCount()`, `getGeoKeys()`, `getBoundingBox()`, `getWidth()`,
+`getHeight()`, `getTileWidth()`, `getTileHeight()`, `isTiled`. It does NOT access
+`fileDirectory` properties directly or use the Pool.
 
 ---
 
@@ -235,16 +259,51 @@ function patchMetadataBounds(metadata) {
 }
 ```
 
-### Fix: Clamped `forwardReproject` in monkey-patch
+### Fix: Edge-sampled bounds (pre-flight)
+
+The library's `getGeographicBounds` uses only 4 bbox corners. For projections where
+edges curve (UTM, Mollweide, sinusoidal), this misses the true extent. We compute
+our own bounds during pre-flight by sampling 5 points per edge (20 total):
+
+```javascript
+for (let i = 0; i <= N; i++) {
+  const t = i / N;
+  pts.push([x0 + t * dx, y0]); // bottom
+  pts.push([x0 + t * dx, y1]); // top
+  pts.push([x0, y0 + t * dy]); // left
+  pts.push([x1, y0 + t * dy]); // right
+}
+// Only accept points with |lon| <= 180 and |lat| <= 90 (rejects Mollweide corner NaN)
+```
+
+### Fix: Sign-based `forwardReproject` fallback
+
+For out-of-domain points (Mollweide edges outside the ellipse), returning `[0, 0]`
+creates spikes in the adaptive mesh (tiles stretching to the equator/prime meridian).
+Instead, use sign-based edge clamping:
 
 ```javascript
 const forwardReproject = (x, y) => {
   const r = converter.forward([x, y], false);
-  return [
-    isFinite(r[0]) ? clamp(r[0], -180, 180) : 0,
-    isFinite(r[1]) ? clamp(r[1], -85.051129, 85.051129) : 0
-  ];
+  const lon = isFinite(r[0]) ? clamp(r[0], -180, 180) : (x >= 0 ? 180 : -180);
+  const lat = isFinite(r[1]) ? clamp(r[1], -85.05, 85.05) : (y >= 0 ? 85.05 : -85.05);
+  return [lon, lat];
 };
+```
+
+Same approach for `projectTo3857` — maps to EPSG:3857 world edges (±20037508.34m).
+
+### Fix: Tile matrix zoom cap
+
+ZSTD decompression runs synchronously on main thread (WASM via `zstddec`). Capping
+tile matrices at 12 levels prevents excessive tile loading at fine zoom levels:
+
+```javascript
+const MAX_TILE_LEVELS = 12;
+if (metadata.tileMatrices.length > MAX_TILE_LEVELS) {
+  metadata.tileMatrices = metadata.tileMatrices.slice(0, MAX_TILE_LEVELS);
+  images = images.slice(images.length - MAX_TILE_LEVELS);
+}
 ```
 
 ### Important: `safeClamp` vs `Math.max/min`
@@ -298,7 +357,30 @@ const compression = firstImage.fileDirectory.getValue('Compression') || 1;
 
 **Proof:** Stats `readRasters` without a pool works fine (same COG, same compression). Only pool-based tile loading hangs.
 
-**Fix:** Do NOT use a v3 Pool. Call `readRasters` without a pool. Decompression happens on the main thread but is async (WASM init via `WebAssembly.instantiate` is non-blocking). Per-tile decompression is ~5-10ms for 512x512 tiles -- acceptable.
+**Fix:** Do NOT use a v3 Pool. Call `readRasters` without a pool. Decompression happens
+on the main thread synchronously via WASM (`zstddec` package). The `zstd.decode()` call
+is fully synchronous — blocks the main thread for the duration of decompression.
+
+**Correction:** Earlier docs said decompression was "async". It is NOT — `readRasters`
+returns a Promise, but the actual ZSTD WASM decode inside is synchronous. The Promise
+wrapper is just syntactic.
+
+### Event loop yielding (fix for UI freeze)
+
+Back-to-back synchronous tile decodes (each ~5-50ms depending on tile size and
+compression) can block the UI for hundreds of milliseconds, preventing paint and
+input handling. The fix: yield to the event loop before each tile decompression:
+
+```javascript
+getTileData: async (image, options) => {
+  await new Promise(r => setTimeout(r, 0));  // yield to browser
+  if (options.signal?.aborted) return null;
+  // ... readRasters + RGBA conversion ...
+}
+```
+
+This inserts a macrotask boundary (~1-4ms) between tiles, letting the browser
+paint frames and process user input (zoom, pan) between decompressions.
 
 **Tradeoff:** No parallel decompression across workers. If this becomes a bottleneck, investigate:
 - Building geotiff v3 workers with Vite's worker bundling
@@ -327,10 +409,9 @@ Despite removing the Pool, the HFP Mollweide COG (360802x176500, ZSTD, UInt16) m
 
 ### Performance optimization ideas (not yet implemented)
 
-- Check compression at pre-flight; only use v3 for ZSTD/WebP/LERC; use v2 images (with library pool) for LZW/Deflate/JPEG
-- Limit concurrent tile requests via `maxRequests` prop on COGLayer
-- Use `requestAnimationFrame` batching for RGBA normalization
-- Profile with Chrome DevTools Performance tab to identify exact bottleneck
+- Check compression at pre-flight; only use v3 for ZSTD/WebP/LERC; use v2 images (with library pool) for LZW/Deflate/JPEG — this gives worker-based parallel decompression for common codecs
+- COGLayer does NOT forward TileLayer props (`maxRequests`, `maxZoom`, etc.) — would need library patch or custom TileLayer creation
+- Profile with Chrome DevTools Performance tab to identify exact split between WASM decode and adaptive mesh proj4 calls
 
 ---
 
@@ -378,6 +459,11 @@ if (firstValidZ > 0) {
 ---
 
 ## UI Layout
+
+### Smooth fly animation
+
+`fitBounds` uses `speed: 1.2, maxDuration: 2000` for a smooth fly-to effect when
+navigating to the COG extent, instead of the jarring instant pan (`animate: false`).
 
 ### Overlay stacking (fixed in this rewrite)
 
@@ -427,6 +513,22 @@ After: wrapped in a flex column container:
 - **Route:** Custom pipeline (SF=3 float)
 - **Issues:** Bounds at +/-90.002 deg, inferRenderPipeline throws for SF=3
 
+### Deforestation 100m (global, Float32, LZW)
+
+- URL: `s3://us-west-2.opendata.source.coop/vizzuality/lg-land-carbon-data/deforest_100m_cog.tif`
+- CRS: EPSG:4326
+- 400752x200376, 1 band, Float32, PI=1 (Gray), LZW
+- Many overviews, large tile count at coarsest level
+- **Route:** Custom pipeline (SF=3 float)
+- **Issues:** Coarsest overview still has ~91 tiles → UI freeze from LZW decode
+
+### rcmap_tree_2009 (works perfectly)
+
+- URL: `s3://us-west-2.opendata.source.coop/berkeley-dse/mrcl/rcmap_tree_2009.tif`
+- Moderate size, uint, Gray
+- **Route:** Custom pipeline (PI=1)
+- **Status:** Works correctly, good reference for testing
+
 ### 64-band COG (UTM, ZSTD, Int8)
 
 - URL: `s3://us-west-2.opendata.source.coop/tge-labs/aef/v1/annual/2021/10N/x06839lqyyiw2qz7y-0000008192-0000008192.tiff`
@@ -435,19 +537,30 @@ After: wrapped in a flex column container:
 - 14 overviews (down to 1x1)
 - **Route:** Custom pipeline (PI=1, SF=2 int)
 - **Issues:** Oversized tile matrices for tiny overviews, ZSTD needs v3
+- **Status:** Works — renders band 0 as grayscale, bbox slightly north (edge sampling fix applied)
 
 ---
 
 ## Open Issues & Future Work
 
-### Browser hang with large Mollweide COGs
-The HFP COG still hangs despite Pool removal. Needs profiling with Chrome DevTools to identify exact bottleneck (RasterLayer mesh, WASM init, GPU memory, or concurrent requests).
+### Browser responsiveness with large COGs
+Multiple mitigations applied: event loop yielding between tiles, tile matrix cap at 12 levels,
+sign-based edge clamping, v3 tiff fallback for monkey-patch. The HFP Mollweide COG (360k×176k,
+ZSTD) and deforestation COG (400k×200k, LZW) remain challenging due to:
+- ZSTD/LZW decompression is **synchronous** on main thread (WASM `zstddec`)
+- RasterLayer adaptive mesh calls `forwardReproject` per vertex (Mollweide = Newton-Raphson)
+- COGLayer doesn't forward `maxRequests` to TileLayer (default 6 concurrent)
+Needs Chrome DevTools Performance profiling to identify the exact bottleneck split.
 
-### Band selector UI
-For multi-band COGs (e.g., 64-band), a band-to-RGB channel assignment UI would be useful. Currently only band 0 is rendered as grayscale.
+### Band selector UI / RGB channel assignment
+For multi-band COGs (e.g., 64-band), a band-to-RGB channel assignment dropdown UI would be
+useful. Currently only band 0 is rendered as grayscale. See titiler's approach for reference
+(https://github.com/developmentseed/titiler).
 
 ### Color ramps
-Single-band COGs are rendered as grayscale (linear stretch from min to max). Scientific COGs often need specific color ramps (viridis, magma, terrain, etc.).
+Single-band COGs are rendered as grayscale (linear stretch from min to max). Scientific COGs
+often need specific color ramps (viridis, magma, terrain, etc.). titiler maintains a
+comprehensive list of colormaps that could be referenced.
 
 ### NoData handling for default pipeline
 The default pipeline doesn't handle NoData for Palette COGs -- NoData pixels render with whatever palette color they map to instead of being transparent.

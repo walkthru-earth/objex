@@ -94,7 +94,13 @@ function patchMetadataBounds(metadata: any) {
 		metadata.projectTo3857 = (point: [number, number]) => {
 			const r = origTo3857(point);
 			if (Number.isFinite(r[0]) && Number.isFinite(r[1])) return r;
-			return [0, 0];
+			// Sign-based edge fallback: map out-of-domain points to the
+			// nearest edge of EPSG:3857 instead of the origin, reducing
+			// adaptive mesh distortion for edge tiles.
+			return [
+				point[0] >= 0 ? 20037508.34 : -20037508.34,
+				point[1] >= 0 ? 20037508.34 : -20037508.34
+			];
 		};
 	}
 
@@ -116,6 +122,12 @@ function patchMetadataBounds(metadata: any) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let capturedV2Geotiff: any = null;
+// v3 geotiff fallback — used when _origParse throws before onGeoTIFFLoad
+// runs (e.g. parseCOGTileMatrixSet fails), leaving capturedV2Geotiff null.
+// parseCOGTileMatrixSet works with v3 geotiff objects (it only calls
+// getImage, getImageCount, getBoundingBox, getGeoKeys, getTileWidth, etc.)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let currentV3Tiff: any = null;
 
 // Guard against HMR re-patching: always reference the true original
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,63 +140,87 @@ COGLayer.prototype._parseGeoTIFF = async function (this: any) {
 	try {
 		await _origParse.call(this);
 	} catch (err) {
-		if (this.props.getTileData && this.props.renderTile && capturedV2Geotiff) {
-			// inferRenderPipeline threw but we have a custom pipeline.
-			// Reconstruct the state that _parseGeoTIFF would have set.
-			// All images/metadata are cached in the v2 GeoTIFF so this is cheap.
-			const geotiff = capturedV2Geotiff;
-			const gkParser = this.props.geoKeysParser;
-			const metadata = await parseCOGTileMatrixSet(geotiff, gkParser);
-			patchMetadataBounds(metadata);
-			const image = await geotiff.getImage();
-			const imageCount = await geotiff.getImageCount();
-			let images: unknown[] = [];
-			for (let i = 0; i < imageCount; i++) {
-				images.push(await geotiff.getImage(i));
-			}
+		// Use v2 geotiff from onGeoTIFFLoad, or fall back to v3 geotiff.
+		// _origParse can throw BEFORE onGeoTIFFLoad runs (e.g. if
+		// parseCOGTileMatrixSet fails for the CRS), leaving capturedV2Geotiff null.
+		const geotiff = capturedV2Geotiff || currentV3Tiff;
+		if (this.props.getTileData && this.props.renderTile && geotiff) {
+			try {
+				const gkParser = this.props.geoKeysParser;
+				const metadata = await parseCOGTileMatrixSet(geotiff, gkParser);
+				patchMetadataBounds(metadata);
+				const image = await geotiff.getImage();
+				const imageCount = await geotiff.getImageCount();
+				let images: unknown[] = [];
+				for (let i = 0; i < imageCount; i++) {
+					images.push(await geotiff.getImage(i));
+				}
 
-			// Skip overviews smaller than tile size — their tile bounds span
-			// most of the globe and produce NaN when projected to Web Mercator.
-			// tileMatrices[0]=coarsest, images[0]=finest (reverse mapping)
-			let firstValidZ = 0;
-			for (let z = 0; z < metadata.tileMatrices.length; z++) {
-				const img = images[images.length - 1 - z] as { getWidth(): number; getHeight(): number };
-				const tm = metadata.tileMatrices[z];
-				if (img.getWidth() >= tm.tileWidth && img.getHeight() >= tm.tileHeight) {
-					firstValidZ = z;
-					break;
+				// Skip overviews smaller than tile size — their tile bounds span
+				// most of the globe and produce NaN when projected to Web Mercator.
+				let firstValidZ = 0;
+				for (let z = 0; z < metadata.tileMatrices.length; z++) {
+					const img = images[images.length - 1 - z] as {
+						getWidth(): number;
+						getHeight(): number;
+					};
+					const tm = metadata.tileMatrices[z];
+					if (img.getWidth() >= tm.tileWidth && img.getHeight() >= tm.tileHeight) {
+						firstValidZ = z;
+						break;
+					}
+				}
+				if (firstValidZ > 0) {
+					metadata.tileMatrices = metadata.tileMatrices.slice(firstValidZ);
+					images = images.slice(0, images.length - firstValidZ);
+				}
+
+				// Cap zoom levels — decompression runs synchronously on the main
+				// thread (WASM). Too many fine levels overwhelms the browser.
+				const MAX_TILE_LEVELS = 12;
+				if (metadata.tileMatrices.length > MAX_TILE_LEVELS) {
+					metadata.tileMatrices = metadata.tileMatrices.slice(0, MAX_TILE_LEVELS);
+					images = images.slice(images.length - MAX_TILE_LEVELS);
+				}
+
+				const sourceProjection = await gkParser(image.getGeoKeys());
+				if (!sourceProjection) throw new Error('Could not determine source projection');
+
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const converter = proj4Lib(sourceProjection.def, 'EPSG:4326') as any;
+				const forwardReproject = (x: number, y: number) => {
+					const r = converter.forward([x, y], false);
+					const lon = Number.isFinite(r[0])
+						? Math.max(-180, Math.min(180, r[0]))
+						: x >= 0
+							? 180
+							: -180;
+					const lat = Number.isFinite(r[1])
+						? Math.max(-85.051129, Math.min(85.051129, r[1]))
+						: y >= 0
+							? 85.051129
+							: -85.051129;
+					return [lon, lat];
+				};
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const inverseReproject = (x: number, y: number) => converter.inverse([x, y], false);
+
+				this.setState({
+					metadata,
+					forwardReproject,
+					inverseReproject,
+					images,
+					defaultGetTileData: null,
+					defaultRenderTile: null
+				});
+			} catch (reconstructErr) {
+				// Reconstruction failed — show the reconstruction error
+				if (this.props.onError) {
+					this.props.onError(
+						reconstructErr instanceof Error ? reconstructErr : new Error(String(reconstructErr))
+					);
 				}
 			}
-			if (firstValidZ > 0) {
-				metadata.tileMatrices = metadata.tileMatrices.slice(firstValidZ);
-				images = images.slice(0, images.length - firstValidZ);
-			}
-
-			const sourceProjection = await gkParser(image.getGeoKeys());
-			if (!sourceProjection) throw new Error('Could not determine source projection');
-
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const converter = proj4Lib(sourceProjection.def, 'EPSG:4326') as any;
-			// Clamp to valid Web Mercator range — edge tiles in projections like
-			// Mollweide can extend beyond the valid domain producing NaN, and
-			// global EPSG:4326 rasters can reach ±90° which is the Mercator singularity.
-			const forwardReproject = (x: number, y: number) => {
-				const r = converter.forward([x, y], false);
-				const lon = Number.isFinite(r[0]) ? Math.max(-180, Math.min(180, r[0])) : 0;
-				const lat = Number.isFinite(r[1]) ? Math.max(-85.051129, Math.min(85.051129, r[1])) : 0;
-				return [lon, lat];
-			};
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const inverseReproject = (x: number, y: number) => converter.inverse([x, y], false);
-
-			this.setState({
-				metadata,
-				forwardReproject,
-				inverseReproject,
-				images,
-				defaultGetTileData: null,
-				defaultRenderTile: null
-			});
 		} else if (this.props.onError) {
 			this.props.onError(err instanceof Error ? err : new Error(String(err)));
 		}
@@ -224,6 +260,8 @@ $effect(() => {
 		error = null;
 		cogInfo = null;
 		bounds = undefined;
+		capturedV2Geotiff = null;
+		currentV3Tiff = null;
 	});
 });
 
@@ -238,6 +276,7 @@ async function onMapReady(map: maplibregl.Map) {
 
 		// Pre-flight: read first IFD with geotiff@3 (single small range request)
 		const tiff = await fromUrl(url, {}, signal);
+		currentV3Tiff = tiff; // expose to monkey-patch as fallback
 		const firstImage = await tiff.getImage();
 		if (signal.aborted) return;
 
@@ -258,6 +297,54 @@ async function onMapReady(map: maplibregl.Map) {
 		// Data type label for info panel
 		const dataType = `${SF_LABELS[sfVal] ?? `sf${sfVal}`}${bpsVal ?? ''}`;
 
+		// Compute geographic bounds with edge sampling — the library's
+		// getGeographicBounds uses only 4 corners, which is inaccurate for
+		// projections where edges curve (UTM at high latitudes, Mollweide,
+		// sinusoidal). Sampling edge midpoints captures the true extent.
+		let preFlightBounds: { west: number; south: number; east: number; north: number } | null = null;
+		try {
+			const geoKeys = firstImage.getGeoKeys() as Record<string, unknown> | null;
+			const projInfo = geoKeys ? await geoKeysParser(geoKeys) : null;
+			if (projInfo) {
+				const [x0, y0, x1, y1] = firstImage.getBoundingBox();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const conv = proj4Lib(projInfo.def, 'EPSG:4326') as any;
+				const N = 4; // samples per edge (including endpoints = 5 points)
+				const pts: [number, number][] = [];
+				for (let i = 0; i <= N; i++) {
+					const t = i / N;
+					pts.push([x0 + t * (x1 - x0), y0]); // bottom edge
+					pts.push([x0 + t * (x1 - x0), y1]); // top edge
+					pts.push([x0, y0 + t * (y1 - y0)]); // left edge
+					pts.push([x1, y0 + t * (y1 - y0)]); // right edge
+				}
+				let w = 180,
+					s = 90,
+					e = -180,
+					n = -90;
+				for (const [px, py] of pts) {
+					const r = conv.forward([px, py], false);
+					if (
+						Number.isFinite(r[0]) &&
+						Number.isFinite(r[1]) &&
+						Math.abs(r[0]) <= 180 &&
+						Math.abs(r[1]) <= 90
+					) {
+						w = Math.min(w, r[0]);
+						e = Math.max(e, r[0]);
+						s = Math.min(s, r[1]);
+						n = Math.max(n, r[1]);
+					}
+				}
+				if (w < e && s < n) {
+					preFlightBounds = clampBounds({ west: w, south: s, east: e, north: n });
+				}
+			}
+		} catch {
+			/* fall back to library bounds */
+		}
+		if (signal.aborted) return;
+
 		// Shared onGeoTIFFLoad callback — populates info panel and fits bounds.
 		// Also captures the library's internal v2 GeoTIFF for the monkey-patch.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -271,7 +358,7 @@ async function onMapReady(map: maplibregl.Map) {
 			}
 		) => {
 			capturedV2Geotiff = v2tiff;
-			const clamped = clampBounds(geographicBounds);
+			const clamped = preFlightBounds || clampBounds(geographicBounds);
 			cogInfo = {
 				width: firstImage.getWidth(),
 				height: firstImage.getHeight(),
@@ -285,7 +372,7 @@ async function onMapReady(map: maplibregl.Map) {
 					[clamped.west, clamped.south],
 					[clamped.east, clamped.north]
 				],
-				{ padding: 40, maxZoom: 18, animate: false }
+				{ padding: 40, maxZoom: 18, speed: 1.2, maxDuration: 2000 }
 			);
 			loading = false;
 		};
@@ -451,6 +538,14 @@ async function buildCustomCogLayer(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		getTileData: async (image: any, options: any) => {
 			const { window: win, signal: tileSig } = options;
+
+			// Yield to event loop before each tile decompression.
+			// ZSTD/LZW decode via geotiff is synchronous WASM on the main
+			// thread. Without yielding, back-to-back tile decodes block the
+			// UI (no paint, no input handling). A zero-delay setTimeout lets
+			// the browser process events between tiles.
+			await new Promise((r) => setTimeout(r, 0));
+			if (tileSig?.aborted) return null;
 
 			// Lazily find/cache the matching v3 image by dimensions
 			const key = `${image.getWidth()}x${image.getHeight()}`;
