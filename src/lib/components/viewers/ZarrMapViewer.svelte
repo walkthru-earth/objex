@@ -215,6 +215,8 @@ onDestroy(() => {
 	} catch {
 		// map may already be destroyed
 	}
+	zarrLayer = null;
+	mapRef = null;
 });
 </script>
 

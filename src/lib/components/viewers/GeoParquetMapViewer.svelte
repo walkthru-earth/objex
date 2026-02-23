@@ -1,5 +1,6 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
+import { onDestroy } from 'svelte';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
@@ -29,12 +30,25 @@ let geoArrowState: {
 	modules: Record<string, any>;
 	geoArrow: GeoArrowResult;
 } | null = null;
+let overlayRef: any = null;
+let mapRef: maplibregl.Map | null = null;
 
 const MAP_FEATURE_LIMIT = 100_000;
 
 $effect(() => {
 	if (!tab || schema.length === 0) return;
 	loadGeoData();
+});
+
+onDestroy(() => {
+	if (overlayRef && mapRef) {
+		try {
+			mapRef.removeControl(overlayRef);
+		} catch { /* already removed */ }
+	}
+	overlayRef = null;
+	mapRef = null;
+	geoArrowState = null;
 });
 
 async function loadGeoData() {
@@ -84,6 +98,7 @@ async function fetchMapData(): Promise<MapQueryResult> {
 
 function onMapReady(map: maplibregl.Map) {
 	if (!geoArrowState) return;
+	mapRef = map;
 
 	const overlay = createGeoArrowOverlay(geoArrowState.modules, {
 		layerId: 'geoarrow-data',
@@ -93,6 +108,7 @@ function onMapReady(map: maplibregl.Map) {
 			showAttributes = true;
 		}
 	});
+	overlayRef = overlay;
 
 	map.addControl(overlay as any);
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Entry } from '@zip.js/zip.js';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
@@ -35,6 +35,15 @@ $effect(() => {
 	untrack(() => {
 		loadArchive();
 	});
+});
+
+onDestroy(() => {
+	if (previewUrl) {
+		URL.revokeObjectURL(previewUrl);
+		previewUrl = null;
+	}
+	entries = [];
+	tree = [];
 });
 
 async function loadArchive() {
@@ -83,7 +92,10 @@ async function selectNode(node: FileTreeNode) {
 
 	selectedNode = node;
 	previewContent = null;
-	previewUrl = null;
+	if (previewUrl) {
+		URL.revokeObjectURL(previewUrl);
+		previewUrl = null;
+	}
 	extracting = true;
 
 	try {

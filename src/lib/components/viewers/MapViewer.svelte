@@ -1,5 +1,6 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
+import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
@@ -18,6 +19,10 @@ let bounds = $state<[number, number, number, number] | undefined>();
 $effect(() => {
 	if (!tab) return;
 	loadGeoJson();
+});
+
+onDestroy(() => {
+	geojsonData = null;
 });
 
 async function loadGeoJson() {

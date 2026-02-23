@@ -1,7 +1,7 @@
 <script lang="ts">
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import type maplibregl from 'maplibre-gl';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadDeckModules } from '$lib/utils/deck.js';
@@ -26,7 +26,9 @@ let bounds = $state<[number, number, number, number] | undefined>();
 
 let deckModules: { MapboxOverlay: any; GeoJsonLayer: any } | null = null;
 let overlay: any = null;
+let mapRef: maplibregl.Map | null = null;
 let features: GeoJSON.Feature[] = [];
+let abortController: AbortController | null = null;
 
 // Header metadata from FlatGeobuf
 let headerInfo = $state<{
@@ -39,6 +41,24 @@ let headerInfo = $state<{
 	hasIndex: boolean;
 } | null>(null);
 
+/** Abort in-flight fetch + streaming and release resources. */
+function cleanup() {
+	if (abortController) {
+		abortController.abort();
+		abortController = null;
+	}
+	if (overlay && mapRef) {
+		try {
+			mapRef.removeControl(overlay);
+		} catch {
+			/* already removed */
+		}
+	}
+	overlay = null;
+	mapRef = null;
+	features = [];
+}
+
 $effect(() => {
 	if (!tab) return;
 	const _tabId = tab.id;
@@ -46,6 +66,8 @@ $effect(() => {
 		loadFlatGeobuf();
 	});
 });
+
+onDestroy(cleanup);
 
 const GEOM_TYPE_NAMES: Record<number, string> = {
 	0: 'Unknown',
@@ -59,6 +81,9 @@ const GEOM_TYPE_NAMES: Record<number, string> = {
 };
 
 async function loadFlatGeobuf() {
+	// Abort any previous in-flight stream before resetting state
+	cleanup();
+
 	loading = true;
 	streaming = false;
 	error = null;
@@ -67,7 +92,6 @@ async function loadFlatGeobuf() {
 	totalFeatures = null;
 	headerInfo = null;
 	bounds = undefined;
-	overlay = null;
 
 	try {
 		deckModules = await loadDeckModules();
@@ -76,6 +100,8 @@ async function loadFlatGeobuf() {
 		streaming = true;
 		await streamFeatures();
 	} catch (err) {
+		// Silently ignore cancellation (tab closed / tab changed)
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	} finally {
@@ -84,6 +110,9 @@ async function loadFlatGeobuf() {
 }
 
 async function streamFeatures() {
+	const ac = new AbortController();
+	abortController = ac;
+
 	const url = buildHttpsUrl(tab);
 
 	let minLng = Infinity,
@@ -91,7 +120,7 @@ async function streamFeatures() {
 		maxLng = -Infinity,
 		maxLat = -Infinity;
 
-	const response = await fetch(url);
+	const response = await fetch(url, { signal: ac.signal });
 	if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 	if (!response.body) throw new Error('No response body');
 
@@ -122,6 +151,8 @@ async function streamFeatures() {
 	let batchCount = 0;
 
 	for await (const feature of iter) {
+		if (ac.signal.aborted) return;
+
 		features.push(feature as GeoJSON.Feature);
 		batchCount++;
 
@@ -129,10 +160,18 @@ async function streamFeatures() {
 			featureCount = features.length;
 			updateLayer();
 			batchCount = 0;
+			// Yield to the macrotask queue so:
+			// 1. The map's `load` event can fire (creates the overlay)
+			// 2. deck.gl gets an animation frame to render the current batch
+			// 3. The browser can paint the feature-count badge
+			await new Promise((r) => setTimeout(r, 0));
+			if (ac.signal.aborted) return;
 		}
 
 		if (features.length >= FEATURE_LIMIT) break;
 	}
+
+	if (ac.signal.aborted) return;
 
 	if (features.length === 0) {
 		error = 'No features found in FlatGeobuf file';
@@ -174,7 +213,7 @@ function updateLayer() {
 		layers: [
 			new GeoJsonLayer({
 				id: 'flatgeobuf-data',
-				data: { type: 'FeatureCollection', features },
+				data: { type: 'FeatureCollection', features: [...features] },
 				pickable: true,
 				stroked: true,
 				filled: true,
@@ -197,10 +236,13 @@ function updateLayer() {
 			})
 		]
 	});
+	// Explicitly tell MapLibre to composite the deck.gl canvas on the next frame
+	mapRef?.triggerRepaint();
 }
 
 function onMapReady(map: maplibregl.Map) {
 	if (!deckModules) return;
+	mapRef = map;
 
 	const { MapboxOverlay } = deckModules;
 	overlay = new MapboxOverlay({
@@ -211,6 +253,10 @@ function onMapReady(map: maplibregl.Map) {
 
 	// If features already streamed before map was ready, render them
 	if (features.length > 0) updateLayer();
+
+	// If bounds arrived from the header before the map loaded,
+	// MapContainer's load handler may have missed them — apply now
+	if (bounds) map.fitBounds(bounds, { padding: 40 });
 }
 </script>
 
