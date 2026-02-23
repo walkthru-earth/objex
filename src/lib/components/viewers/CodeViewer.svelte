@@ -179,9 +179,9 @@ async function copyCode() {
 					{t('code.maplibreStyle')}
 				</Badge>
 				<Button
+					variant={viewMode === 'maputnik' ? 'default' : 'outline'}
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'maputnik' ? 'text-blue-500' : ''}"
-					variant="ghost"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'maputnik' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 					onclick={() => setViewMode('maputnik')}
 				>
 					{viewMode === 'maputnik' ? t('code.code') : t('code.editStyle')}
@@ -195,9 +195,9 @@ async function copyCode() {
 					{t(stacBadgeKey[jsonKind] ?? 'code.stacItem')}
 				</Badge>
 				<Button
+					variant={viewMode === 'stac-browser' ? 'default' : 'outline'}
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'stac-browser' ? 'text-blue-500' : ''}"
-					variant="ghost"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac-browser' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 					onclick={() => setViewMode('stac-browser')}
 				>
 					{viewMode === 'stac-browser' ? t('code.code') : t('code.browseStac')}
@@ -207,9 +207,9 @@ async function copyCode() {
 					{t('code.keplerGl')}
 				</Badge>
 				<Button
+					variant={viewMode === 'kepler' ? 'default' : 'outline'}
 					size="sm"
-					class="h-7 px-2 text-xs {viewMode === 'kepler' ? 'text-blue-500' : ''}"
-					variant="ghost"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'kepler' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 					onclick={() => setViewMode('kepler')}
 				>
 					{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}

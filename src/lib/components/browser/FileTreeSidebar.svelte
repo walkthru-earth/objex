@@ -92,7 +92,8 @@ function openFile(entry: FileEntry) {
 		path: entry.path,
 		source: 'remote',
 		connectionId: connection.id,
-		extension: entry.extension
+		extension: entry.extension,
+		size: entry.size
 	});
 
 	// Update URL for shareable links

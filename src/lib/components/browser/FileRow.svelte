@@ -32,7 +32,8 @@ function handleClick() {
 				path: entry.path,
 				source: 'remote',
 				connectionId: browser.activeConnection.id,
-				extension: entry.extension
+				extension: entry.extension,
+				size: entry.size
 			});
 		}
 	}

@@ -152,23 +152,25 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating feature count badge -->
 		{#if featureCount > 0}
 			<div
-				class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+				class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				{featureCount.toLocaleString()} features{#if featureCount >= MAP_FEATURE_LIMIT}
 					<span class="text-amber-300">(limit)</span>{/if}
 			</div>
 		{/if}
 
-		<!-- Floating attributes toggle -->
+		<!-- Floating button group -->
 		{#if selectedFeature}
-			<button
-				class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showAttributes}
-				class:ring-primary={showAttributes}
-				onclick={() => (showAttributes = !showAttributes)}
-			>
-				{t('map.attributes')}
-			</button>
+			<div class="absolute right-2 top-2 z-10 flex gap-1">
+				<button
+					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class:ring-1={showAttributes}
+					class:ring-primary={showAttributes}
+					onclick={() => (showAttributes = !showAttributes)}
+				>
+					{t('map.attributes')}
+				</button>
+			</div>
 		{/if}
 
 		<AttributeTable

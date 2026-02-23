@@ -66,6 +66,10 @@ function createTabsStore() {
 			if (tabs.find((t) => t.id === id)) {
 				activeTabId = id;
 			}
+		},
+
+		update(id: string, partial: Partial<Omit<Tab, 'id'>>) {
+			tabs = tabs.map((t) => (t.id === id ? { ...t, ...partial } : t));
 		}
 	};
 }

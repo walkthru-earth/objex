@@ -172,14 +172,16 @@ function onMapReady(map: maplibregl.Map) {
 		</div>
 
 		{#if selectedFeature}
-			<button
-				class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showAttributes}
-				class:ring-primary={showAttributes}
-				onclick={() => (showAttributes = !showAttributes)}
-			>
-				{t('map.attributes')}
-			</button>
+			<div class="absolute right-2 top-2 z-10 flex gap-1">
+				<button
+					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class:ring-1={showAttributes}
+					class:ring-primary={showAttributes}
+					onclick={() => (showAttributes = !showAttributes)}
+				>
+					{t('map.attributes')}
+				</button>
+			</div>
 		{/if}
 
 		<AttributeTable

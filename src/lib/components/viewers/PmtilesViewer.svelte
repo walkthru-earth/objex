@@ -124,7 +124,7 @@ function onMapReady(map: maplibregl.Map) {
 		<!-- Floating metadata badge -->
 		{#if metadata}
 			<div
-				class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+				class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				{metadata.formatLabel} · z{metadata.minZoom}-{metadata.maxZoom}
 				{#if metadata.layers.length > 0}
@@ -134,31 +134,32 @@ function onMapReady(map: maplibregl.Map) {
 			</div>
 		{/if}
 
-		<!-- Floating info toggle -->
-		<button
-			class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-			class:ring-1={showInfo}
-			class:ring-primary={showInfo}
-			onclick={() => (showInfo = !showInfo)}
-		>
-			{t('map.info')}
-		</button>
-
-		<!-- Floating attributes toggle -->
-		{#if selectedFeature}
+		<!-- Floating button group -->
+		<div class="absolute right-2 top-2 z-10 flex gap-1">
 			<button
-				class="absolute right-12 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showAttributes}
-				class:ring-primary={showAttributes}
-				onclick={() => (showAttributes = !showAttributes)}
+				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class:ring-1={showInfo}
+				class:ring-primary={showInfo}
+				onclick={() => (showInfo = !showInfo)}
 			>
-				{t('map.attributes')}
+				{t('map.info')}
 			</button>
-		{/if}
+
+			{#if selectedFeature}
+				<button
+					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class:ring-1={showAttributes}
+					class:ring-primary={showAttributes}
+					onclick={() => (showAttributes = !showAttributes)}
+				>
+					{t('map.attributes')}
+				</button>
+			{/if}
+		</div>
 
 		{#if showInfo && metadata}
 			<div
-				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.archiveInfo')}</h3>
 				<dl class="space-y-1.5">

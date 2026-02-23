@@ -58,13 +58,21 @@ async function handleAutoDetection() {
 		if (ext) {
 			const info = getFileTypeInfo(ext);
 			if (info.viewer !== 'raw') {
+				const tabId = `url:${rawUrl}`;
 				tabs.open({
-					id: `url:${rawUrl}`,
+					id: tabId,
 					name: fileName,
 					path: rawUrl,
 					source: 'url',
 					extension: ext
 				});
+				// Fire-and-forget: fetch file size via HEAD request
+				fetch(rawUrl, { method: 'HEAD' })
+					.then((res) => {
+						const cl = res.headers.get('content-length');
+						if (cl) tabs.update(tabId, { size: Number(cl) });
+					})
+					.catch(() => {});
 				return;
 			}
 		}
@@ -94,14 +102,22 @@ async function handleAutoDetection() {
 				browser.browse(conn, parentPrefix || undefined);
 				const fileName = prefixParam.split('/').pop() || prefixParam;
 				const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+				const tabId = `${conn.id}:${prefixParam}`;
 				tabs.open({
-					id: `${conn.id}:${prefixParam}`,
+					id: tabId,
 					name: fileName,
 					path: prefixParam,
 					source: 'remote',
 					connectionId: conn.id,
 					extension: ext
 				});
+				// Fire-and-forget: fetch file size via HEAD request
+				fetch(url.searchParams.get('url')!, { method: 'HEAD' })
+					.then((res) => {
+						const cl = res.headers.get('content-length');
+						if (cl) tabs.update(tabId, { size: Number(cl) });
+					})
+					.catch(() => {});
 			} else if (prefixParam) {
 				// It's a directory prefix
 				browser.browse(conn, prefixParam);

@@ -270,7 +270,7 @@ onDestroy(() => {
 			<MapContainer {onMapReady} bounds={[-130, 20, -60, 55]} />
 			{#if loading}
 				<div
-					class="pointer-events-none absolute left-2 top-2 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+					class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 				>
 					{t('map.loadingZarr')}
 				</div>

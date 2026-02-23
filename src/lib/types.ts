@@ -41,6 +41,7 @@ export interface Tab {
 	source: 'remote' | 'url';
 	connectionId?: string;
 	extension: string;
+	size?: number;
 }
 
 export interface WriteResult {

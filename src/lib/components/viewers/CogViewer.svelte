@@ -620,7 +620,7 @@ onDestroy(() => {
 		<MapContainer {onMapReady} {bounds} />
 	</div>
 
-	<div class="pointer-events-none absolute left-2 top-2 flex flex-col gap-1.5">
+	<div class="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
 		{#if loading}
 			<div
 				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
@@ -649,18 +649,20 @@ onDestroy(() => {
 
 	{#if cogInfo}
 
-		<button
-			class="absolute right-2 top-20 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-			class:ring-1={showInfo}
-			class:ring-primary={showInfo}
-			onclick={() => (showInfo = !showInfo)}
-		>
-			{t('map.info')}
-		</button>
+		<div class="absolute right-2 top-2 z-10 flex gap-1">
+			<button
+				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class:ring-1={showInfo}
+				class:ring-primary={showInfo}
+				onclick={() => (showInfo = !showInfo)}
+			>
+				{t('map.info')}
+			</button>
+		</div>
 
 		{#if showInfo}
 			<div
-				class="absolute right-2 top-28 max-h-[80vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.cogInfo')}</h3>
 				<dl class="space-y-1.5">

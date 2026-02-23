@@ -3,16 +3,23 @@ import CloudIcon from '@lucide/svelte/icons/cloud';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import FolderIcon from '@lucide/svelte/icons/folder';
 import GlobeIcon from '@lucide/svelte/icons/globe';
+import InfoIcon from '@lucide/svelte/icons/info';
 import { Separator } from '$lib/components/ui/separator/index.js';
+import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { files } from '$lib/stores/files.svelte.js';
+import { tabs } from '$lib/stores/tabs.svelte.js';
+import { formatFileSize } from '$lib/utils/format.js';
 import SafeLockToggle from './SafeLockToggle.svelte';
 
 let isBrowsingRemote = $derived(browser.activeConnection !== null);
 
 let displayPath = $derived(isBrowsingRemote ? browser.currentPrefix : files.currentPath);
 let displayCount = $derived(isBrowsingRemote ? browser.entries.length : files.entries.length);
+
+let activeTab = $derived(tabs.active);
+let activeFileInfo = $derived(activeTab ? getFileTypeInfo(activeTab.extension) : null);
 </script>
 
 <div
@@ -39,6 +46,17 @@ let displayCount = $derived(isBrowsingRemote ? browser.entries.length : files.en
 	{#if displayCount > 0}
 		<FileTextIcon class="size-3 shrink-0" />
 		<span>{displayCount} {displayCount === 1 ? t('statusBar.item') : t('statusBar.items')}</span>
+		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
+	{/if}
+
+	<!-- Active file info -->
+	{#if activeTab && activeFileInfo}
+		<InfoIcon class="size-3 shrink-0" />
+		<span>{activeFileInfo.label}</span>
+		{#if activeTab.size}
+			<span class="text-muted-foreground/50">·</span>
+			<span>{formatFileSize(activeTab.size)}</span>
+		{/if}
 		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
 	{/if}
 

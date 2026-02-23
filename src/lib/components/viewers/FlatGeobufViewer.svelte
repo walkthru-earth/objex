@@ -475,7 +475,7 @@ function onMapReady(map: maplibregl.Map) {
 		</div>
 
 		<!-- Floating feature count badge + load-all button -->
-		<div class="absolute left-2 top-2 flex flex-col gap-1">
+		<div class="absolute left-2 top-2 z-10 flex flex-col gap-1">
 			<div
 				class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 			>
@@ -502,7 +502,7 @@ function onMapReady(map: maplibregl.Map) {
 		</div>
 
 		<!-- Floating toggle buttons -->
-		<div class="absolute right-2 top-2 flex gap-1">
+		<div class="absolute right-2 top-2 z-10 flex gap-1">
 			{#if headerInfo}
 				<button
 					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
@@ -527,7 +527,7 @@ function onMapReady(map: maplibregl.Map) {
 
 		{#if showInfo && headerInfo}
 			<div
-				class="absolute right-2 top-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
 			>
 				<h3 class="mb-2 font-medium">{t('map.flatgeobufInfo')}</h3>
 				<dl class="space-y-1.5">

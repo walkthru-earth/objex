@@ -20,7 +20,7 @@ function formatValue(value: any): string {
 
 {#if visible && feature}
 	<div
-		class="absolute bottom-2 end-2 top-28 z-10 flex w-64 flex-col overflow-hidden rounded bg-card/95 text-card-foreground shadow-lg backdrop-blur-sm sm:w-72"
+		class="absolute bottom-2 end-2 top-10 z-10 flex w-64 flex-col overflow-hidden rounded bg-card/95 text-card-foreground shadow-lg backdrop-blur-sm sm:w-72"
 	>
 		<div
 			class="flex items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-zinc-800"
