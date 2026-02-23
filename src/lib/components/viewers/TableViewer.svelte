@@ -85,15 +85,23 @@ function buildDefaultSql(offset = 0): string {
 			upper.includes('LINESTRING') ||
 			upper.includes('POLYGON');
 		const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
-		let geomExpr = isSpatialType
-			? quoted
-			: isBinaryType
-				? `ST_GeomFromWKB(${quoted})`
-				: `ST_GeomFromGeoJSON(${quoted})`;
-		if (sourceCrs) {
-			geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+
+		let wkbExpr: string;
+		if (isBinaryType && !sourceCrs) {
+			// Already WKB binary, no transform needed — just alias
+			wkbExpr = `${quoted} AS __wkb`;
+		} else {
+			let geomExpr = isSpatialType
+				? quoted
+				: isBinaryType
+					? `ST_GeomFromWKB(${quoted})`
+					: `ST_GeomFromGeoJSON(${quoted})`;
+			if (sourceCrs) {
+				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+			}
+			wkbExpr = `ST_AsWKB(${geomExpr}) AS __wkb`;
 		}
-		sql = `SELECT * EXCLUDE(${quoted}), ST_AsWKB(${geomExpr}) AS __wkb FROM ${source}`;
+		sql = `SELECT * EXCLUDE(${quoted}), ${wkbExpr} FROM ${source}`;
 	} else {
 		sql = `SELECT * FROM ${source}`;
 	}

@@ -254,7 +254,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			// Build geometry expression based on column type:
 			// - Native spatial types (GEOMETRY, WKB_BLOB, POINT, etc.) → use directly
-			// - BLOB/BINARY → WKB binary, use ST_GeomFromWKB
+			// - BLOB/BINARY → WKB binary, use ST_GeomFromWKB for type detection
 			// - Everything else (VARCHAR, JSON, STRUCT, ...) → GeoJSON text
 			const quoted = `"${geomCol}"`;
 			const upper = geomColType.toUpperCase();
@@ -265,6 +265,8 @@ export class WasmQueryEngine implements QueryEngine {
 				upper.includes('LINESTRING') ||
 				upper.includes('POLYGON');
 			const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
+
+			// geomExpr: GEOMETRY value needed for ST_GeometryType (and ST_Transform)
 			let geomExpr = isSpatialType
 				? quoted
 				: isBinaryType
@@ -276,8 +278,11 @@ export class WasmQueryEngine implements QueryEngine {
 				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
 			}
 
-			// Wrap query: ST_AsWKB for binary geometry, ST_GeometryType for type detection
-			const mapSql = `SELECT *, ST_AsWKB(${geomExpr}) AS __wkb,
+			// wkbExpr: skip WKB→GEOM→WKB round-trip when column is already WKB and no transform
+			const wkbExpr = isBinaryType && !sourceCrs ? quoted : `ST_AsWKB(${geomExpr})`;
+
+			// Wrap query: WKB for binary geometry, ST_GeometryType for type detection
+			const mapSql = `SELECT *, ${wkbExpr} AS __wkb,
 				ST_GeometryType(${geomExpr}) AS __geom_type
 				FROM (${sql}) __src`;
 			const result = await conn.query(mapSql);
