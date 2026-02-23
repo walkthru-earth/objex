@@ -256,19 +256,37 @@ $effect(() => {
 	untrack(() => {
 		abortController.abort();
 		abortController = new AbortController();
+		// Remove previous overlay from map before loading new COG
+		if (mapRef && overlayRef) {
+			try {
+				mapRef.removeControl(overlayRef);
+			} catch {
+				// map may already be destroyed
+			}
+		}
+		overlayRef = null;
 		loading = true;
 		error = null;
 		cogInfo = null;
 		bounds = undefined;
 		capturedV2Geotiff = null;
 		currentV3Tiff = null;
+		// Re-trigger loading if map is already initialized (tab switch).
+		// On first mount mapRef is null — onMapReady will handle it.
+		if (mapRef) {
+			loadCog(mapRef);
+		}
 	});
 });
 
 // ─── Map ready ──────────────────────────────────────────────────
 
-async function onMapReady(map: maplibregl.Map) {
+function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
+	loadCog(map);
+}
+
+async function loadCog(map: maplibregl.Map) {
 	const signal = abortController.signal;
 
 	try {
