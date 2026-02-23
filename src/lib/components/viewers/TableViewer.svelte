@@ -84,7 +84,12 @@ function buildDefaultSql(offset = 0): string {
 			upper.includes('POINT') ||
 			upper.includes('LINESTRING') ||
 			upper.includes('POLYGON');
-		let geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+		const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
+		let geomExpr = isSpatialType
+			? quoted
+			: isBinaryType
+				? `ST_GeomFromWKB(${quoted})`
+				: `ST_GeomFromGeoJSON(${quoted})`;
 		if (sourceCrs) {
 			geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
 		}

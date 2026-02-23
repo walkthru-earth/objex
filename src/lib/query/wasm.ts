@@ -252,9 +252,10 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
-			// Build geometry expression: only native spatial types (GEOMETRY, WKB_BLOB,
-			// POINT, LINESTRING, etc.) can be passed directly to ST_AsWKB.
-			// Everything else (VARCHAR, JSON, STRUCT, ...) needs ST_GeomFromGeoJSON.
+			// Build geometry expression based on column type:
+			// - Native spatial types (GEOMETRY, WKB_BLOB, POINT, etc.) → use directly
+			// - BLOB/BINARY → WKB binary, use ST_GeomFromWKB
+			// - Everything else (VARCHAR, JSON, STRUCT, ...) → GeoJSON text
 			const quoted = `"${geomCol}"`;
 			const upper = geomColType.toUpperCase();
 			const isSpatialType =
@@ -263,7 +264,12 @@ export class WasmQueryEngine implements QueryEngine {
 				upper.includes('POINT') ||
 				upper.includes('LINESTRING') ||
 				upper.includes('POLYGON');
-			let geomExpr = isSpatialType ? quoted : `ST_GeomFromGeoJSON(${quoted})`;
+			const isBinaryType = upper === 'BLOB' || upper.includes('BINARY') || upper === 'BYTEA';
+			let geomExpr = isSpatialType
+				? quoted
+				: isBinaryType
+					? `ST_GeomFromWKB(${quoted})`
+					: `ST_GeomFromGeoJSON(${quoted})`;
 
 			// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84
 			if (sourceCrs) {
