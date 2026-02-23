@@ -99,7 +99,7 @@ function onMapReady(map: maplibregl.Map) {
 		data: geojsonData
 	});
 
-	// Fill layer for polygons
+	// Fill layer for polygons (orange)
 	map.addLayer({
 		id: 'geojson-fill',
 		type: 'fill',
@@ -111,19 +111,31 @@ function onMapReady(map: maplibregl.Map) {
 		}
 	});
 
-	// Line layer for lines and polygon outlines
+	// Outline layer for polygons (orange)
 	map.addLayer({
-		id: 'geojson-line',
+		id: 'geojson-polygon-outline',
 		type: 'line',
 		source: 'geojson-source',
-		filter: ['any', ['==', '$type', 'LineString'], ['==', '$type', 'Polygon']],
+		filter: ['==', '$type', 'Polygon'],
 		paint: {
 			'line-color': '#e65100',
 			'line-width': 2.5
 		}
 	});
 
-	// Circle layer for points
+	// Line layer for linestrings (teal)
+	map.addLayer({
+		id: 'geojson-line',
+		type: 'line',
+		source: 'geojson-source',
+		filter: ['==', '$type', 'LineString'],
+		paint: {
+			'line-color': '#00838f',
+			'line-width': 2.5
+		}
+	});
+
+	// Circle layer for points (blue)
 	map.addLayer({
 		id: 'geojson-points',
 		type: 'circle',
@@ -131,14 +143,19 @@ function onMapReady(map: maplibregl.Map) {
 		filter: ['==', '$type', 'Point'],
 		paint: {
 			'circle-radius': 7,
-			'circle-color': '#e8793d',
+			'circle-color': '#4285f4',
 			'circle-stroke-width': 1.5,
 			'circle-stroke-color': '#fff'
 		}
 	});
 
 	// Click handler
-	for (const layerId of ['geojson-fill', 'geojson-line', 'geojson-points']) {
+	for (const layerId of [
+		'geojson-fill',
+		'geojson-polygon-outline',
+		'geojson-line',
+		'geojson-points'
+	]) {
 		map.on('click', layerId, (e: any) => {
 			if (e.features && e.features.length > 0) {
 				selectedFeature = { ...e.features[0].properties };

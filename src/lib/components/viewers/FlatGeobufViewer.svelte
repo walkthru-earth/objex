@@ -8,7 +8,7 @@ import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
-import { loadDeckModules } from '$lib/utils/deck.js';
+import { geojsonFillColor, geojsonLineColor, loadDeckModules } from '$lib/utils/deck.js';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -423,8 +423,8 @@ function updateLayer() {
 				stroked: true,
 				filled: true,
 				pointType: 'circle',
-				getFillColor: [232, 121, 61, 110],
-				getLineColor: [230, 81, 0, 220],
+				getFillColor: geojsonFillColor as any,
+				getLineColor: geojsonLineColor as any,
 				getPointRadius: 6,
 				getLineWidth: 2.5,
 				lineWidthMinPixels: 1.5,

@@ -7,6 +7,35 @@
 
 import type { GeoArrowResult } from './geoarrow.js';
 
+// ─── Geometry-type color palette ─────────────────────────────────────
+
+type RGBA = [number, number, number, number];
+
+/** Distinct fill/line colors per geometry type. */
+export const GEOMETRY_COLORS: Record<string, { fill: RGBA; line: RGBA }> = {
+	point: { fill: [66, 133, 244, 180], line: [25, 103, 210, 220] },
+	linestring: { fill: [0, 172, 193, 160], line: [0, 131, 143, 220] },
+	polygon: { fill: [232, 121, 61, 110], line: [230, 81, 0, 220] }
+};
+
+/** Lookup colors for a geometry type, falling back to polygon palette. */
+function colorsForType(geomType: string): { fill: RGBA; line: RGBA } {
+	const t = geomType.toLowerCase().replace('multi', '');
+	return GEOMETRY_COLORS[t] ?? GEOMETRY_COLORS.polygon;
+}
+
+/**
+ * GeoJSON accessor: return fill color based on feature geometry type.
+ * Used as deck.gl accessor function for getFillColor / getLineColor.
+ */
+export function geojsonFillColor(feature: any): RGBA {
+	return colorsForType(feature.geometry?.type ?? 'polygon').fill;
+}
+
+export function geojsonLineColor(feature: any): RGBA {
+	return colorsForType(feature.geometry?.type ?? 'polygon').line;
+}
+
 // ─── GeoJSON overlay (FlatGeobufViewer) ──────────────────────────────
 
 /** Lazy-load deck.gl modules (MapboxOverlay + GeoJsonLayer). */
@@ -21,27 +50,19 @@ export async function loadDeckModules() {
 export interface DeckOverlayOptions {
 	layerId: string;
 	data: GeoJSON.FeatureCollection;
-	fillColor?: [number, number, number, number];
-	lineColor?: [number, number, number, number];
 	onClick?: (feature: Record<string, any>) => void;
 }
 
 /**
  * Create a MapboxOverlay with a single GeoJsonLayer.
- * Returns the overlay instance ready to be added to a MapLibre map via `map.addControl()`.
+ * Colors are assigned per-feature based on geometry type.
  */
 export function createDeckOverlay(
 	modules: { MapboxOverlay: any; GeoJsonLayer: any },
 	options: DeckOverlayOptions
 ) {
 	const { MapboxOverlay, GeoJsonLayer } = modules;
-	const {
-		layerId,
-		data,
-		fillColor = [232, 121, 61, 110],
-		lineColor = [230, 81, 0, 220],
-		onClick
-	} = options;
+	const { layerId, data, onClick } = options;
 
 	return new MapboxOverlay({
 		interleaved: false,
@@ -53,8 +74,8 @@ export function createDeckOverlay(
 				stroked: true,
 				filled: true,
 				pointType: 'circle',
-				getFillColor: fillColor,
-				getLineColor: lineColor,
+				getFillColor: geojsonFillColor,
+				getLineColor: geojsonLineColor,
 				getPointRadius: 6,
 				getLineWidth: 2.5,
 				lineWidthMinPixels: 1.5,
@@ -86,8 +107,6 @@ export async function loadGeoArrowModules() {
 export interface GeoArrowOverlayOptions {
 	layerId: string;
 	geoArrowResults: GeoArrowResult[];
-	fillColor?: [number, number, number, number];
-	lineColor?: [number, number, number, number];
 	onClick?: (properties: Record<string, any>) => void;
 }
 
@@ -96,18 +115,17 @@ function createLayerForResult(
 	modules: Record<string, any>,
 	result: GeoArrowResult,
 	layerId: string,
-	fillColor: [number, number, number, number],
-	lineColor: [number, number, number, number],
 	onClick?: (properties: Record<string, any>) => void
 ): any {
 	const { GeoArrowScatterplotLayer, GeoArrowPathLayer, GeoArrowPolygonLayer } = modules;
 	const { table, geometryType } = result;
+	const { fill, line } = colorsForType(geometryType);
 
 	if (geometryType === 'point' || geometryType === 'multipoint') {
 		return new GeoArrowScatterplotLayer({
 			id: layerId,
 			data: table,
-			getFillColor: fillColor,
+			getFillColor: fill,
 			getRadius: 6,
 			radiusUnits: 'pixels',
 			radiusMinPixels: 4,
@@ -122,7 +140,7 @@ function createLayerForResult(
 		return new GeoArrowPathLayer({
 			id: layerId,
 			data: table,
-			getColor: lineColor,
+			getColor: line,
 			getWidth: 2.5,
 			widthUnits: 'pixels',
 			widthMinPixels: 1.5,
@@ -136,8 +154,8 @@ function createLayerForResult(
 		return new GeoArrowPolygonLayer({
 			id: layerId,
 			data: table,
-			getFillColor: fillColor,
-			getLineColor: lineColor,
+			getFillColor: fill,
+			getLineColor: line,
 			getLineWidth: 2,
 			lineWidthMinPixels: 1.5,
 			pickable: true,
@@ -158,23 +176,10 @@ export function createGeoArrowOverlay(
 	options: GeoArrowOverlayOptions
 ) {
 	const { MapboxOverlay } = modules;
-	const {
-		layerId,
-		geoArrowResults,
-		fillColor = [232, 121, 61, 110],
-		lineColor = [230, 81, 0, 220],
-		onClick
-	} = options;
+	const { layerId, geoArrowResults, onClick } = options;
 
 	const layers = geoArrowResults.map((result) =>
-		createLayerForResult(
-			modules,
-			result,
-			`${layerId}-${result.geometryType}`,
-			fillColor,
-			lineColor,
-			onClick
-		)
+		createLayerForResult(modules, result, `${layerId}-${result.geometryType}`, onClick)
 	);
 
 	return new MapboxOverlay({ interleaved: false, layers });
