@@ -1,4 +1,5 @@
 <script lang="ts">
+import CheckCircleIcon from '@lucide/svelte/icons/circle-check';
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import XCircleIcon from '@lucide/svelte/icons/x-circle';
 import { tableFromIPC } from 'apache-arrow';
@@ -47,6 +48,7 @@ let executionTimeMs = $state(0);
 
 // Progress stage for user feedback
 let loadStage = $state('');
+let loadDetails = $state<string[]>([]);
 
 // Load cancellation: incrementing ID so stale loads are ignored
 let loadGeneration = 0;
@@ -177,6 +179,7 @@ async function loadTable() {
 	sourceCrs = null;
 	mapData = null;
 	loadStage = t('table.preparingQuery');
+	loadDetails = [];
 
 	// Set SQL eagerly so editor shows the query while loading
 	const initialSql = buildDefaultSql(0);
@@ -198,18 +201,26 @@ async function loadTable() {
 			schema = await engine.getSchema(connId, fileUrl);
 			if (thisGen !== loadGeneration) return;
 			columns = schema.map((f) => f.name);
+			loadDetails = [...loadDetails, `${columns.length} columns`];
 
 			const detectedGeoCol = findGeoColumn(schema);
 			geoCol = detectedGeoCol;
 			if (detectedGeoCol) {
 				const geoField = schema.find((f) => f.name === detectedGeoCol);
 				geoColType = geoField?.type ?? 'GEOMETRY';
+				loadDetails = [...loadDetails, `Geometry: ${detectedGeoCol} (${geoColType})`];
 				// Detect CRS from GeoParquet metadata (non-WGS84 → needs ST_Transform)
 				sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
 				if (thisGen !== loadGeneration) return;
+				if (sourceCrs) {
+					loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+				}
 			}
 			hasGeo = detectedGeoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
+			if (isStac) {
+				loadDetails = [...loadDetails, 'STAC catalog detected'];
+			}
 		}
 
 		// Rebuild SQL now that we know the actual path resolution
@@ -483,8 +494,8 @@ function setStacView() {
 	/>
 
 	{#if viewMode === 'table'}
-		<!-- SQL Query Bar — table mode only -->
-		<div class="border-b border-zinc-200 px-4 py-1.5 dark:border-zinc-800">
+		<!-- SQL Query Bar — hidden during schema/CRS detection, shown once query starts running -->
+		<div class="border-b border-zinc-200 px-4 py-1.5 dark:border-zinc-800" class:hidden={loading && loadStage !== t('table.runningQuery')}>
 			<div class="flex items-center gap-2">
 				<div class="flex-1">
 					<CodeMirrorEditor
@@ -530,6 +541,16 @@ function setStacView() {
 				<div class="flex flex-1 flex-col items-center justify-center gap-3">
 					<Loader2Icon class="size-6 animate-spin text-primary" />
 					<p class="text-sm text-zinc-400">{loadStage || t('table.loading')}</p>
+					{#if loadDetails.length > 0}
+						<ul class="flex flex-col gap-1">
+							{#each loadDetails as detail}
+								<li class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+									<CheckCircleIcon class="size-3 text-green-500" />
+									{detail}
+								</li>
+							{/each}
+						</ul>
+					{/if}
 					<button
 						class="mt-1 flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
 						onclick={cancelLoad}
