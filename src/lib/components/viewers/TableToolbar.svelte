@@ -6,6 +6,7 @@ import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import InfoIcon from '@lucide/svelte/icons/info';
 import LinkIcon from '@lucide/svelte/icons/link';
 import MapIcon from '@lucide/svelte/icons/map';
 import TableIcon from '@lucide/svelte/icons/table';
@@ -34,15 +35,14 @@ let {
 	currentPage = 1,
 	totalPages = 1,
 	pageSize = 1000,
-	schemaVisible = false,
 	historyVisible = false,
 	hasGeo = false,
 	isStac = false,
-	viewMode = 'table' as 'table' | 'map' | 'stac',
+	viewMode = 'table' as 'table' | 'map' | 'stac' | 'info',
 	onPrevPage,
 	onNextPage,
 	onGoToPage,
-	onToggleSchema,
+	onToggleInfo,
 	onToggleHistory,
 	onToggleView,
 	onToggleStac,
@@ -55,15 +55,14 @@ let {
 	currentPage?: number;
 	totalPages?: number;
 	pageSize?: number;
-	schemaVisible?: boolean;
 	historyVisible?: boolean;
 	hasGeo?: boolean;
 	isStac?: boolean;
-	viewMode?: 'table' | 'map' | 'stac';
+	viewMode?: 'table' | 'map' | 'stac' | 'info';
 	onPrevPage: () => void;
 	onNextPage: () => void;
 	onGoToPage?: (page: number) => void;
-	onToggleSchema: () => void;
+	onToggleInfo?: () => void;
 	onToggleHistory?: () => void;
 	onToggleView?: () => void;
 	onToggleStac?: () => void;
@@ -134,6 +133,18 @@ function handleJumpKeydown(e: KeyboardEvent) {
 
 	<div class="ms-auto flex items-center gap-1 sm:gap-2">
 		<!-- ===== View mode buttons (all screen sizes) ===== -->
+		{#if onToggleInfo}
+			<Button
+				variant={viewMode === 'info' ? 'default' : 'outline'}
+				size="sm"
+				class="h-7 gap-1 px-2 text-xs {viewMode !== 'info' ? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900' : ''}"
+				onclick={onToggleInfo}
+			>
+				<InfoIcon class="size-3" />
+				<span class="hidden sm:inline">{t('toolbar.info')}</span>
+			</Button>
+		{/if}
+
 		{#if hasGeo && onToggleView}
 			<Button
 				variant={viewMode === 'map' ? 'default' : 'outline'}
@@ -141,7 +152,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 				class="h-7 gap-1 px-2 text-xs {viewMode !== 'map' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
 				onclick={onToggleView}
 			>
-				{#if viewMode === 'table' || viewMode === 'stac'}
+				{#if viewMode !== 'map'}
 					<MapIcon class="size-3" />
 					{t('toolbar.map')}
 				{:else}
@@ -212,18 +223,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 				</Button>
 			{/if}
 
-			{#if viewMode === 'table'}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="h-7 px-2 text-xs {schemaVisible ? 'text-blue-500' : ''}"
-					onclick={onToggleSchema}
-				>
-					{t('toolbar.schema')}
-				</Button>
-			{/if}
-
-			<!-- Page size selector — hidden in map mode -->
+				<!-- Page size selector — hidden in map mode -->
 			{#if onPageSizeChange && viewMode === 'table'}
 				<Separator orientation="vertical" class="!h-4" />
 				<select
@@ -353,13 +353,6 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					{#if onToggleHistory && viewMode === 'table'}
 						<DropdownMenu.Item onclick={onToggleHistory}>
 							{historyVisible ? t('toolbar.hideHistory') : t('toolbar.showHistory')}
-						</DropdownMenu.Item>
-					{/if}
-
-					<!-- Schema toggle — table mode only -->
-					{#if viewMode === 'table'}
-						<DropdownMenu.Item onclick={onToggleSchema}>
-							{schemaVisible ? t('toolbar.hideSchema') : t('toolbar.showSchema')}
 						</DropdownMenu.Item>
 					{/if}
 

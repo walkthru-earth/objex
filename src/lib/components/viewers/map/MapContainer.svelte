@@ -56,18 +56,24 @@ $effect(() => {
 		map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
 		map.on('load', () => {
-			if (bounds && map) {
-				const [minX, minY, maxX, maxY] = bounds;
-				// Validate bounds are within WGS84 range — projected CRS coordinates
-				// (e.g. shapefiles without .prj) would crash MapLibre's fitBounds.
-				if (minX >= -180 && maxX <= 180 && minY >= -90 && maxY <= 90) {
-					map.fitBounds(bounds, { padding: 40 });
-				} else {
-					console.warn('[MapContainer] Bounds outside WGS84 range, skipping fitBounds:', bounds);
-				}
-			}
 			if (map) onMapReady(map);
 		});
+	}
+});
+
+// React to bounds changes — data may load after the map is ready.
+// Also handles initial bounds that arrive before or during map load.
+let prevBoundsKey = '';
+$effect(() => {
+	if (!bounds || !map) return;
+	const key = bounds.join(',');
+	if (key === prevBoundsKey) return;
+	prevBoundsKey = key;
+	const [minX, minY, maxX, maxY] = bounds;
+	if (minX >= -180 && maxX <= 180 && minY >= -90 && maxY <= 90) {
+		map.fitBounds(bounds, { padding: 40 });
+	} else {
+		console.warn('[MapContainer] Bounds outside WGS84 range, skipping fitBounds:', bounds);
 	}
 });
 

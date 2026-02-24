@@ -9,7 +9,11 @@ import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
-import { buildGeoArrowTables, type GeoArrowResult } from '$lib/utils/geoarrow.js';
+import {
+	buildGeoArrowTables,
+	type GeoArrowGeomType,
+	type GeoArrowResult
+} from '$lib/utils/geoarrow.js';
 import { buildDuckDbUrl } from '$lib/utils/url.js';
 import { findGeoColumn } from '$lib/utils/wkb.js';
 import AttributeTable from './map/AttributeTable.svelte';
@@ -19,12 +23,16 @@ let {
 	tab,
 	schema,
 	mapData = null,
-	sourceCrs = null
+	sourceCrs = null,
+	knownGeomType = undefined,
+	metadataBounds = null
 }: {
 	tab: Tab;
 	schema: SchemaField[];
 	mapData?: MapQueryResult | null;
 	sourceCrs?: string | null;
+	knownGeomType?: GeoArrowGeomType;
+	metadataBounds?: [number, number, number, number] | null;
 } = $props();
 
 let loading = $state(true);
@@ -82,8 +90,9 @@ async function loadGeoData() {
 
 		const modules = await loadGeoArrowModules();
 
-		// Convert WKB → GeoArrow Arrow Tables (one per geometry type group)
-		const geoArrowResults = buildGeoArrowTables(result.wkbArrays, result.attributes);
+		// Convert WKB → GeoArrow Arrow Tables (zero-copy direct binary read)
+		// Pass knownGeomType from metadata to skip classification pass
+		const geoArrowResults = buildGeoArrowTables(result.wkbArrays, result.attributes, knownGeomType);
 
 		if (geoArrowResults.length === 0) {
 			error = t('map.noData');
@@ -93,7 +102,8 @@ async function loadGeoData() {
 
 		geoArrowState = { modules, geoArrowResults };
 		featureCount = geoArrowResults.reduce((sum, r) => sum + r.table.numRows, 0);
-		bounds = geoArrowResults[0].bounds; // shared merged bounds
+		// Use metadata bounds if available (no client-side computation needed)
+		bounds = metadataBounds ?? geoArrowResults[0].bounds;
 		loading = false;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);

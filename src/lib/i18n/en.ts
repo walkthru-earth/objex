@@ -140,7 +140,33 @@ export const en: Record<string, string> = {
 	'table.format': 'Format',
 	'table.loading': 'Loading...',
 	'table.cancel': 'Cancel',
+	'table.readingMetadata': 'Reading file metadata...',
+	'table.bootingEngine': 'Booting DuckDB-WASM...',
 	'table.enterSql': 'Enter SQL query... (Cmd+Enter to run)',
+
+	// Load Progress labels
+	'progress.format': 'Format',
+	'progress.source': 'Source',
+	'progress.columns': 'Columns',
+	'progress.rows': 'Rows',
+	'progress.geometry': 'Geometry',
+	'progress.crs': 'CRS',
+	'progress.bounds': 'Bounds',
+	'progress.encoding': 'Encoding',
+	'progress.compression': 'Compress.',
+	'progress.rowGroups': 'Row Groups',
+	'progress.createdBy': 'Created By',
+	'progress.rangeRequest': 'Range request (hyparquet)',
+	'progress.duckdbFallback': 'DuckDB-WASM',
+	'progress.stacDetected': 'STAC catalog detected',
+
+	// File Info view
+	'fileInfo.fileMetadata': 'File Metadata',
+	'fileInfo.geometry': 'Geometry',
+	'fileInfo.schema': 'Schema',
+	'fileInfo.column': 'Column',
+	'fileInfo.type': 'Type',
+	'fileInfo.noMetadata': 'No metadata available',
 
 	// Table Toolbar
 	'toolbar.copied': 'Copied!',
@@ -159,9 +185,7 @@ export const en: Record<string, string> = {
 	'toolbar.history': 'History',
 	'toolbar.showHistory': 'Show History',
 	'toolbar.hideHistory': 'Hide History',
-	'toolbar.schema': 'Schema',
-	'toolbar.showSchema': 'Show Schema',
-	'toolbar.hideSchema': 'Hide Schema',
+	'toolbar.info': 'Info',
 	'toolbar.pageSize': 'Page size',
 	'toolbar.rows': 'rows',
 	'toolbar.firstPage': 'First page',
@@ -267,9 +291,6 @@ export const en: Record<string, string> = {
 	'queryHistory.minsAgo': '{n}m ago',
 	'queryHistory.hoursAgo': '{n}h ago',
 	'queryHistory.daysAgo': '{n}d ago',
-
-	// Schema Panel
-	'schema.title': 'Schema ({count} columns)',
 
 	// Map Viewers
 	'map.loadingData': 'Loading map data...',

@@ -1,7 +1,4 @@
 <script lang="ts">
-import CheckCircleIcon from '@lucide/svelte/icons/circle-check';
-import Loader2Icon from '@lucide/svelte/icons/loader-2';
-import XCircleIcon from '@lucide/svelte/icons/x-circle';
 import { tableFromIPC } from 'apache-arrow';
 import { format as formatSql } from 'sql-formatter';
 import { untrack } from 'svelte';
@@ -14,11 +11,24 @@ import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildDuckDbUrl, buildStorageUrl } from '$lib/utils/url.js';
+import type { GeoArrowGeomType } from '$lib/utils/geoarrow.js';
+import {
+	extractBounds,
+	extractEpsgFromGeoMeta,
+	extractGeometryTypes,
+	readParquetMetadata
+} from '$lib/utils/parquet-metadata.js';
+import {
+	buildDuckDbUrl,
+	buildHttpsUrl,
+	buildStorageUrl,
+	canStreamDirectly
+} from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import { findGeoColumn, findGeoColumnFromRows, parseWKB, toBinary } from '$lib/utils/wkb.js';
+import FileInfo from './FileInfo.svelte';
+import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
 import QueryHistoryPanel from './QueryHistoryPanel.svelte';
-import SchemaPanel from './SchemaPanel.svelte';
 import TableGrid from './TableGrid.svelte';
 import TableStatusBar from './TableStatusBar.svelte';
 import TableToolbar from './TableToolbar.svelte';
@@ -34,14 +44,13 @@ let totalRows = $state<number | null>(null);
 let currentPage = $state(1);
 let loading = $state(true);
 let error = $state<string | null>(null);
-let schemaVisible = $state(false);
 let historyVisible = $state(false);
 let hasGeo = $state(false);
 let isStac = $state(false);
 // Restore view mode from URL hash if present
 const urlView = getUrlView();
-let viewMode = $state<'table' | 'map' | 'stac'>(
-	urlView === 'map' ? 'map' : urlView === 'stac' ? 'stac' : 'table'
+let viewMode = $state<'table' | 'map' | 'stac' | 'info'>(
+	urlView === 'map' ? 'map' : urlView === 'stac' ? 'stac' : urlView === 'info' ? 'info' : 'table'
 );
 let sqlQuery = $state('');
 let customSql = $state('');
@@ -50,7 +59,7 @@ let executionTimeMs = $state(0);
 
 // Progress stage for user feedback
 let loadStage = $state('');
-let loadDetails = $state<string[]>([]);
+let loadProgress = $state<ProgressEntry[]>([]);
 
 // Load cancellation: incrementing ID so stale loads are ignored
 let loadGeneration = 0;
@@ -64,6 +73,8 @@ let geoCol = $state<string | null>(null);
 let geoColType = $state<string>('');
 let sourceCrs = $state<string | null>(null);
 let mapData = $state<MapQueryResult | null>(null);
+let knownGeomType = $state<GeoArrowGeomType | undefined>(undefined);
+let metadataBounds = $state<[number, number, number, number] | null>(null);
 
 const totalPages = $derived(totalRows != null ? Math.max(1, Math.ceil(totalRows / pageSize)) : 1);
 const connId = $derived(tab?.connectionId ?? '');
@@ -166,6 +177,8 @@ $effect(() => {
 		columns = [];
 		mapData = null;
 		geoCol = null;
+		knownGeomType = undefined;
+		metadataBounds = null;
 		error = null;
 	});
 	return unregister;
@@ -204,8 +217,10 @@ async function loadTable() {
 	geoColType = '';
 	sourceCrs = null;
 	mapData = null;
+	knownGeomType = undefined;
+	metadataBounds = null;
 	loadStage = t('table.preparingQuery');
-	loadDetails = [];
+	loadProgress = [];
 
 	// Set SQL eagerly so editor shows the query while loading
 	const initialSql = buildDefaultSql(0);
@@ -213,58 +228,203 @@ async function loadTable() {
 	customSql = initialSql;
 
 	try {
-		loadStage = t('table.initEngine');
-		const engine = await getQueryEngine();
-		if (thisGen !== loadGeneration) return; // cancelled
-
 		const fileUrl = buildDuckDbUrl(tab);
+		const httpsUrl = buildHttpsUrl(tab);
 		const cloudNative = isCloudNativeFormat(tab.path);
+		const isParquet = /\.parquet$/i.test(tab.path);
+		const streamable = canStreamDirectly(tab);
 
-		if (cloudNative) {
-			// Cloud-native formats (Parquet): metadata reads are cheap range
-			// requests — combine schema + CRS in a single connection when possible.
+		// Start DuckDB boot immediately (runs in parallel with hyparquet)
+		loadStage = t('table.initEngine');
+		const enginePromise = getQueryEngine();
+
+		// ── Fast metadata via hyparquet (runs concurrently with DuckDB boot) ──
+		let metaFromHyparquet = false;
+		if (cloudNative && isParquet && streamable) {
+			try {
+				loadStage = t('table.readingMetadata');
+				const meta = await readParquetMetadata(httpsUrl);
+				if (thisGen !== loadGeneration) return;
+
+				// Format detection
+				const formatName = meta.geo ? 'GeoParquet' : 'Parquet';
+				loadProgress = [
+					{ label: t('progress.format'), value: formatName },
+					{ label: t('progress.source'), value: t('progress.rangeRequest') }
+				];
+
+				// Instant schema display — override geo column type to match DuckDB
+				const geoColName = meta.geo?.primaryColumn;
+				schema = meta.schema.map((s) => ({
+					name: s.name,
+					type: geoColName && s.name === geoColName ? 'GEOMETRY' : s.type,
+					nullable: true
+				}));
+				columns = schema.map((f) => f.name);
+				totalRows = meta.rowCount;
+
+				// Column names preview (truncated)
+				const colPreview =
+					columns.length <= 8
+						? columns.join(', ')
+						: `${columns.slice(0, 7).join(', ')}, +${columns.length - 7} more`;
+				loadProgress = [
+					...loadProgress,
+					{ label: t('progress.columns'), value: String(columns.length), detail: colPreview },
+					{ label: t('progress.rows'), value: meta.rowCount.toLocaleString() }
+				];
+
+				// Row groups & compression
+				if (meta.numRowGroups > 0) {
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.rowGroups'), value: String(meta.numRowGroups) }
+					];
+				}
+				if (meta.compression) {
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.compression'), value: meta.compression }
+					];
+				}
+
+				// Created by (tool)
+				if (meta.createdBy) {
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.createdBy'), value: meta.createdBy }
+					];
+				}
+
+				if (meta.geo) {
+					geoCol = meta.geo.primaryColumn;
+					// DuckDB with spatial extension auto-promotes GeoParquet
+					// geometry columns from BLOB to GEOMETRY. Match DuckDB's type
+					// for correct SQL generation (ST_AsWKB vs ST_GeomFromWKB).
+					geoColType = 'GEOMETRY';
+					sourceCrs = extractEpsgFromGeoMeta(meta.geo);
+					const geomTypes = extractGeometryTypes(meta.geo);
+					if (geomTypes.length === 1) knownGeomType = geomTypes[0];
+					metadataBounds = extractBounds(meta.geo);
+
+					const geomLabel = geomTypes.join(', ') || geoColType;
+					const primaryCol = meta.geo.columns[meta.geo.primaryColumn];
+					const encodingInfo = primaryCol?.encoding ?? 'WKB';
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.geometry'), value: `${geoCol} (${geomLabel})` },
+						{ label: t('progress.encoding'), value: encodingInfo }
+					];
+					if (sourceCrs) {
+						loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
+					} else {
+						loadProgress = [
+							...loadProgress,
+							{ label: t('progress.crs'), value: 'EPSG:4326 (WGS84)' }
+						];
+					}
+					if (metadataBounds) {
+						const [minX, minY, maxX, maxY] = metadataBounds;
+						loadProgress = [
+							...loadProgress,
+							{
+								label: t('progress.bounds'),
+								value: `${minX.toFixed(2)}, ${minY.toFixed(2)}, ${maxX.toFixed(2)}, ${maxY.toFixed(2)}`
+							}
+						];
+					}
+				}
+
+				hasGeo = geoCol !== null;
+				isStac = schema.some((f) => f.name === 'stac_version');
+				if (isStac) {
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.format'), value: t('progress.stacDetected') }
+					];
+				}
+				metaFromHyparquet = true;
+			} catch {
+				// hyparquet failed (CORS, auth, format) — fall back to DuckDB
+			}
+		}
+
+		// Wait for DuckDB engine
+		loadStage = metaFromHyparquet ? t('table.bootingEngine') : t('table.initEngine');
+		const engine = await enginePromise;
+		if (thisGen !== loadGeneration) return;
+
+		if (cloudNative && !metaFromHyparquet) {
+			// Fallback: DuckDB metadata queries
 			loadStage = t('table.loadingSchema');
+			loadProgress = [
+				...loadProgress,
+				{ label: t('progress.source'), value: t('progress.duckdbFallback') }
+			];
+
 			if (engine.getSchemaAndCrs) {
 				const result = await engine.getSchemaAndCrs(connId, fileUrl, findGeoColumn);
 				if (thisGen !== loadGeneration) return;
 				schema = result.schema;
 				columns = schema.map((f) => f.name);
-				loadDetails = [...loadDetails, `${columns.length} columns`];
+				const colPreview =
+					columns.length <= 8
+						? columns.join(', ')
+						: `${columns.slice(0, 7).join(', ')}, +${columns.length - 7} more`;
+				loadProgress = [
+					...loadProgress,
+					{ label: t('progress.columns'), value: String(columns.length), detail: colPreview }
+				];
 
 				geoCol = result.geomCol;
 				if (result.geomCol) {
 					const geoField = schema.find((f) => f.name === result.geomCol);
 					geoColType = geoField?.type ?? 'GEOMETRY';
-					loadDetails = [...loadDetails, `Geometry: ${result.geomCol} (${geoColType})`];
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.geometry'), value: `${result.geomCol} (${geoColType})` }
+					];
 					sourceCrs = result.crs;
 					if (sourceCrs) {
-						loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+						loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
 					}
 				}
 			} else {
-				// Fallback: separate queries (non-WASM engines)
 				schema = await engine.getSchema(connId, fileUrl);
 				if (thisGen !== loadGeneration) return;
 				columns = schema.map((f) => f.name);
-				loadDetails = [...loadDetails, `${columns.length} columns`];
+				const colPreview =
+					columns.length <= 8
+						? columns.join(', ')
+						: `${columns.slice(0, 7).join(', ')}, +${columns.length - 7} more`;
+				loadProgress = [
+					...loadProgress,
+					{ label: t('progress.columns'), value: String(columns.length), detail: colPreview }
+				];
 
 				const detectedGeoCol = findGeoColumn(schema);
 				geoCol = detectedGeoCol;
 				if (detectedGeoCol) {
 					const geoField = schema.find((f) => f.name === detectedGeoCol);
 					geoColType = geoField?.type ?? 'GEOMETRY';
-					loadDetails = [...loadDetails, `Geometry: ${detectedGeoCol} (${geoColType})`];
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.geometry'), value: `${detectedGeoCol} (${geoColType})` }
+					];
 					sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
 					if (thisGen !== loadGeneration) return;
 					if (sourceCrs) {
-						loadDetails = [...loadDetails, `CRS: ${sourceCrs}`];
+						loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
 					}
 				}
 			}
 			hasGeo = geoCol !== null;
 			isStac = schema.some((f) => f.name === 'stac_version');
 			if (isStac) {
-				loadDetails = [...loadDetails, 'STAC catalog detected'];
+				loadProgress = [
+					...loadProgress,
+					{ label: t('progress.format'), value: t('progress.stacDetected') }
+				];
 			}
 		}
 
@@ -328,23 +488,24 @@ async function loadTable() {
 		loadStage = '';
 		updateUrlView(viewMode);
 
-		// Row count: for non-cloud-native formats, if all rows fit on one
-		// page we already know the total — skip the extra download.
-		if (!cloudNative && rows.length < pageSize) {
-			totalRows = rows.length;
-		} else {
-			loadStage = t('table.countingRows');
-			engine
-				.getRowCount(connId, fileUrl)
-				.then((count) => {
-					if (thisGen === loadGeneration) {
-						totalRows = count;
-					}
-					loadStage = '';
-				})
-				.catch(() => {
-					loadStage = '';
-				});
+		// Row count: skip if hyparquet already provided it
+		if (totalRows === null) {
+			if (!cloudNative && rows.length < pageSize) {
+				totalRows = rows.length;
+			} else {
+				loadStage = t('table.countingRows');
+				engine
+					.getRowCount(connId, fileUrl)
+					.then((count) => {
+						if (thisGen === loadGeneration) {
+							totalRows = count;
+						}
+						loadStage = '';
+					})
+					.catch(() => {
+						loadStage = '';
+					});
+			}
 		}
 	} catch (err) {
 		if (thisGen !== loadGeneration) return;
@@ -495,8 +656,9 @@ function goToPage(page: number) {
 	if (page >= 1 && page <= totalPages) loadPage(page);
 }
 
-function toggleSchema() {
-	schemaVisible = !schemaVisible;
+function toggleInfo() {
+	viewMode = viewMode === 'info' ? 'table' : 'info';
+	updateUrlView(viewMode);
 }
 
 function toggleHistory() {
@@ -504,7 +666,7 @@ function toggleHistory() {
 }
 
 function toggleView() {
-	viewMode = viewMode === 'table' ? 'map' : 'table';
+	viewMode = viewMode === 'map' ? 'table' : 'map';
 	updateUrlView(viewMode);
 }
 
@@ -524,7 +686,6 @@ function setStacView() {
 		{currentPage}
 		{totalPages}
 		{pageSize}
-		{schemaVisible}
 		{historyVisible}
 		{hasGeo}
 		{isStac}
@@ -532,7 +693,7 @@ function setStacView() {
 		onPrevPage={prevPage}
 		onNextPage={nextPage}
 		onGoToPage={goToPage}
-		onToggleSchema={toggleSchema}
+		onToggleInfo={toggleInfo}
 		onToggleHistory={toggleHistory}
 		onToggleView={toggleView}
 		onToggleStac={setStacView}
@@ -584,27 +745,11 @@ function setStacView() {
 		<!-- Content area: loading / table + side panels -->
 		<div class="relative flex flex-1 overflow-hidden">
 			{#if loading || queryRunning}
-				<div class="flex flex-1 flex-col items-center justify-center gap-3">
-					<Loader2Icon class="size-6 animate-spin text-primary" />
-					<p class="text-sm text-zinc-400">{loadStage || t('table.loading')}</p>
-					{#if loadDetails.length > 0}
-						<ul class="flex flex-col gap-1">
-							{#each loadDetails as detail}
-								<li class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-									<CheckCircleIcon class="size-3 text-green-500" />
-									{detail}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-					<button
-						class="mt-1 flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-						onclick={cancelLoad}
-					>
-						<XCircleIcon class="size-3" />
-						{t('table.cancel')}
-					</button>
-				</div>
+				<LoadProgress
+					stage={loadStage}
+					entries={loadProgress}
+					onCancel={cancelLoad}
+				/>
 			{:else if error && rows.length === 0}
 				<div class="flex flex-1 items-center justify-center">
 					<div
@@ -629,7 +774,6 @@ function setStacView() {
 				onSelect={handleHistorySelect}
 				onClose={toggleHistory}
 			/>
-			<SchemaPanel fields={schema} visible={schemaVisible} onClose={toggleSchema} />
 		</div>
 
 		<!-- Status bar — table mode only -->
@@ -641,6 +785,11 @@ function setStacView() {
 			{rows}
 			fileName={tab.name}
 		/>
+	{:else if viewMode === 'info'}
+		<!-- Info mode — file metadata & schema -->
+		<div class="min-h-0 flex-1 overflow-auto">
+			<FileInfo entries={loadProgress} {schema} />
+		</div>
 	{:else if viewMode === 'stac'}
 		<!-- STAC Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
@@ -648,11 +797,11 @@ function setStacView() {
 				<StacMapViewer.default {tab} />
 			{/await}
 		</div>
-	{:else}
+	{:else if viewMode === 'map'}
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
 			{#await import('./GeoParquetMapViewer.svelte') then GeoParquetMapViewer}
-				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} />
+				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} {knownGeomType} {metadataBounds} />
 			{/await}
 		</div>
 	{/if}

@@ -140,7 +140,33 @@ export const ar: Record<string, string> = {
 	'table.format': 'تنسيق',
 	'table.loading': 'جارٍ التحميل...',
 	'table.cancel': 'إلغاء',
+	'table.readingMetadata': 'جارٍ قراءة بيانات الملف...',
+	'table.bootingEngine': 'جارٍ تشغيل DuckDB-WASM...',
 	'table.enterSql': 'أدخل استعلام SQL... (Cmd+Enter للتنفيذ)',
+
+	// Load Progress labels
+	'progress.format': 'الصيغة',
+	'progress.source': 'المصدر',
+	'progress.columns': 'الأعمدة',
+	'progress.rows': 'الصفوف',
+	'progress.geometry': 'الهندسة',
+	'progress.crs': 'نظام الإحداثيات',
+	'progress.bounds': 'الحدود',
+	'progress.encoding': 'الترميز',
+	'progress.compression': 'الضغط',
+	'progress.rowGroups': 'مجموعات الصفوف',
+	'progress.createdBy': 'أُنشئ بواسطة',
+	'progress.rangeRequest': 'طلب نطاقي (hyparquet)',
+	'progress.duckdbFallback': 'DuckDB-WASM',
+	'progress.stacDetected': 'تم اكتشاف كتالوج STAC',
+
+	// File Info view
+	'fileInfo.fileMetadata': 'بيانات الملف',
+	'fileInfo.geometry': 'الهندسة',
+	'fileInfo.schema': 'المخطط',
+	'fileInfo.column': 'العمود',
+	'fileInfo.type': 'النوع',
+	'fileInfo.noMetadata': 'لا تتوفر بيانات وصفية',
 
 	// Table Toolbar
 	'toolbar.copied': 'تم النسخ!',
@@ -159,9 +185,7 @@ export const ar: Record<string, string> = {
 	'toolbar.history': 'السجل',
 	'toolbar.showHistory': 'إظهار السجل',
 	'toolbar.hideHistory': 'إخفاء السجل',
-	'toolbar.schema': 'المخطط',
-	'toolbar.showSchema': 'إظهار المخطط',
-	'toolbar.hideSchema': 'إخفاء المخطط',
+	'toolbar.info': 'معلومات',
 	'toolbar.pageSize': 'حجم الصفحة',
 	'toolbar.rows': 'صفوف',
 	'toolbar.firstPage': 'الصفحة الأولى',
@@ -264,9 +288,6 @@ export const ar: Record<string, string> = {
 	'queryHistory.minsAgo': 'منذ {n} دقيقة',
 	'queryHistory.hoursAgo': 'منذ {n} ساعة',
 	'queryHistory.daysAgo': 'منذ {n} يوم',
-
-	// Schema Panel
-	'schema.title': 'المخطط ({count} أعمدة)',
 
 	// Map Viewers
 	'map.loadingData': 'جارٍ تحميل بيانات الخريطة...',

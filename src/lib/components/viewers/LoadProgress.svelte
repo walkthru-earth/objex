@@ -1,0 +1,73 @@
+<script lang="ts">
+import CheckCircleIcon from '@lucide/svelte/icons/circle-check';
+import Loader2Icon from '@lucide/svelte/icons/loader-2';
+import XCircleIcon from '@lucide/svelte/icons/x-circle';
+import { t } from '$lib/i18n/index.svelte.js';
+
+export type ProgressEntry = {
+	label: string;
+	value: string;
+	detail?: string;
+};
+
+let {
+	stage = '',
+	entries = [],
+	onCancel
+}: {
+	stage?: string;
+	entries?: ProgressEntry[];
+	onCancel?: () => void;
+} = $props();
+</script>
+
+<div class="flex flex-1 flex-col items-center justify-center gap-4">
+	<!-- Active step -->
+	<div class="flex items-center gap-2">
+		<Loader2Icon class="size-4 animate-spin text-primary" />
+		<p class="text-sm text-zinc-500 dark:text-zinc-400">{stage || t('table.loading')}</p>
+	</div>
+
+	<!-- Discovered metadata -->
+	{#if entries.length > 0}
+		<div
+			class="w-full max-w-md rounded-lg border border-zinc-200/60 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/50"
+		>
+			<div class="flex flex-col gap-1.5">
+				{#each entries as entry}
+					<div class="flex items-start gap-2">
+						<CheckCircleIcon class="mt-0.5 size-3 shrink-0 text-green-500/80" />
+						<span
+							class="w-[4.5rem] shrink-0 text-xs text-zinc-400 dark:text-zinc-500"
+						>
+							{entry.label}
+						</span>
+						<div class="min-w-0 flex-1">
+							<span class="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+								{entry.value}
+							</span>
+							{#if entry.detail}
+								<p
+									class="mt-0.5 truncate font-mono text-[10px] leading-tight text-zinc-400 dark:text-zinc-500"
+								>
+									{entry.detail}
+								</p>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Cancel -->
+	{#if onCancel}
+		<button
+			class="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+			onclick={onCancel}
+		>
+			<XCircleIcon class="size-3" />
+			{t('table.cancel')}
+		</button>
+	{/if}
+</div>
