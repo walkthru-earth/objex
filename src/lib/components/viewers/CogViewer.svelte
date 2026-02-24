@@ -268,6 +268,7 @@ let cogInfo = $state<{
 	bandCount: number;
 	dataType: string;
 	bounds: { west: number; south: number; east: number; north: number };
+	downsampled?: boolean;
 } | null>(null);
 
 let abortController = new AbortController();
@@ -488,8 +489,43 @@ async function loadCog(map: maplibregl.Map) {
 				throw new Error('Cannot determine geographic bounds for non-tiled GeoTIFF');
 			}
 
+			const imgW = firstImage.getWidth();
+			const imgH = firstImage.getHeight();
+			const totalPixels = imgW * imgH;
+
+			// Size gates — non-tiled TIFFs are read as a single strip-based
+			// blob (no random tile access). Protect against OOM / browser hang.
+			const MAX_NONTILED_PIXELS = 100_000_000; // 100M — refuse above
+			const PREVIEW_MAX_DIM = 4096; // max output dimension
+
+			if (totalPixels > MAX_NONTILED_PIXELS) {
+				const clamped = preFlightBounds;
+				cogInfo = { width: imgW, height: imgH, bandCount, dataType, bounds: clamped };
+				bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
+				fitCogBounds(map, clamped);
+				throw new Error(
+					`Non-tiled GeoTIFF too large (${imgW.toLocaleString()} × ${imgH.toLocaleString()} = ` +
+						`${(totalPixels / 1e6).toFixed(0)}M pixels). Convert to COG: ` +
+						`gdal_translate -of COG input.tif output.tif`
+				);
+			}
+
+			// Cap output dimensions — keeps RGBA array + canvas within safe limits
+			const needsDownsample = imgW > PREVIEW_MAX_DIM || imgH > PREVIEW_MAX_DIM;
+			let readW = imgW;
+			let readH = imgH;
+			if (needsDownsample) {
+				const scale = Math.min(PREVIEW_MAX_DIM / imgW, PREVIEW_MAX_DIM / imgH);
+				readW = Math.max(1, Math.round(imgW * scale));
+				readH = Math.max(1, Math.round(imgH * scale));
+			}
+
 			const noData = firstImage.getGDALNoData();
-			const rasters = await firstImage.readRasters({ samples: [0], signal });
+			const rasters = await firstImage.readRasters({
+				samples: [0],
+				signal,
+				...(needsDownsample ? { width: readW, height: readH } : {})
+			});
 			if (signal.aborted) return;
 
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -513,12 +549,13 @@ async function loadCog(map: maplibregl.Map) {
 				bMax,
 				bRange,
 				noData,
-				len: band.length
+				len: band.length,
+				readW,
+				readH,
+				downsampled: needsDownsample
 			});
 
-			const imgW = firstImage.getWidth();
-			const imgH = firstImage.getHeight();
-			const rgba = new Uint8ClampedArray(imgW * imgH * 4);
+			const rgba = new Uint8ClampedArray(readW * readH * 4);
 			for (let i = 0; i < band.length; i++) {
 				const v = band[i];
 				const isND = (noData !== null && v === noData) || !Number.isFinite(v);
@@ -533,14 +570,21 @@ async function loadCog(map: maplibregl.Map) {
 			// Render via MapLibre native image source — bypasses deck.gl
 			// entirely, avoiding WebGL texture upload issues in Firefox.
 			const canvas = document.createElement('canvas');
-			canvas.width = imgW;
-			canvas.height = imgH;
+			canvas.width = readW;
+			canvas.height = readH;
 			const ctx = canvas.getContext('2d')!;
-			ctx.putImageData(new ImageData(rgba, imgW, imgH), 0, 0);
+			ctx.putImageData(new ImageData(rgba, readW, readH), 0, 0);
 			const dataUrl = canvas.toDataURL();
 
 			const clamped = preFlightBounds;
-			cogInfo = { width: imgW, height: imgH, bandCount, dataType, bounds: clamped };
+			cogInfo = {
+				width: imgW,
+				height: imgH,
+				bandCount,
+				dataType,
+				bounds: clamped,
+				downsampled: needsDownsample
+			};
 			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
 			fitCogBounds(map, clamped);
 
@@ -784,6 +828,9 @@ onDestroy(cleanup);
 			>
 				COG {cogInfo.width}&times;{cogInfo.height}, {cogInfo.bandCount}
 				band{cogInfo.bandCount !== 1 ? 's' : ''}, {cogInfo.dataType}
+				{#if cogInfo.downsampled}
+					<span class="text-amber-400">— downsampled preview</span>
+				{/if}
 			</div>
 		{/if}
 

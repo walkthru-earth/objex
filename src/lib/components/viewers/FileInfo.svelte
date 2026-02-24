@@ -5,11 +5,19 @@ import type { ProgressEntry } from './LoadProgress.svelte';
 
 let {
 	entries = [],
-	schema = []
+	schema = [],
+	parquetUrl = ''
 }: {
 	entries?: ProgressEntry[];
 	schema?: SchemaField[];
+	parquetUrl?: string;
 } = $props();
+
+const parquetTableSrc = $derived(
+	parquetUrl
+		? `https://source-cooperative.github.io/parquet-table/?iframe=true&url=${encodeURIComponent(parquetUrl)}`
+		: ''
+);
 
 // Separate entries into groups for display
 const geoLabels = $derived(
@@ -20,10 +28,10 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 </script>
 
 <div class="flex flex-1 overflow-auto">
-	<div class="mx-auto w-full max-w-2xl space-y-5 p-4 sm:p-6">
+	<div class="mx-auto w-full space-y-5 p-4 sm:p-6">
 		<!-- File Metadata -->
 		{#if fileEntries.length > 0}
-			<section>
+			<section class="mx-auto max-w-2xl">
 				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
 					{t('fileInfo.fileMetadata')}
 				</h3>
@@ -59,7 +67,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 
 		<!-- Geometry -->
 		{#if geoEntries.length > 0}
-			<section>
+			<section class="mx-auto max-w-2xl">
 				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
 					{t('fileInfo.geometry')}
 				</h3>
@@ -88,7 +96,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 
 		<!-- Schema -->
 		{#if schema.length > 0}
-			<section>
+			<section class="mx-auto max-w-2xl">
 				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
 					{t('fileInfo.schema')} ({schema.length})
 				</h3>
@@ -133,6 +141,26 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 							{/each}
 						</tbody>
 					</table>
+				</div>
+			</section>
+		{/if}
+
+		<!-- Parquet Table Explorer -->
+		{#if parquetTableSrc}
+			<section>
+				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+					{t('fileInfo.parquetExplorer')}
+				</h3>
+				<div
+					class="mt-2 overflow-hidden rounded-lg border border-zinc-200/70 dark:border-zinc-800/70"
+				>
+					<iframe
+						src={parquetTableSrc}
+						title="Parquet Table Explorer"
+						class="h-[500px] w-full border-0"
+						sandbox="allow-scripts allow-same-origin allow-popups"
+						loading="lazy"
+					></iframe>
 				</div>
 			</section>
 		{/if}

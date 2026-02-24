@@ -788,7 +788,11 @@ function setStacView() {
 	{:else if viewMode === 'info'}
 		<!-- Info mode — file metadata & schema -->
 		<div class="min-h-0 flex-1 overflow-auto">
-			<FileInfo entries={loadProgress} {schema} />
+			<FileInfo
+				entries={loadProgress}
+				{schema}
+				parquetUrl={/\.parquet$/i.test(tab.path) ? buildHttpsUrl(tab) : ''}
+			/>
 		</div>
 	{:else if viewMode === 'stac'}
 		<!-- STAC Map mode — full size -->

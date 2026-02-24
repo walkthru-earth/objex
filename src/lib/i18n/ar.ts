@@ -167,6 +167,7 @@ export const ar: Record<string, string> = {
 	'fileInfo.column': 'العمود',
 	'fileInfo.type': 'النوع',
 	'fileInfo.noMetadata': 'لا تتوفر بيانات وصفية',
+	'fileInfo.parquetExplorer': 'مستكشف جدول Parquet',
 
 	// Table Toolbar
 	'toolbar.copied': 'تم النسخ!',

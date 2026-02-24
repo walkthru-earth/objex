@@ -167,6 +167,7 @@ export const en: Record<string, string> = {
 	'fileInfo.column': 'Column',
 	'fileInfo.type': 'Type',
 	'fileInfo.noMetadata': 'No metadata available',
+	'fileInfo.parquetExplorer': 'Parquet Table Explorer',
 
 	// Table Toolbar
 	'toolbar.copied': 'Copied!',
