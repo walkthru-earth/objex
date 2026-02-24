@@ -1,7 +1,5 @@
 # objex
 
-> **Early development** — not everything listed below is fully working yet. Expect breaking changes.
-
 Cloud storage explorer that runs entirely in the browser. Connect to S3, Azure, GCS, R2, MinIO — browse files, query data with SQL, and visualize geospatial formats on interactive maps. No backend required.
 
 ```mermaid
@@ -10,20 +8,20 @@ graph LR
     App --> Browse[File Tree]
     App --> Query["DuckDB-WASM<br/>SQL Engine"]
     App --> Map["MapLibre + deck.gl<br/>Geo Visualization"]
-    App --> View["20+ Viewers<br/>Tables, Code, PDF, 3D..."]
+    App --> View["15+ Viewers<br/>Tables, Code, PDF, 3D..."]
 ```
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
-| Framework | SvelteKit 5 (static adapter, CSR-only) |
-| Styling | TailwindCSS 4 + Bits UI |
+| Framework | SvelteKit 2 + Svelte 5 (static adapter, CSR-only) |
+| Styling | TailwindCSS 4 + shadcn-svelte (bits-ui) |
 | Query engine | DuckDB-WASM (in-browser SQL) |
-| Maps | MapLibre GL + deck.gl |
+| Maps | MapLibre GL 5 + deck.gl 9 |
 | Storage auth | aws4fetch (SigV4) / Azure SAS |
-| Linting | Biome |
-| Package manager | pnpm |
+| Code quality | Biome + svelte-check |
+| Package manager | pnpm 10 |
 
 ## Architecture
 
@@ -37,15 +35,13 @@ graph TD
     end
 
     subgraph Viewers["Viewers"]
-        TV["TableViewer"]
-        MV["MapViewer<br/>(GeoJSON)"]
-        GPV["GeoParquetMapViewer<br/>(deck.gl)"]
+        TV["TableViewer<br/>+ GeoParquetMapViewer<br/>+ StacMapViewer"]
         PMT["PmtilesViewer"]
         FGB["FlatGeobufViewer"]
         COG["CogViewer"]
-        ZARR["ZarrViewer"]
+        ZARR["ZarrViewer<br/>+ ZarrMapViewer"]
         DB["DatabaseViewer"]
-        CODE["CodeViewer"]
+        CODE["CodeViewer<br/>+ StyleEditorOverlay"]
         PDF["PdfViewer"]
         IMG["ImageViewer"]
         MODEL["ModelViewer<br/>(3D)"]
@@ -56,7 +52,7 @@ graph TD
     end
 
     subgraph Core["Core"]
-        SA["StorageAdapter<br/>browser-cloud / browser-azure"]
+        SA["StorageAdapter<br/>browser-cloud / browser-azure / url-adapter"]
         DDB["DuckDB-WASM<br/>+ httpfs + spatial"]
         WKB["WKB Parser<br/>→ GeoArrow"]
         FI["File Icons Registry<br/>(ext → viewer)"]
@@ -67,14 +63,15 @@ graph TD
         BS["browser"]
         TS["tabs"]
         CRED["credentials"]
+        QH["query-history"]
+        SET["settings"]
     end
 
     Page --> Sidebar --> SA
     Page --> Tabs --> VR
     VR -->|by extension| Viewers
     TV --> DDB
-    GPV --> DDB
-    GPV --> WKB
+    TV --> WKB
     DB --> DDB
     SA --> CS
     SA --> CRED
@@ -87,15 +84,19 @@ graph TD
 
 | Category | Formats | How |
 |----------|---------|-----|
-| **Tabular** | Parquet, CSV, TSV, JSON, JSONL, Arrow, Feather | DuckDB SQL queries |
-| **Geo vector** | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf | MapLibre / deck.gl |
-| **Geo raster** | PMTiles (vector+raster), Cloud Optimized GeoTIFF, Zarr | MapLibre / deck.gl |
-| **Code** | 30+ languages (Python, TS, Rust, Go, SQL, etc.) | Shiki syntax highlight |
-| **Documents** | Markdown, PDF, plain text | Milkdown / pdf.js |
-| **Media** | PNG, JPEG, GIF, WebP, SVG, MP4, WebM, MP3, WAV | Native / OpenSeadragon |
+| **Tabular** | Parquet, CSV, TSV, JSONL, NDJSON | DuckDB SQL queries |
+| **Geo vector** | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf | DuckDB + MapLibre / deck.gl |
+| **Geo raster** | Cloud Optimized GeoTIFF, PMTiles (vector + raster), Zarr v2/v3 | geotiff.js / MapLibre / deck.gl |
+| **Code** | 30+ languages (Python, TS, Rust, Go, SQL, etc.) | Shiki syntax highlighting |
+| **Config** | JSON, XML, YAML, TOML, INI, .env | Shiki syntax highlighting |
+| **Documents** | Markdown, PDF, plain text, logs | Milkdown / pdf.js |
+| **Media** | PNG, JPEG, GIF, WebP, AVIF, SVG, BMP, ICO | Native `<img>` |
+| **Video** | MP4, WebM, MOV, AVI, MKV | Native `<video>` |
+| **Audio** | MP3, WAV, OGG, FLAC, AAC | Native `<audio>` |
 | **3D** | GLB, glTF, OBJ, STL, FBX | Babylon.js |
-| **Archives** | ZIP, TAR, GZIP | zip.js |
+| **Archives** | ZIP, TAR, GZ, TGZ, 7Z, RAR, BZ2 | zip.js (progressive streaming) |
 | **Database** | DuckDB, SQLite | DuckDB-WASM |
+| **Raw** | Any (fallback) | Hex dump |
 
 ## Viewers & Sources
 
@@ -103,18 +104,17 @@ graph TD
 
 | Viewer | Formats | Powered by | URL Hash |
 |--------|---------|------------|----------|
-| **TableViewer** | Parquet, CSV, TSV, JSONL, GeoJSON, Shapefile, GeoPackage | [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm), [Apache Arrow](https://github.com/apache/arrow) | `#table` |
+| **TableViewer** | Parquet, CSV, TSV, JSONL, GeoJSON, Shapefile, GeoPackage | [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm), [Apache Arrow](https://github.com/apache/arrow), [CodeMirror](https://codemirror.net) (SQL editor) | `#table` |
 | **DatabaseViewer** | DuckDB, SQLite | [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm) | — |
 
 ### Map Viewers
 
 | Viewer | Formats | Powered by | URL Hash |
 |--------|---------|------------|----------|
-| **GeoParquetMapViewer** | GeoParquet | [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org), custom WKB parser (unified query with TableViewer) | `#map` |
-| **MapViewer** | GeoJSON | [MapLibre GL](https://maplibre.org) | `#map` |
+| **GeoParquetMapViewer** | GeoParquet, GeoJSON, Shapefile, GeoPackage (any geo-detected tabular format) | [deck.gl](https://deck.gl), [@geoarrow/deck.gl-layers](https://github.com/geoarrow/deck.gl-layers), [MapLibre GL](https://maplibre.org), custom WKB parser | `#map` |
 | **PmtilesViewer** | PMTiles (vector + raster) | [pmtiles](https://github.com/protomaps/PMTiles), [MapLibre GL](https://maplibre.org) | — |
 | **FlatGeobufViewer** | FlatGeobuf | [flatgeobuf](https://github.com/flatgeobuf/flatgeobuf), [deck.gl](https://deck.gl), [MapLibre GL](https://maplibre.org) | — |
-| **CogViewer** | Cloud Optimized GeoTIFF | [geotiff.js](https://github.com/geotiffjs/geotiff.js), [@developmentseed/deck.gl-geotiff](https://github.com/developmentseed/deck.gl-geotiff), [proj4js](https://github.com/proj4js/proj4js) | — |
+| **CogViewer** | Cloud Optimized GeoTIFF | [geotiff.js](https://github.com/geotiffjs/geotiff.js) v3, [@developmentseed/deck.gl-geotiff](https://github.com/developmentseed/deck.gl-geotiff), [proj4js](https://github.com/proj4js/proj4js) | — |
 | **ZarrViewer** | Zarr v2/v3 | [zarrita](https://github.com/manzt/zarrita.js), [@carbonplan/zarr-layer](https://github.com/carbonplan/maps), [MapLibre GL](https://maplibre.org) | `#map`, `#inspect` |
 | **StacMapViewer** | STAC GeoParquet | [stac-map](https://developmentseed.org/stac-map) by Development Seed (iframe) | `#stac` |
 
@@ -131,14 +131,14 @@ graph TD
 | Viewer | Formats | Powered by | URL Hash |
 |--------|---------|------------|----------|
 | **ImageViewer** | PNG, JPEG, GIF, WebP, AVIF, SVG, BMP, ICO | Native `<img>` with CSS transforms | — |
-| **MediaViewer** | MP4, WebM, MOV, MP3, WAV, OGG, FLAC, AAC | Native `<video>` / `<audio>` | — |
+| **MediaViewer** | MP4, WebM, MOV, AVI, MKV, MP3, WAV, OGG, FLAC, AAC | Native `<video>` / `<audio>` | — |
 | **ModelViewer** | GLB, glTF, OBJ, STL, FBX | [Babylon.js](https://www.babylonjs.com) | — |
 
 ### Other Viewers
 
 | Viewer | Formats | Powered by | URL Hash |
 |--------|---------|------------|----------|
-| **ArchiveViewer** | ZIP, TAR, GZIP, 7Z, RAR, BZ2 | [zip.js](https://github.com/nicbarker/zip.js) | — |
+| **ArchiveViewer** | ZIP, TAR, GZ, TGZ, 7Z, RAR, BZ2 | [zip.js](https://github.com/nicbarker/zip.js) (streaming + progressive chunking) | — |
 | **RawViewer** | Any (fallback) | Custom hex dump | — |
 
 ### Smart JSON Detection
@@ -166,6 +166,41 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | CodeViewer |
 | Kepler.gl | [Kepler.gl Demo](https://kepler.gl/demo) | CodeViewer |
 
+## Geospatial Pipeline
+
+The TableViewer + GeoParquetMapViewer share a unified query pipeline:
+
+1. **Schema detection** — DuckDB reads Parquet metadata (cheap range requests, no full download)
+2. **Geometry column detection** — scans schema for known geo types (GEOMETRY, WKB_BLOB, BLOB, JSON geo columns)
+3. **CRS detection** — reads GeoParquet `"geo"` KV metadata → native Parquet 2.11 logical_type → fallback WGS84
+4. **CRS reprojection** — `ST_Transform(..., always_xy := true)` for non-WGS84 sources
+5. **WKB extraction** — `ST_AsWKB()` adds a `__wkb` column alongside table data
+6. **GeoArrow rendering** — `buildGeoArrowTables()` splits mixed WKBs by geometry type → one deck.gl layer per type (Point, LineString, Polygon, Multi*)
+
+## URL Sharing
+
+URLs encode the full viewer state for shareable links:
+
+```
+https://walkthru.earth/objex/?url=<storage-url>#<view>
+```
+
+| Hash | View |
+|------|------|
+| `#table` | Table / SQL query |
+| `#map` | Map visualization |
+| `#query` | Custom SQL mode |
+| `#stac` | STAC map viewer |
+| `#inspect` | Zarr variable inspector |
+| `#code` | Code / syntax view |
+| `#maputnik` | Maputnik style editor |
+| `#stac-browser` | STAC Browser |
+| `#kepler` | Kepler.gl map |
+
+## i18n
+
+Supports **English** and **Arabic** with automatic RTL layout. Translation function: `t(key, params?)` with `{param}` placeholder interpolation.
+
 ## Quick Start
 
 ```bash
@@ -189,23 +224,25 @@ src/
 ├── routes/              # Single-page app (SPA)
 ├── lib/
 │   ├── components/
-│   │   ├── viewers/     # 20+ file-type viewers
+│   │   ├── viewers/     # 15+ file-type viewers
 │   │   ├── browser/     # File tree, breadcrumbs, upload
 │   │   ├── layout/      # Sidebar, tabs, status bar
 │   │   ├── editor/      # CodeMirror SQL editor
+│   │   ├── map/         # Shared map components
 │   │   └── ui/          # Headless primitives (bits-ui)
 │   ├── stores/          # Svelte 5 rune stores
-│   ├── storage/         # Cloud adapters (S3, Azure)
+│   ├── storage/         # Cloud adapters (S3, Azure, URL)
 │   ├── query/           # DuckDB-WASM engine
-│   ├── utils/           # WKB parser, URL builder, etc.
+│   ├── utils/           # WKB parser, GeoArrow, URL state, archive streaming
+│   ├── i18n/            # Translations (en, ar)
 │   └── file-icons/      # Extension → viewer/icon registry
 ```
 
 ## Storage Providers
 
-Works with any S3-compatible API: **AWS S3**, **Cloudflare R2**, **Google GCS**, **Azure Blob**, **MinIO**, **Wasabi**, **DigitalOcean Spaces**, **Storj**.
+Works with any S3-compatible API: **AWS S3**, **Cloudflare R2**, **Google GCS**, **Azure Blob**, **MinIO**, **Wasabi**, **DigitalOcean Spaces**, **Storj**. Also supports direct HTTPS URLs (no auth).
 
-Credentials stay in-memory (never persisted to disk). Connections config (without secrets) saved to localStorage.
+Credentials stay in-memory (never persisted to disk). Connection configs (without secrets) saved to localStorage.
 
 ## License
 

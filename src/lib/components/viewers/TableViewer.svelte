@@ -12,6 +12,7 @@ import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildDuckDbUrl, buildStorageUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
@@ -154,6 +155,21 @@ function extractMapData(queryRows: Record<string, any>[]): MapQueryResult | null
 
 // Track last loaded tab to prevent duplicate loads
 let lastLoadedTabId = '';
+
+// Register cleanup so tab store can free heavy data on close
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, () => {
+		loadGeneration++;
+		rows = [];
+		schema = [];
+		columns = [];
+		mapData = null;
+		geoCol = null;
+		error = null;
+	});
+	return unregister;
+});
 
 $effect(() => {
 	if (!tab) return;

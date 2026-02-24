@@ -74,17 +74,8 @@ function createSettingsStore() {
 		persist();
 	}
 
-	// Listen for system preference changes when theme is 'system'
-	if (typeof window !== 'undefined') {
-		window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-			if (theme === 'system') {
-				resolved = resolveTheme('system');
-				if (typeof document !== 'undefined') {
-					document.documentElement.classList.toggle('dark', resolved === 'dark');
-				}
-			}
-		});
-	}
+	// System theme changes are handled by the $effect in +layout.svelte
+	// which properly cleans up the listener. No module-level listener needed.
 
 	return {
 		get theme() {

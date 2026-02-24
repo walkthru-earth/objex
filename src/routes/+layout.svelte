@@ -52,6 +52,6 @@ $effect(() => {
 
 <svelte:head><link rel="icon" type="image/svg+xml" href="{base}/favicon.svg" /></svelte:head>
 
-<div class="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+<div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
 	{@render children()}
 </div>

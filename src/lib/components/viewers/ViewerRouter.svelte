@@ -1,36 +1,16 @@
 <script lang="ts">
 import { getViewerKind } from '$lib/file-icons/index.js';
 import type { Tab } from '$lib/types';
-import { updateUrlView } from '$lib/utils/url-state.js';
-import ArchiveViewer from './ArchiveViewer.svelte';
 import CodeViewer from './CodeViewer.svelte';
-
-import DatabaseViewer from './DatabaseViewer.svelte';
-import FlatGeobufViewer from './FlatGeobufViewer.svelte';
 import ImageViewer from './ImageViewer.svelte';
-import MarkdownViewer from './MarkdownViewer.svelte';
 import MediaViewer from './MediaViewer.svelte';
-import ModelViewer from './ModelViewer.svelte';
-import PdfViewer from './PdfViewer.svelte';
-import PmtilesViewer from './PmtilesViewer.svelte';
 import RawViewer from './RawViewer.svelte';
 import TableViewer from './TableViewer.svelte';
-import ZarrViewer from './ZarrViewer.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
 const ext = $derived(tab?.extension ?? '');
 const viewerKind = $derived(getViewerKind(ext));
-
-// Clear stale URL hash when switching tabs (skip initial mount to preserve shareable links)
-let prevTabId = '';
-$effect(() => {
-	const id = tab?.id ?? '';
-	if (prevTabId && prevTabId !== id) {
-		updateUrlView('');
-	}
-	prevTabId = id;
-});
 </script>
 
 {#if viewerKind === 'table'}
@@ -40,7 +20,9 @@ $effect(() => {
 {:else if viewerKind === 'video' || viewerKind === 'audio'}
 	<MediaViewer {tab} />
 {:else if viewerKind === 'markdown'}
-	<MarkdownViewer {tab} />
+	{#await import('./MarkdownViewer.svelte') then { default: MarkdownViewer }}
+		<MarkdownViewer {tab} />
+	{/await}
 {:else if viewerKind === 'code'}
 	<CodeViewer {tab} />
 {:else if viewerKind === 'cog'}
@@ -48,19 +30,33 @@ $effect(() => {
 		<CogViewer {tab} />
 	{/await}
 {:else if viewerKind === 'pmtiles'}
-	<PmtilesViewer {tab} />
+	{#await import('./PmtilesViewer.svelte') then { default: PmtilesViewer }}
+		<PmtilesViewer {tab} />
+	{/await}
 {:else if viewerKind === 'flatgeobuf'}
-	<FlatGeobufViewer {tab} />
+	{#await import('./FlatGeobufViewer.svelte') then { default: FlatGeobufViewer }}
+		<FlatGeobufViewer {tab} />
+	{/await}
 {:else if viewerKind === 'pdf'}
-	<PdfViewer {tab} />
+	{#await import('./PdfViewer.svelte') then { default: PdfViewer }}
+		<PdfViewer {tab} />
+	{/await}
 {:else if viewerKind === '3d'}
-	<ModelViewer {tab} />
+	{#await import('./ModelViewer.svelte') then { default: ModelViewer }}
+		<ModelViewer {tab} />
+	{/await}
 {:else if viewerKind === 'archive'}
-	<ArchiveViewer {tab} />
+	{#await import('./ArchiveViewer.svelte') then { default: ArchiveViewer }}
+		<ArchiveViewer {tab} />
+	{/await}
 {:else if viewerKind === 'database'}
-	<DatabaseViewer {tab} />
+	{#await import('./DatabaseViewer.svelte') then { default: DatabaseViewer }}
+		<DatabaseViewer {tab} />
+	{/await}
 {:else if viewerKind === 'zarr'}
-	<ZarrViewer {tab} />
+	{#await import('./ZarrViewer.svelte') then { default: ZarrViewer }}
+		<ZarrViewer {tab} />
+	{/await}
 {:else}
 	<RawViewer {tab} />
 {/if}

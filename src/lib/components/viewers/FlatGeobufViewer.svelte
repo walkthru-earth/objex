@@ -9,6 +9,7 @@ import proj4 from 'proj4';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { geojsonFillColor, geojsonLineColor, loadDeckModules } from '$lib/utils/deck.js';
 import { buildHttpsUrl } from '$lib/utils/url.js';
@@ -201,6 +202,11 @@ $effect(() => {
 	});
 });
 
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
 onDestroy(cleanup);
 
 async function loadFlatGeobuf() {

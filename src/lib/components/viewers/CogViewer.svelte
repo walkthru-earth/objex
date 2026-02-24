@@ -7,6 +7,7 @@ import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
@@ -722,7 +723,7 @@ async function buildCustomCogLayer(
 
 // ─── Cleanup ────────────────────────────────────────────────────
 
-onDestroy(() => {
+function cleanup() {
 	abortController.abort();
 	cleanupNativeBitmap();
 	if (mapRef && overlayRef) {
@@ -734,7 +735,14 @@ onDestroy(() => {
 	}
 	mapRef = null;
 	overlayRef = null;
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
 });
+onDestroy(cleanup);
 </script>
 
 <div class="relative flex h-full overflow-hidden">

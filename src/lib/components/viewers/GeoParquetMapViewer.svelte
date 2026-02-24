@@ -6,6 +6,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 import { settings } from '$lib/stores/settings.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
 import { buildGeoArrowTables, type GeoArrowResult } from '$lib/utils/geoarrow.js';
@@ -45,7 +46,7 @@ $effect(() => {
 	loadGeoData();
 });
 
-onDestroy(() => {
+function cleanup() {
 	if (overlayRef && mapRef) {
 		try {
 			mapRef.removeControl(overlayRef);
@@ -56,7 +57,14 @@ onDestroy(() => {
 	overlayRef = null;
 	mapRef = null;
 	geoArrowState = null;
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
 });
+onDestroy(cleanup);
 
 async function loadGeoData() {
 	loading = true;
