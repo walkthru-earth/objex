@@ -228,14 +228,19 @@ function createConnectionsStore() {
 			}
 		},
 
-		/** Reactive counter — increments each time the "new connection" dialog is requested. */
-		get dialogRequest() {
-			return dialogRequest;
+		/** True when a dialog open has been requested and not yet consumed. */
+		get dialogRequested() {
+			return dialogRequest > 0;
 		},
 
 		/** Request opening the new-connection dialog from anywhere. */
 		requestDialog() {
 			dialogRequest++;
+		},
+
+		/** Mark the dialog request as consumed. */
+		clearDialogRequest() {
+			dialogRequest = 0;
 		},
 
 		/**

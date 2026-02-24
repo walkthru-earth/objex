@@ -49,7 +49,8 @@ $effect(() => {
 
 // Allow other components to request opening the new-connection dialog
 $effect(() => {
-	if (connections.dialogRequest > 0) {
+	if (connections.dialogRequested) {
+		connections.clearDialogRequest();
 		handleAddConnection();
 	}
 });

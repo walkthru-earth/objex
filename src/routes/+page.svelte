@@ -143,7 +143,10 @@ const aliveTabs = $derived(tabs.aliveTabs);
 							</div>
 							<div class="mt-4 flex items-center gap-2">
 								<button
-									onclick={() => connections.requestDialog()}
+									onclick={() => {
+									if (!isDesktop) mobileSheetOpen = true;
+									connections.requestDialog();
+								}}
 									class="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
 								>
 									<PlusIcon class="size-3" />
