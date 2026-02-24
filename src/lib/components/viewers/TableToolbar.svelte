@@ -133,6 +133,36 @@ function handleJumpKeydown(e: KeyboardEvent) {
 	</span>
 
 	<div class="ms-auto flex items-center gap-1 sm:gap-2">
+		<!-- ===== View mode buttons (all screen sizes) ===== -->
+		{#if hasGeo && onToggleView}
+			<Button
+				variant={viewMode === 'map' ? 'default' : 'outline'}
+				size="sm"
+				class="h-7 gap-1 px-2 text-xs {viewMode !== 'map' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
+				onclick={onToggleView}
+			>
+				{#if viewMode === 'table' || viewMode === 'stac'}
+					<MapIcon class="size-3" />
+					{t('toolbar.map')}
+				{:else}
+					<TableIcon class="size-3" />
+					{t('toolbar.table')}
+				{/if}
+			</Button>
+		{/if}
+
+		{#if isStac && onToggleStac}
+			<Button
+				variant={viewMode === 'stac' ? 'default' : 'outline'}
+				size="sm"
+				class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
+				onclick={onToggleStac}
+			>
+				<MapIcon class="size-3" />
+				{t('toolbar.stacMap')}
+			</Button>
+		{/if}
+
 		<!-- ===== Desktop-only controls (hidden on mobile) ===== -->
 		<div class="hidden items-center gap-1 sm:flex">
 			<!-- Copy URL dropdown -->
@@ -168,40 +198,6 @@ function handleJumpKeydown(e: KeyboardEvent) {
 			</DropdownMenu.Root>
 
 			<Separator orientation="vertical" class="!h-4" />
-
-			<!-- Viewer mode buttons — segmented style -->
-			{#if hasGeo && onToggleView}
-				<Button
-					variant={viewMode === 'map' ? 'default' : 'outline'}
-					size="sm"
-					class="h-7 gap-1 px-2 text-xs {viewMode !== 'map' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
-					onclick={onToggleView}
-				>
-					{#if viewMode === 'table' || viewMode === 'stac'}
-						<MapIcon class="size-3" />
-						{t('toolbar.map')}
-					{:else}
-						<TableIcon class="size-3" />
-						{t('toolbar.table')}
-					{/if}
-				</Button>
-			{/if}
-
-			{#if isStac && onToggleStac}
-				<Button
-					variant={viewMode === 'stac' ? 'default' : 'outline'}
-					size="sm"
-					class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
-					onclick={onToggleStac}
-				>
-					<MapIcon class="size-3" />
-					{t('toolbar.stacMap')}
-				</Button>
-			{/if}
-
-			{#if (hasGeo && onToggleView) || (isStac && onToggleStac)}
-				<Separator orientation="vertical" class="!h-4" />
-			{/if}
 
 			<!-- History toggle — hidden in map mode -->
 			{#if onToggleHistory && viewMode === 'table'}
@@ -352,20 +348,6 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					{/if}
 
 					<DropdownMenu.Separator />
-
-					<!-- Map/Table toggle -->
-					{#if hasGeo && onToggleView}
-						<DropdownMenu.Item onclick={onToggleView}>
-							{viewMode === 'table' || viewMode === 'stac' ? t('toolbar.switchToMap') : t('toolbar.switchToTable')}
-						</DropdownMenu.Item>
-					{/if}
-
-					<!-- STAC Map toggle -->
-					{#if isStac && onToggleStac}
-						<DropdownMenu.Item onclick={onToggleStac}>
-							{t('toolbar.stacMap')}
-						</DropdownMenu.Item>
-					{/if}
 
 					<!-- History toggle — table mode only -->
 					{#if onToggleHistory && viewMode === 'table'}
