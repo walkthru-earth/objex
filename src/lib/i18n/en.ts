@@ -350,12 +350,13 @@ export const en: Record<string, string> = {
 	'mapInfo.bands': 'Bands',
 
 	// Page
-	'page.selectFile': 'Select a file',
-	'page.selectFileDescription': 'Browse the file tree on the left and click a file to open it.',
-	'page.noFileOpen': 'No file open',
-	'page.noFileDescription':
-		'Open a Parquet file from the sidebar, add a cloud storage connection, or drag and drop a file to get started.',
-	'page.supportsFormats': 'Supports Parquet, CSV, and Arrow IPC formats',
+	'page.selectFile': 'Pick something',
+	'page.selectFileDescription': 'Browse the file tree and click a file to peek inside.',
+	'page.noFileOpen': 'Nothing here yet',
+	'page.noFileDescription': 'Add a bucket from the sidebar to start exploring.',
+	'page.supportsFormats':
+		'Parquet · Cloud Optimized GeoTIFF · FlatGeobuf · PMTiles · CSV · PDF · 3D and more',
+	'page.tryExample': 'Try an example',
 
 	// Mobile
 	'mobile.openSidebar': 'Open file browser',

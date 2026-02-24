@@ -347,12 +347,13 @@ export const ar: Record<string, string> = {
 	'mapInfo.bands': 'النطاقات',
 
 	// Page
-	'page.selectFile': 'اختر ملفاً',
-	'page.selectFileDescription': 'تصفح شجرة الملفات على اليمين وانقر على ملف لفتحه.',
-	'page.noFileOpen': 'لا يوجد ملف مفتوح',
-	'page.noFileDescription':
-		'افتح ملف Parquet من الشريط الجانبي، أضف اتصال تخزين سحابي، أو اسحب ملفاً وأفلته للبدء.',
-	'page.supportsFormats': 'يدعم تنسيقات Parquet وCSV وArrow IPC',
+	'page.selectFile': 'اختر شيئاً',
+	'page.selectFileDescription': 'تصفح شجرة الملفات وانقر على ملف لإلقاء نظرة.',
+	'page.noFileOpen': 'لا شيء هنا بعد',
+	'page.noFileDescription': 'أضف حاوية من الشريط الجانبي لبدء الاستكشاف.',
+	'page.supportsFormats':
+		'Parquet · Cloud Optimized GeoTIFF · FlatGeobuf · PMTiles · CSV · PDF · 3D والمزيد',
+	'page.tryExample': 'جرّب مثالاً',
 
 	// Mobile
 	'mobile.openSidebar': 'فتح متصفح الملفات',

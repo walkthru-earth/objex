@@ -1,5 +1,7 @@
 <script lang="ts">
-import DatabaseIcon from '@lucide/svelte/icons/database';
+import CloudIcon from '@lucide/svelte/icons/cloud';
+import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+import LayersIcon from '@lucide/svelte/icons/layers';
 import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
@@ -23,33 +25,41 @@ import { getUrlPrefix, updateUrlView } from '$lib/utils/url-state.js';
 
 const initialFilePath = getUrlPrefix();
 
+function openUrlTab(rawUrl: string) {
+	const fileName = rawUrl.split('/').pop()?.split('?')[0] || '';
+	const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+	if (!ext) return;
+	const info = getFileTypeInfo(ext);
+	if (info.viewer === 'raw') return;
+	const tabId = `url:${rawUrl}`;
+	tabs.open({
+		id: tabId,
+		name: fileName,
+		path: rawUrl,
+		source: 'url',
+		extension: ext
+	});
+	fetch(rawUrl, { method: 'HEAD' })
+		.then((res) => {
+			const cl = res.headers.get('content-length');
+			if (cl) tabs.update(tabId, { size: Number(cl) });
+		})
+		.catch(() => {});
+}
+
 // Open direct file URL tab eagerly — must run before layout renders
 // so it works on mobile where Sidebar is inside a Sheet (not mounted).
 {
 	const rawUrl = new URL(window.location.href).searchParams.get('url');
-	if (rawUrl) {
-		const fileName = rawUrl.split('/').pop()?.split('?')[0] || '';
-		const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
-		if (ext) {
-			const info = getFileTypeInfo(ext);
-			if (info.viewer !== 'raw') {
-				const tabId = `url:${rawUrl}`;
-				tabs.open({
-					id: tabId,
-					name: fileName,
-					path: rawUrl,
-					source: 'url',
-					extension: ext
-				});
-				fetch(rawUrl, { method: 'HEAD' })
-					.then((res) => {
-						const cl = res.headers.get('content-length');
-						if (cl) tabs.update(tabId, { size: Number(cl) });
-					})
-					.catch(() => {});
-			}
-		}
-	}
+	if (rawUrl) openUrlTab(rawUrl);
+}
+
+const EXAMPLE_URL =
+	'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/walkthru-earth/opensensor-space/share/suitability_analysis_of_aq.parquet';
+
+function handleTryExample(e: MouseEvent) {
+	e.preventDefault();
+	openUrlTab(EXAMPLE_URL);
 }
 
 let hasActiveTab = $derived(tabs.active !== null && tabs.active !== undefined);
@@ -111,10 +121,10 @@ const aliveTabs = $derived(tabs.aliveTabs);
 						{#if hasBrowserConnection}
 							<SearchIcon class="size-7 text-muted-foreground" />
 						{:else}
-							<DatabaseIcon class="size-8 text-muted-foreground" />
+							<CloudIcon class="size-8 text-muted-foreground" />
 						{/if}
 					</div>
-					<div class="flex flex-col gap-1">
+					<div class="flex flex-col items-center gap-1">
 						{#if hasBrowserConnection}
 							<h2 class="text-base font-semibold">{t('page.selectFile')}</h2>
 							<p class="max-w-xs text-sm text-muted-foreground">
@@ -126,9 +136,16 @@ const aliveTabs = $derived(tabs.aliveTabs);
 								{t('page.noFileDescription')}
 							</p>
 							<div class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-								<SearchIcon class="size-3.5" />
+								<LayersIcon class="size-3.5" />
 								<span>{t('page.supportsFormats')}</span>
 							</div>
+							<button
+								onclick={handleTryExample}
+								class="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md border border-primary/30 px-4 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+							>
+								<ExternalLinkIcon class="size-3" />
+								{t('page.tryExample')}
+							</button>
 						{/if}
 					</div>
 				</div>
