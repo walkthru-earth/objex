@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
@@ -67,6 +68,11 @@ function cleanup() {
 	mediaSrc = null;
 }
 
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
 onDestroy(cleanup);
 </script>
 

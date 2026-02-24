@@ -430,10 +430,6 @@ async function streamFeatures(limit?: number) {
 				hitLimit = true;
 				break;
 			}
-			if (features.length >= settings.featureLimit) {
-				hitLimit = true;
-				break;
-			}
 		}
 	} finally {
 		// Force-close the HTTP connection. break from for-await doesn't release

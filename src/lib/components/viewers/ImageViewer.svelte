@@ -11,6 +11,7 @@ import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
@@ -143,6 +144,11 @@ function cleanup() {
 	imgSrc = null;
 }
 
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
 onDestroy(cleanup);
 </script>
 

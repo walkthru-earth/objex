@@ -12,6 +12,7 @@ import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { Separator } from '$lib/components/ui/separator/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
@@ -148,10 +149,18 @@ function zoomOut() {
 	scale = Math.max(scale - 0.25, 0.5);
 }
 
-onDestroy(() => {
+function cleanup() {
 	cancelActiveTask();
 	pdfDoc?.destroy();
+	pdfDoc = null;
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
 });
+onDestroy(cleanup);
 </script>
 
 <div class="flex h-full flex-col">

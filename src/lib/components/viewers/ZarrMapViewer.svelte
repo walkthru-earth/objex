@@ -2,6 +2,7 @@
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
@@ -207,7 +208,7 @@ async function changeVariable() {
 	await addZarrLayer(mapRef);
 }
 
-onDestroy(() => {
+function cleanup() {
 	try {
 		if (zarrLayer && mapRef?.getLayer('zarr-data')) {
 			mapRef.removeLayer('zarr-data');
@@ -217,7 +218,14 @@ onDestroy(() => {
 	}
 	zarrLayer = null;
 	mapRef = null;
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
 });
+onDestroy(cleanup);
 </script>
 
 <div class="flex h-full w-full flex-col overflow-hidden">

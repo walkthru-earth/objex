@@ -23,7 +23,14 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
-import { getUrlPrefix, updateUrlView } from '$lib/utils/url-state.js';
+import {
+	clearUrlState,
+	getUrlPrefix,
+	getUrlView,
+	setRawUrlParam,
+	syncUrlParam,
+	updateUrlView
+} from '$lib/utils/url-state.js';
 
 const initialFilePath = getUrlPrefix();
 
@@ -88,21 +95,61 @@ $effect(() => {
 	}
 });
 
-// Clear URL hash when switching between tabs (moved from ViewerRouter
-// since keep-alive means ViewerRouter instances no longer see tab changes).
+// Keep the full URL (?url= and #hash) in sync with the active tab.
+// Save/restore view mode per tab so switching back preserves the view.
 let prevActiveTabId = '';
+const tabViewModes = new Map<string, string>();
 $effect(() => {
-	const id = tabs.activeTabId ?? '';
+	const tab = tabs.active;
+	const id = tab?.id ?? '';
+
 	if (prevActiveTabId && prevActiveTabId !== id) {
-		updateUrlView('');
+		// Save the current view mode for the tab we're leaving
+		tabViewModes.set(prevActiveTabId, getUrlView());
 	}
+
+	if (!tab) {
+		clearUrlState();
+	} else {
+		// Restore view mode hash for the tab we're switching to
+		updateUrlView(tabViewModes.get(id) ?? '');
+
+		// Sync ?url= param
+		if (tab.source === 'url') {
+			setRawUrlParam(tab.path);
+		} else if (tab.connectionId) {
+			const conn = connections.getById(tab.connectionId);
+			if (conn) syncUrlParam(conn, tab.path);
+		}
+	}
+
 	prevActiveTabId = id;
 });
 
 // Keep-alive tabs: only the most recently used tabs stay mounted.
 // Switching between alive tabs is instant (no re-loading).
 const aliveTabs = $derived(tabs.aliveTabs);
+
+// Dynamic page title based on active tab
+const pageTitle = $derived.by(() => {
+	const tab = tabs.active;
+	if (!tab) return 'objex — Cloud Storage Explorer';
+	const info = getFileTypeInfo(tab.extension);
+	return `${tab.name} — ${info.label} | objex`;
+});
+const pageDescription = $derived.by(() => {
+	const tab = tabs.active;
+	if (!tab)
+		return 'Browse, query, and visualize Parquet, GeoTIFF, PMTiles, CSV, PDF, 3D models and more in S3, GCS, Azure — directly in your browser.';
+	const info = getFileTypeInfo(tab.extension);
+	return `Viewing ${tab.name} (${info.label}) in objex cloud storage explorer`;
+});
 </script>
+
+<svelte:head>
+	<title>{pageTitle}</title>
+	<meta name="description" content={pageDescription} />
+</svelte:head>
 
 {#snippet viewerContent()}
 	<div class="relative flex-1 overflow-auto">

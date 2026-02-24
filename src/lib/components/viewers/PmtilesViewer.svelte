@@ -1,8 +1,9 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import {
 	buildPmtilesLayers,
@@ -29,6 +30,21 @@ let pmtilesUrl = $state('');
 const protocol = getPmtilesProtocol();
 maplibreModule.addProtocol('pmtiles', protocol.tile);
 
+let mapRef: maplibregl.Map | null = null;
+
+function cleanup() {
+	mapRef = null;
+	metadata = null;
+	pmtilesUrl = '';
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
+
 $effect(() => {
 	if (!tab) return;
 	const _tabId = tab.id;
@@ -53,6 +69,7 @@ async function loadMetadata() {
 }
 
 function onMapReady(map: maplibregl.Map) {
+	mapRef = map;
 	if (!metadata || !pmtilesUrl) return;
 
 	const sourceId = 'pmtiles-source';

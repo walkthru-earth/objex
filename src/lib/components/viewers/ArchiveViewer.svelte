@@ -5,6 +5,7 @@ import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import {
 	type ArchiveEntry,
@@ -68,11 +69,19 @@ $effect(() => {
 	});
 });
 
-onDestroy(() => {
+function cleanup() {
 	abortController?.abort();
 	entryList = [];
 	zipEntryMap.clear();
+	tarBuffer = null;
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
 });
+onDestroy(cleanup);
 
 // ── Navigation ─────────────────────────────────────────────────────────
 

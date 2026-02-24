@@ -1,10 +1,11 @@
 <script lang="ts">
-import { tick } from 'svelte';
+import { onDestroy, tick } from 'svelte';
 import SqlResultBlock from '$lib/components/editor/SqlResultBlock.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { EvidenceContext } from '$lib/utils/evidence-context';
 import { detectRTL, processDirection, renderMarkdown } from '$lib/utils/markdown';
@@ -27,6 +28,19 @@ let sqlResults = $state<
 let hasSqlBlocks = $state(false);
 let contentDir = $state<'ltr' | 'rtl'>('ltr');
 let contentEl: HTMLElement | undefined = $state();
+
+function cleanup() {
+	html = '';
+	rawMarkdown = '';
+	sqlResults = new Map();
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
 
 $effect(() => {
 	if (!tab) return;

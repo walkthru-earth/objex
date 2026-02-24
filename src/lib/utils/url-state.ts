@@ -37,6 +37,19 @@ export function buildUrlParam(conn: Connection, prefix?: string): string {
 }
 
 /**
+ * Set the ?url= param to a raw URL string (for direct URL tabs).
+ */
+export function setRawUrlParam(rawUrl: string) {
+	try {
+		const url = new URL(window.location.href);
+		url.searchParams.set('url', rawUrl);
+		replaceState(url.pathname + url.search + url.hash, {});
+	} catch {
+		/* ignore */
+	}
+}
+
+/**
  * Sync the ?url= param in the browser URL.
  */
 export function syncUrlParam(conn: Connection, prefix?: string) {
