@@ -353,6 +353,7 @@ export const ar: Record<string, string> = {
 	'page.noFileDescription': 'أضف حاوية من الشريط الجانبي لبدء الاستكشاف.',
 	'page.supportsFormats':
 		'Parquet · Cloud Optimized GeoTIFF · FlatGeobuf · PMTiles · CSV · PDF · 3D والمزيد',
+	'page.addConnection': 'أضف اتصال',
 	'page.tryExample': 'جرّب مثالاً',
 
 	// Mobile

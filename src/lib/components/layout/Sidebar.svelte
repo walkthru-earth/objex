@@ -47,6 +47,13 @@ $effect(() => {
 	});
 });
 
+// Allow other components to request opening the new-connection dialog
+$effect(() => {
+	if (connections.dialogRequest > 0) {
+		handleAddConnection();
+	}
+});
+
 async function handleAutoDetection() {
 	// Direct file URLs (e.g. ?url=https://...file.parquet) are opened eagerly
 	// in +page.svelte so they work on mobile. Skip if tab already exists.

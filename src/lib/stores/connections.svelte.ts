@@ -37,6 +37,7 @@ function persistToLocalStorage(connections: Connection[]): void {
 function createConnectionsStore() {
 	let connections = $state<Connection[]>([]);
 	let loaded = $state(false);
+	let dialogRequest = $state(0);
 
 	return {
 		get items() {
@@ -225,6 +226,16 @@ function createConnectionsStore() {
 					credentialStore.remove(tempId);
 				}
 			}
+		},
+
+		/** Reactive counter — increments each time the "new connection" dialog is requested. */
+		get dialogRequest() {
+			return dialogRequest;
+		},
+
+		/** Request opening the new-connection dialog from anywhere. */
+		requestDialog() {
+			dialogRequest++;
 		},
 
 		/**

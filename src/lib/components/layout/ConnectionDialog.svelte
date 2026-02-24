@@ -339,7 +339,7 @@ function handleCancel() {
 					onclick={() => { anonymous = !anonymous; }}
 				>
 					<span
-						class="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform {anonymous ? 'translate-x-4' : 'translate-x-0'}"
+						class="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform {anonymous ? 'ltr:translate-x-4 rtl:-translate-x-4' : 'translate-x-0'}"
 					></span>
 				</button>
 				<span class="text-sm font-medium">{t('connection.anonymous')}</span>

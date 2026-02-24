@@ -1,5 +1,6 @@
 <script lang="ts">
 import { ScrollArea as ScrollAreaPrimitive } from 'bits-ui';
+import { settings } from '$lib/stores/settings.svelte.js';
 import { cn, type WithoutChild } from '$lib/utils.js';
 import { Scrollbar } from './index.js';
 
@@ -18,10 +19,13 @@ let {
 	scrollbarYClasses?: string | undefined;
 	viewportRef?: HTMLElement | null;
 } = $props();
+
+const dir = $derived<'ltr' | 'rtl'>(settings.locale === 'ar' ? 'rtl' : 'ltr');
 </script>
 
 <ScrollAreaPrimitive.Root
 	bind:ref
+	{dir}
 	data-slot="scroll-area"
 	class={cn("relative", className)}
 	{...restProps}

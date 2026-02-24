@@ -51,8 +51,13 @@ function createSettingsStore() {
 	let featureLimit = $state<number>(initial.featureLimit);
 	let resolved = $state<'light' | 'dark'>(resolveTheme(initial.theme));
 
-	// Sync i18n module with persisted locale
+	// Sync i18n module and document dir with persisted locale
 	setLocale(initial.locale);
+	if (typeof document !== 'undefined') {
+		const dir = initial.locale === 'ar' ? 'rtl' : 'ltr';
+		document.documentElement.dir = dir;
+		document.documentElement.lang = initial.locale;
+	}
 
 	function persist() {
 		persistSettings({ theme, locale, featureLimit });
@@ -72,6 +77,12 @@ function createSettingsStore() {
 		locale = l;
 		setLocale(l);
 		persist();
+
+		if (typeof document !== 'undefined') {
+			const dir = l === 'ar' ? 'rtl' : 'ltr';
+			document.documentElement.dir = dir;
+			document.documentElement.lang = l;
+		}
 	}
 
 	// System theme changes are handled by the $effect in +layout.svelte

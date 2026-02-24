@@ -3,6 +3,7 @@ import CloudIcon from '@lucide/svelte/icons/cloud';
 import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 import LayersIcon from '@lucide/svelte/icons/layers';
 import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+import PlusIcon from '@lucide/svelte/icons/plus';
 import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
 import FileTreeSidebar from '$lib/components/browser/FileTreeSidebar.svelte';
@@ -20,6 +21,7 @@ import ViewerRouter from '$lib/components/viewers/ViewerRouter.svelte';
 import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
+import { connections } from '$lib/stores/connections.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
 import { getUrlPrefix, updateUrlView } from '$lib/utils/url-state.js';
 
@@ -139,13 +141,22 @@ const aliveTabs = $derived(tabs.aliveTabs);
 								<LayersIcon class="size-3.5" />
 								<span>{t('page.supportsFormats')}</span>
 							</div>
-							<button
-								onclick={handleTryExample}
-								class="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md border border-primary/30 px-4 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
-							>
-								<ExternalLinkIcon class="size-3" />
-								{t('page.tryExample')}
-							</button>
+							<div class="mt-4 flex items-center gap-2">
+								<button
+									onclick={() => connections.requestDialog()}
+									class="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+								>
+									<PlusIcon class="size-3" />
+									{t('page.addConnection')}
+								</button>
+								<button
+									onclick={handleTryExample}
+									class="inline-flex items-center justify-center gap-1.5 rounded-md border border-primary/30 px-4 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+								>
+									<ExternalLinkIcon class="size-3" />
+									{t('page.tryExample')}
+								</button>
+							</div>
 						{/if}
 					</div>
 				</div>

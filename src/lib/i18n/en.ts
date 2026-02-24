@@ -356,6 +356,7 @@ export const en: Record<string, string> = {
 	'page.noFileDescription': 'Add a bucket from the sidebar to start exploring.',
 	'page.supportsFormats':
 		'Parquet · Cloud Optimized GeoTIFF · FlatGeobuf · PMTiles · CSV · PDF · 3D and more',
+	'page.addConnection': 'Add connection',
 	'page.tryExample': 'Try an example',
 
 	// Mobile
