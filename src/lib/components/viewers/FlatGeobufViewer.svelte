@@ -1,4 +1,5 @@
 <script lang="ts">
+import LocateIcon from '@lucide/svelte/icons/locate';
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import { magicbytes } from 'flatgeobuf/lib/mjs/constants.js';
 import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featurecollection.js';
@@ -31,10 +32,14 @@ let showInfo = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let hasMore = $state(false);
 
+let firstFeatureCoord = $state<[number, number] | null>(null);
+
 let deckModules: { MapboxOverlay: any; GeoJsonLayer: any } | null = null;
 let overlay: any = null;
 let mapRef: maplibregl.Map | null = null;
 let features: GeoJSON.Feature[] = [];
+/** Monotonic counter — bump to signal deck.gl that data changed (avoids spreading the features array). */
+let dataVersion = 0;
 let abortController: AbortController | null = null;
 let activeStreamCancel: (() => void) | null = null;
 let resolveMapReady: (() => void) | null = null;
@@ -168,10 +173,23 @@ function populateHeaderInfo(header: HeaderMeta) {
 	}
 }
 
+/** Drill into nested coordinate arrays to find the first [lng, lat] pair. */
+function extractFirstCoord(coords: any): [number, number] | null {
+	if (!Array.isArray(coords) || coords.length === 0) return null;
+	if (typeof coords[0] === 'number') return [coords[0] as number, coords[1] as number];
+	return extractFirstCoord(coords[0]);
+}
+
+function flyToFirstFeature() {
+	if (!mapRef || !firstFeatureCoord) return;
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+}
+
 function cleanup() {
 	resolveMapReady?.();
 	resolveMapReady = null;
 	hasMore = false;
+	firstFeatureCoord = null;
 	// Force-close any active stream + HTTP connection
 	activeStreamCancel?.();
 	activeStreamCancel = null;
@@ -189,6 +207,7 @@ function cleanup() {
 	overlay = null;
 	mapRef = null;
 	features = [];
+	dataVersion = 0;
 	storedHeader = null;
 	storedFeatureOffset = 0;
 	proj4Forward = null;
@@ -409,6 +428,10 @@ async function streamFeatures(limit?: number) {
 			if (features.length === 0 && f.geometry && headerInfo?.geometryType === 'Unknown') {
 				headerInfo = { ...headerInfo, geometryType: f.geometry.type };
 			}
+			// Capture first feature coordinate for fly-to button
+			if (features.length === 0 && f.geometry) {
+				firstFeatureCoord = extractFirstCoord((f.geometry as any).coordinates);
+			}
 			features.push(f);
 			batchCount++;
 
@@ -542,12 +565,17 @@ function createCompositeStream(
 function updateLayer() {
 	if (!overlay || !deckModules) return;
 
+	// Bump version so deck.gl sees a new data identity without copying the array.
+	dataVersion++;
+	const fc = { type: 'FeatureCollection' as const, features, _v: dataVersion };
+
 	const { GeoJsonLayer } = deckModules;
 	overlay.setProps({
 		layers: [
 			new GeoJsonLayer({
 				id: 'flatgeobuf-data',
-				data: { type: 'FeatureCollection', features: [...features] },
+				data: fc,
+				dataComparator: (a: any, b: any) => a._v === b._v,
 				pickable: true,
 				stroked: true,
 				filled: true,
@@ -603,21 +631,32 @@ function onMapReady(map: maplibregl.Map) {
 			<MapContainer {onMapReady} {bounds} />
 		</div>
 
-		<!-- Floating feature count badge + load-all button -->
+		<!-- Floating feature count badge + fly-to + load-all button -->
 		<div class="absolute left-2 top-2 z-10 flex flex-col gap-1">
-			<div
-				class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-			>
-				{#if streaming}
-					<span class="animate-pulse">
-						{featureCount.toLocaleString()} features...
-					</span>
-				{:else if featureCount > 0}
-					{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= settings.featureLimit}{' '}
-						<span class="text-amber-300">
-							of {totalFeatures.toLocaleString()} (limit)
+			<div class="flex items-center gap-1">
+				<div
+					class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+				>
+					{#if streaming}
+						<span class="animate-pulse">
+							{featureCount.toLocaleString()} features...
 						</span>
+					{:else if featureCount > 0}
+						{featureCount.toLocaleString()} features{#if totalFeatures && featureCount >= settings.featureLimit}{' '}
+							<span class="text-amber-300">
+								of {totalFeatures.toLocaleString()} (limit)
+							</span>
+						{/if}
 					{/if}
+				</div>
+				{#if firstFeatureCoord && !streaming}
+					<button
+						class="rounded bg-card/80 p-1.5 text-card-foreground backdrop-blur-sm hover:bg-card"
+						onclick={flyToFirstFeature}
+						title={t('map.flyToFirst')}
+					>
+						<LocateIcon class="size-3.5" />
+					</button>
 				{/if}
 			</div>
 			{#if hasMore && !streaming}
