@@ -57,6 +57,10 @@ const viewerKind = $derived(getViewerKind(ext));
 	{#await import('./ZarrViewer.svelte') then { default: ZarrViewer }}
 		<ZarrViewer {tab} />
 	{/await}
+{:else if viewerKind === 'copc'}
+	{#await import('./CopcViewer.svelte') then { default: CopcViewer }}
+		<CopcViewer {tab} />
+	{/await}
 {:else}
 	<RawViewer {tab} />
 {/if}

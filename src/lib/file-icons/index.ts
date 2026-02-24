@@ -40,6 +40,7 @@ export type ViewerKind =
 	| 'archive'
 	| 'database'
 	| 'zarr'
+	| 'copc'
 	| 'raw';
 
 export type DuckDbReadFn = 'read_parquet' | 'read_csv' | 'read_json' | 'ST_Read';
@@ -1043,6 +1044,28 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		label: 'Zarr',
 		category: 'data',
 		viewer: 'zarr',
+		queryable: false,
+		duckdbReadFn: null,
+		mimeType: 'application/octet-stream'
+	},
+
+	// ── Point Cloud ─────────────────────────────────────────────────────
+	'.laz': {
+		icon: 'Orbit',
+		color: 'text-cyan-600 dark:text-cyan-400',
+		label: 'COPC / LAZ',
+		category: 'geo',
+		viewer: 'copc',
+		queryable: false,
+		duckdbReadFn: null,
+		mimeType: 'application/octet-stream'
+	},
+	'.las': {
+		icon: 'Orbit',
+		color: 'text-cyan-600 dark:text-cyan-400',
+		label: 'LAS Point Cloud',
+		category: 'geo',
+		viewer: 'copc',
 		queryable: false,
 		duckdbReadFn: null,
 		mimeType: 'application/octet-stream'

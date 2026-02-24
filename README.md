@@ -8,7 +8,7 @@ graph LR
     App --> Browse[File Tree]
     App --> Query["DuckDB-WASM<br/>SQL Engine"]
     App --> Map["MapLibre + deck.gl<br/>Geo Visualization"]
-    App --> View["15+ Viewers<br/>Tables, Code, PDF, 3D..."]
+    App --> View["16+ Viewers<br/>Tables, Code, PDF, 3D, Point Cloud..."]
 ```
 
 ## Stack
@@ -40,6 +40,7 @@ graph TD
         FGB["FlatGeobufViewer"]
         COG["CogViewer"]
         ZARR["ZarrViewer<br/>+ ZarrMapViewer"]
+        COPC["CopcViewer"]
         DB["DatabaseViewer"]
         CODE["CodeViewer<br/>+ StyleEditorOverlay"]
         PDF["PdfViewer"]
@@ -87,6 +88,7 @@ graph TD
 | **Tabular** | Parquet, CSV, TSV, JSONL, NDJSON | DuckDB SQL queries |
 | **Geo vector** | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf | DuckDB + MapLibre / deck.gl |
 | **Geo raster** | Cloud Optimized GeoTIFF, PMTiles (vector + raster), Zarr v2/v3 | geotiff.js / MapLibre / deck.gl |
+| **Point cloud** | COPC, LAZ, LAS | [viewer.copc.io](https://viewer.copc.io) (iframe) |
 | **Code** | 30+ languages (Python, TS, Rust, Go, SQL, etc.) | Shiki syntax highlighting |
 | **Config** | JSON, XML, YAML, TOML, INI, .env | Shiki syntax highlighting |
 | **Documents** | Markdown, PDF, plain text, logs | Milkdown / pdf.js |
@@ -117,6 +119,7 @@ graph TD
 | **CogViewer** | Cloud Optimized GeoTIFF | [geotiff.js](https://github.com/geotiffjs/geotiff.js) v3, [@developmentseed/deck.gl-geotiff](https://github.com/developmentseed/deck.gl-geotiff), [proj4js](https://github.com/proj4js/proj4js) | — |
 | **ZarrViewer** | Zarr v2/v3 | [zarrita](https://github.com/manzt/zarrita.js), [@carbonplan/zarr-layer](https://github.com/carbonplan/maps), [MapLibre GL](https://maplibre.org) | `#map`, `#inspect` |
 | **StacMapViewer** | STAC GeoParquet | [stac-map](https://developmentseed.org/stac-map) by Development Seed (iframe) | `#stac` |
+| **CopcViewer** | COPC, LAZ, LAS | [viewer.copc.io](https://viewer.copc.io) (iframe) | — |
 
 ### Document & Code Viewers
 
@@ -165,6 +168,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | STAC Browser | [Radiant Earth STAC Browser](https://radiantearth.github.io/stac-browser/) | CodeViewer |
 | Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | CodeViewer |
 | Kepler.gl | [Kepler.gl Demo](https://kepler.gl/demo) | CodeViewer |
+| COPC Viewer | [viewer.copc.io](https://viewer.copc.io) | CopcViewer |
 
 ## Geospatial Pipeline
 
@@ -224,7 +228,7 @@ src/
 ├── routes/              # Single-page app (SPA)
 ├── lib/
 │   ├── components/
-│   │   ├── viewers/     # 15+ file-type viewers
+│   │   ├── viewers/     # 16+ file-type viewers
 │   │   ├── browser/     # File tree, breadcrumbs, upload
 │   │   ├── layout/      # Sidebar, tabs, status bar
 │   │   ├── editor/      # CodeMirror SQL editor
