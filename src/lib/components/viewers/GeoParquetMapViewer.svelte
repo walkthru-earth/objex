@@ -1,4 +1,5 @@
 <script lang="ts">
+import LocateIcon from '@lucide/svelte/icons/locate';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy } from 'svelte';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
@@ -15,7 +16,8 @@ import {
 	type GeoArrowResult
 } from '$lib/utils/geoarrow.js';
 import { buildDuckDbUrl } from '$lib/utils/url.js';
-import { findGeoColumn } from '$lib/utils/wkb.js';
+import { findGeoColumn, parseWKB } from '$lib/utils/wkb.js';
+import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
@@ -25,7 +27,8 @@ let {
 	mapData = null,
 	sourceCrs = null,
 	knownGeomType = undefined,
-	metadataBounds = null
+	metadataBounds = null,
+	progressEntries = []
 }: {
 	tab: Tab;
 	schema: SchemaField[];
@@ -33,6 +36,7 @@ let {
 	sourceCrs?: string | null;
 	knownGeomType?: GeoArrowGeomType;
 	metadataBounds?: [number, number, number, number] | null;
+	progressEntries?: ProgressEntry[];
 } = $props();
 
 let loading = $state(true);
@@ -42,12 +46,26 @@ let selectedFeature = $state<Record<string, any> | null>(null);
 let showAttributes = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 
+let firstFeatureCoord = $state<[number, number] | null>(null);
+
 let geoArrowState: {
 	modules: Record<string, any>;
 	geoArrowResults: GeoArrowResult[];
 } | null = null;
 let overlayRef: any = null;
 let mapRef: maplibregl.Map | null = null;
+
+/** Drill into nested coordinate arrays to find the first [lng, lat] pair. */
+function extractFirstCoord(coords: any): [number, number] | null {
+	if (!Array.isArray(coords) || coords.length === 0) return null;
+	if (typeof coords[0] === 'number') return [coords[0] as number, coords[1] as number];
+	return extractFirstCoord(coords[0]);
+}
+
+function flyToFirstFeature() {
+	if (!mapRef || !firstFeatureCoord) return;
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+}
 
 $effect(() => {
 	if (!tab || schema.length === 0) return;
@@ -104,6 +122,13 @@ async function loadGeoData() {
 		featureCount = geoArrowResults.reduce((sum, r) => sum + r.table.numRows, 0);
 		// Use metadata bounds if available (no client-side computation needed)
 		bounds = metadataBounds ?? geoArrowResults[0].bounds;
+
+		// Extract first feature coordinate for fly-to
+		if (result.wkbArrays.length > 0) {
+			const parsed = parseWKB(result.wkbArrays[0]);
+			if (parsed) firstFeatureCoord = extractFirstCoord(parsed.coordinates);
+		}
+
 		loading = false;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
@@ -154,9 +179,7 @@ function onMapReady(map: maplibregl.Map) {
 
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
-		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">{t('map.loadingGeometry')}</p>
-		</div>
+		<LoadProgress stage={t('map.loadingGeometry')} entries={progressEntries} />
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
 			<p class="text-sm text-red-400">{error}</p>
@@ -166,13 +189,26 @@ function onMapReady(map: maplibregl.Map) {
 			<MapContainer {onMapReady} {bounds} />
 		</div>
 
-		<!-- Floating feature count badge -->
+		<!-- Floating feature count badge + fly-to -->
 		{#if featureCount > 0}
 			<div
-				class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute left-2 top-2 z-10 flex items-center gap-1"
 			>
-				{featureCount.toLocaleString()} features{#if featureCount >= settings.featureLimit}
-					<span class="text-amber-300">(limit)</span>{/if}
+				<div
+					class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+				>
+					{featureCount.toLocaleString()} features{#if featureCount >= settings.featureLimit}
+						<span class="text-amber-300">(limit)</span>{/if}
+				</div>
+				{#if firstFeatureCoord}
+					<button
+						class="rounded bg-card/80 p-1.5 text-card-foreground backdrop-blur-sm hover:bg-card"
+						onclick={flyToFirstFeature}
+						title={t('map.flyToFirst')}
+					>
+						<LocateIcon class="size-3.5" />
+					</button>
+				{/if}
 			</div>
 		{/if}
 

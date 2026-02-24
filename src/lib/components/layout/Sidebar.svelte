@@ -19,7 +19,6 @@ import {
 	TooltipProvider,
 	TooltipTrigger
 } from '$lib/components/ui/tooltip/index.js';
-import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
@@ -49,33 +48,12 @@ $effect(() => {
 });
 
 async function handleAutoDetection() {
-	// Check for direct file URL first — open immediately without creating a connection
+	// Direct file URLs (e.g. ?url=https://...file.parquet) are opened eagerly
+	// in +page.svelte so they work on mobile. Skip if tab already exists.
 	const url = new URL(window.location.href);
 	const rawUrl = url.searchParams.get('url');
-	if (rawUrl) {
-		const fileName = rawUrl.split('/').pop()?.split('?')[0] || '';
-		const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
-		if (ext) {
-			const info = getFileTypeInfo(ext);
-			if (info.viewer !== 'raw') {
-				const tabId = `url:${rawUrl}`;
-				tabs.open({
-					id: tabId,
-					name: fileName,
-					path: rawUrl,
-					source: 'url',
-					extension: ext
-				});
-				// Fire-and-forget: fetch file size via HEAD request
-				fetch(rawUrl, { method: 'HEAD' })
-					.then((res) => {
-						const cl = res.headers.get('content-length');
-						if (cl) tabs.update(tabId, { size: Number(cl) });
-					})
-					.catch(() => {});
-				return;
-			}
-		}
+	if (rawUrl && tabs.items.some((t) => t.id === `url:${rawUrl}`)) {
+		return;
 	}
 
 	const detected = detectHostBucket();

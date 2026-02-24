@@ -60,6 +60,37 @@ function clampBounds(b: { west: number; south: number; east: number; north: numb
 }
 
 /**
+ * Fit the map to COG bounds with responsive padding.
+ * Uses smaller padding on mobile to zoom in closer, ensuring overviews load
+ * properly instead of appearing black at very low zoom levels.
+ * After fitting, bumps zoom +1 when the viewport settles at a very low level.
+ */
+function fitCogBounds(
+	map: maplibregl.Map,
+	b: { west: number; south: number; east: number; north: number }
+) {
+	const isMobile = window.innerWidth < 640;
+	const viewportMin = Math.min(window.innerWidth, window.innerHeight);
+	const padding = isMobile ? 5 : Math.max(10, Math.round(viewportMin * 0.04));
+	map.fitBounds(
+		[
+			[b.west, b.south],
+			[b.east, b.north]
+		],
+		{ padding, maxZoom: 18, speed: 1.2, maxDuration: 2000 }
+	);
+	// On small screens, fitBounds settles at a zoom too low for overviews
+	// to render (appears black). Bump zoom so the first overview tile loads.
+	map.once('moveend', () => {
+		const z = map.getZoom();
+		const minZoom = isMobile ? 10 : 8;
+		if (z < minZoom) {
+			map.zoomTo(z + 2, { duration: 500 });
+		}
+	});
+}
+
+/**
  * Fix metadata from parseCOGTileMatrixSet for projections where corner
  * reprojection produces NaN/extreme values (Mollweide, global EPSG:4326, etc.).
  * Clamps wgsBounds and wraps projectTo3857/projectToWgs84 with safe fallbacks.
@@ -404,13 +435,7 @@ async function loadCog(map: maplibregl.Map) {
 				bounds: clamped
 			};
 			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
-			map.fitBounds(
-				[
-					[clamped.west, clamped.south],
-					[clamped.east, clamped.north]
-				],
-				{ padding: 40, maxZoom: 18, speed: 1.2, maxDuration: 2000 }
-			);
+			fitCogBounds(map, clamped);
 			loading = false;
 		};
 
@@ -517,13 +542,7 @@ async function loadCog(map: maplibregl.Map) {
 			const clamped = preFlightBounds;
 			cogInfo = { width: imgW, height: imgH, bandCount, dataType, bounds: clamped };
 			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
-			map.fitBounds(
-				[
-					[clamped.west, clamped.south],
-					[clamped.east, clamped.north]
-				],
-				{ padding: 40, maxZoom: 18, speed: 1.2, maxDuration: 2000 }
-			);
+			fitCogBounds(map, clamped);
 
 			cleanupNativeBitmap();
 			map.addSource(BITMAP_SOURCE, {

@@ -300,6 +300,7 @@ export const ar: Record<string, string> = {
 	'map.limit': '(الحد)',
 	'map.of': 'من',
 	'map.attributes': 'السمات',
+	'map.flyToFirst': 'انتقل إلى أول معلم',
 	'map.info': 'معلومات',
 	'map.archiveInfo': 'معلومات الأرشيف',
 	'map.flatgeobufInfo': 'معلومات FlatGeobuf',

@@ -303,6 +303,7 @@ export const en: Record<string, string> = {
 	'map.limit': '(limit)',
 	'map.of': 'of',
 	'map.attributes': 'Attributes',
+	'map.flyToFirst': 'Fly to first feature',
 	'map.info': 'Info',
 	'map.archiveInfo': 'Archive Info',
 	'map.flatgeobufInfo': 'FlatGeobuf Info',

@@ -41,6 +41,7 @@ const resolvedStyle = $derived(style ?? MAP_STYLES[settings.resolved]);
 let containerEl: HTMLDivElement | undefined = $state();
 let map: maplibregl.Map | null = null;
 let currentStyleUrl: string | maplibregl.StyleSpecification | null = null;
+let currentZoom = $state(2);
 
 $effect(() => {
 	if (containerEl && !map) {
@@ -53,7 +54,15 @@ $effect(() => {
 
 		currentStyleUrl = resolvedStyle;
 
-		map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+		map.addControl(
+			new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
+			'bottom-right'
+		);
+
+		currentZoom = map.getZoom();
+		map.on('zoom', () => {
+			if (map) currentZoom = map.getZoom();
+		});
 
 		map.on('load', () => {
 			if (map) onMapReady(map);
@@ -92,4 +101,14 @@ onDestroy(() => {
 });
 </script>
 
-<div bind:this={containerEl} class="h-full w-full"></div>
+<div class="relative h-full w-full">
+	<div bind:this={containerEl} class="h-full w-full"></div>
+	<!-- Zoom level indicator — positioned above nav controls -->
+	<div
+		class="pointer-events-none absolute bottom-[10rem] right-[10px] z-10 flex size-[29px] items-center justify-center rounded-full border border-zinc-300 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-800"
+	>
+		<span class="text-[10px] font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">
+			{currentZoom.toFixed(1)}
+		</span>
+	</div>
+</div>

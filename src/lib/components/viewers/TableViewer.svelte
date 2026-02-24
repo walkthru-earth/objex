@@ -801,7 +801,7 @@ function setStacView() {
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
 			{#await import('./GeoParquetMapViewer.svelte') then GeoParquetMapViewer}
-				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} {knownGeomType} {metadataBounds} />
+				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} {knownGeomType} {metadataBounds} progressEntries={loadProgress} />
 			{/await}
 		</div>
 	{/if}
