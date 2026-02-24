@@ -160,10 +160,13 @@ $effect(() => {
 	const tabId = tab.id;
 	untrack(() => {
 		if (tabId !== lastLoadedTabId) {
+			const isInitialLoad = lastLoadedTabId === '';
 			lastLoadedTabId = tabId;
-			// Reset view mode on tab switch to avoid stale iframe/map views
-			viewMode = 'table';
-			updateUrlView('');
+			if (!isInitialLoad) {
+				// Reset view mode on tab switch to avoid stale iframe/map views
+				viewMode = 'table';
+				updateUrlView('');
+			}
 			loadTable();
 		}
 	});
