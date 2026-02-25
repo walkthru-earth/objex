@@ -68,6 +68,9 @@ let loadGeneration = 0;
 let sortColumn = $state<string | null>(null);
 let sortDirection = $state<'asc' | 'desc' | null>(null);
 
+// Tracks whether the current mapData came from a user-edited query (no system limit)
+let isCustomQuery = $state(false);
+
 // Geo column state for unified table+map query
 let geoCol = $state<string | null>(null);
 let geoColType = $state<string>('');
@@ -217,6 +220,7 @@ async function loadTable() {
 	geoColType = '';
 	sourceCrs = null;
 	mapData = null;
+	isCustomQuery = false;
 	knownGeomType = undefined;
 	metadataBounds = null;
 	loadStage = t('table.preparingQuery');
@@ -561,6 +565,7 @@ async function runCustomSql() {
 	queryRunning = true;
 	error = null;
 	mapData = null;
+	isCustomQuery = true;
 	loadStage = t('table.runningCustomQuery');
 	const start = performance.now();
 	try {
@@ -570,6 +575,9 @@ async function runCustomSql() {
 		currentPage = 1;
 		totalRows = null;
 		updateUrlView('query');
+
+		// Pass custom query results to the map (respects user's LIMIT or lack thereof)
+		mapData = extractMapData(rows);
 
 		// Record in history
 		queryHistory.add({
@@ -805,7 +813,7 @@ function setStacView() {
 		<!-- Map mode — full size -->
 		<div class="flex-1 overflow-hidden">
 			{#await import('./GeoParquetMapViewer.svelte') then GeoParquetMapViewer}
-				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} {knownGeomType} {metadataBounds} progressEntries={loadProgress} />
+				<GeoParquetMapViewer.default {tab} {schema} {mapData} {sourceCrs} {knownGeomType} {metadataBounds} {isCustomQuery} progressEntries={loadProgress} />
 			{/await}
 		</div>
 	{/if}

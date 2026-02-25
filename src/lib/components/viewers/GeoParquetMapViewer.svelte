@@ -33,6 +33,7 @@ let {
 	sourceCrs = null,
 	knownGeomType = undefined,
 	metadataBounds = null,
+	isCustomQuery = false,
 	progressEntries = []
 }: {
 	tab: Tab;
@@ -41,6 +42,7 @@ let {
 	sourceCrs?: string | null;
 	knownGeomType?: GeoArrowGeomType;
 	metadataBounds?: [number, number, number, number] | null;
+	isCustomQuery?: boolean;
 	progressEntries?: ProgressEntry[];
 } = $props();
 
@@ -228,7 +230,7 @@ function onMapReady(map: maplibregl.Map) {
 				<div
 					class="pointer-events-none rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
 				>
-					{featureCount.toLocaleString()} features{#if featureCount >= settings.featureLimit}
+					{featureCount.toLocaleString()} features{#if !isCustomQuery && featureCount >= settings.featureLimit}
 						<span class="text-amber-300">(limit)</span>{/if}
 				</div>
 				{#if firstFeatureCoord}
