@@ -143,6 +143,9 @@ export const en: Record<string, string> = {
 	'table.readingMetadata': 'Reading file metadata...',
 	'table.bootingEngine': 'Booting DuckDB-WASM...',
 	'table.enterSql': 'Enter SQL query... (Cmd+Enter to run)',
+	'table.copyCell': 'Copy Cell',
+	'table.copyRow': 'Copy Row (JSON)',
+	'table.copyColumn': 'Copy Column',
 
 	// Load Progress labels
 	'progress.format': 'Format',

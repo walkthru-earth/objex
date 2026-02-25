@@ -143,6 +143,9 @@ export const ar: Record<string, string> = {
 	'table.readingMetadata': 'جارٍ قراءة بيانات الملف...',
 	'table.bootingEngine': 'جارٍ تشغيل DuckDB-WASM...',
 	'table.enterSql': 'أدخل استعلام SQL... (Cmd+Enter للتنفيذ)',
+	'table.copyCell': 'نسخ الخلية',
+	'table.copyRow': 'نسخ الصف (JSON)',
+	'table.copyColumn': 'نسخ العمود',
 
 	// Load Progress labels
 	'progress.format': 'الصيغة',
