@@ -11,11 +11,6 @@ import Sidebar from '$lib/components/layout/Sidebar.svelte';
 import StatusBar from '$lib/components/layout/StatusBar.svelte';
 import TabBar from '$lib/components/layout/TabBar.svelte';
 import { Button } from '$lib/components/ui/button/index.js';
-import {
-	ResizableHandle,
-	ResizablePane,
-	ResizablePaneGroup
-} from '$lib/components/ui/resizable/index.js';
 import * as Sheet from '$lib/components/ui/sheet/index.js';
 import ViewerRouter from '$lib/components/viewers/ViewerRouter.svelte';
 import { getFileTypeInfo } from '$lib/file-icons/index.js';
@@ -74,6 +69,7 @@ function handleTryExample(e: MouseEvent) {
 let hasActiveTab = $derived(tabs.active !== null && tabs.active !== undefined);
 let hasBrowserConnection = $derived(browser.activeConnection !== null);
 let mobileSheetOpen = $state(false);
+let desktopSidebarOpen = $state(false);
 
 // Responsive: use matchMedia instead of CSS dual-rendering
 // so viewers are mounted only once (not duplicated in hidden DOM).
@@ -92,6 +88,13 @@ $effect(() => {
 $effect(() => {
 	if (tabs.active) {
 		mobileSheetOpen = false;
+	}
+});
+
+// Auto-open desktop sidebar when a connection is activated
+$effect(() => {
+	if (hasBrowserConnection) {
+		desktopSidebarOpen = true;
 	}
 });
 
@@ -217,32 +220,34 @@ const pageDescription = $derived.by(() => {
 
 <div class="flex flex-1 overflow-hidden">
 	{#if isDesktop}
-		<!-- Desktop layout: Icon Rail + Resizable Panes -->
+		<!-- Desktop layout: Icon Rail + Stable Flex Layout -->
 		<Sidebar />
-
-		{#if hasBrowserConnection && browser.activeConnection}
-			<ResizablePaneGroup direction="horizontal" class="flex-1">
-				<ResizablePane defaultSize={22} minSize={15} maxSize={35}>
+		<div class="flex flex-1 overflow-hidden">
+			{#if desktopSidebarOpen && hasBrowserConnection && browser.activeConnection}
+				<div class="h-full w-64 shrink-0 border-e border-zinc-200 xl:w-72 dark:border-zinc-800">
 					<FileTreeSidebar connection={browser.activeConnection} initialPath={initialFilePath} />
-				</ResizablePane>
-
-				<ResizableHandle withHandle />
-
-				<ResizablePane defaultSize={78} minSize={50}>
-					<div class="flex h-full flex-col">
-						<TabBar />
-						{@render viewerContent()}
-						<StatusBar />
-					</div>
-				</ResizablePane>
-			</ResizablePaneGroup>
-		{:else}
-			<div class="flex h-full flex-1 flex-col">
-				<TabBar />
+				</div>
+			{/if}
+			<div class="flex h-full min-w-0 flex-1 flex-col">
+				<TabBar>
+					{#snippet leading()}
+						{#if hasBrowserConnection}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 px-1.5"
+								onclick={() => (desktopSidebarOpen = !desktopSidebarOpen)}
+								title={t('mobile.openSidebar')}
+							>
+								<PanelLeftIcon class="size-4" />
+							</Button>
+						{/if}
+					{/snippet}
+				</TabBar>
 				{@render viewerContent()}
 				<StatusBar />
 			</div>
-		{/if}
+		</div>
 	{:else}
 		<!-- Mobile layout: Full-width content + Sheet sidebar -->
 		<div class="flex flex-1 flex-col">

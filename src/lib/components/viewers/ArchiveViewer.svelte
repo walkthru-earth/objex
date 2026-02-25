@@ -3,6 +3,11 @@ import { Archive, ChevronRight, Download, File, Folder, Loader } from '@lucide/s
 import type { Entry } from '@zip.js/zip.js';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
+import {
+	ResizableHandle,
+	ResizablePane,
+	ResizablePaneGroup
+} from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
@@ -20,6 +25,7 @@ import {
 	readTarEntriesFromBuffer,
 	readZipEntriesFromBuffer,
 	streamTarEntriesFromUrl,
+	streamTarGzEntriesFromUrl,
 	streamZipEntriesFromUrl
 } from '$lib/utils/archive';
 import { formatFileSize } from '$lib/utils/format';
@@ -27,8 +33,7 @@ import { buildHttpsUrl } from '$lib/utils/url.js';
 
 let { tab }: { tab: Tab } = $props();
 
-const MAX_DIRS = 500;
-const MAX_FILES = 500;
+const MAX_ITEMS = 500;
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -40,24 +45,38 @@ let format = $state<ArchiveFormat>('unsupported');
 let downloading = $state<Set<string>>(new Set());
 let remoteUrl = $state('');
 let tarBuffer = $state<Uint8Array | null>(null);
-
-/** true while the initial setup/fetch is happening (before any entries appear) */
 let initializing = $state(true);
-/** true while entries are still being discovered (progressive scan) */
 let scanning = $state(false);
-/** number of entries found so far — drives reactivity for the listing */
 let scanCount = $state(0);
 
-// ZIP entry lookup for downloads (non-reactive, just a Map)
+// Column browser state
+let selectedDir = $state<string | null>(null);
+let selectedFile = $state<ArchiveEntry | null>(null);
+
 let zipEntryMap = new Map<string, Entry>();
 let abortController: AbortController | null = null;
 
-// Derived listing — re-evaluates when scanCount or prefix changes
+// Derived listing — column 1
 let contents = $derived.by(() => {
-	void scanCount; // explicit dependency on scan progress
+	void scanCount;
 	return listContents(entryList, prefix);
 });
+
+// Column 2 — contents of selected directory
+let selectedDirContents = $derived.by(() => {
+	if (!selectedDir) return { directories: [] as string[], files: [] as ArchiveEntry[] };
+	void scanCount;
+	return listContents(entryList, selectedDir);
+});
+
 let breadcrumbs = $derived(prefix.length > 0 ? prefix.split('/').filter(Boolean) : []);
+
+// Reset selections when prefix changes
+$effect(() => {
+	void prefix;
+	selectedDir = null;
+	selectedFile = null;
+});
 
 // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -93,6 +112,19 @@ function breadcrumbPath(index: number): string {
 	return breadcrumbs.slice(0, index + 1).join('/');
 }
 
+function selectDirectory(dir: string) {
+	selectedDir = dir;
+	selectedFile = null;
+}
+
+function selectFile(file: ArchiveEntry) {
+	selectedFile = file;
+}
+
+function navigateIntoDir(dir: string) {
+	navigateTo(dir);
+}
+
 // ── Loading ────────────────────────────────────────────────────────────
 
 function resetState() {
@@ -107,13 +139,13 @@ function resetState() {
 	remoteUrl = '';
 	initializing = true;
 	scanning = false;
+	selectedDir = null;
+	selectedFile = null;
 }
 
-/** Push a batch of entries and trigger a reactive update */
 function pushEntries(batch: ArchiveEntry[]) {
 	entryList.push(...batch);
 	scanCount = entryList.length;
-	// Once we have any entries, we're past the "initializing" spinner phase
 	if (initializing) initializing = false;
 }
 
@@ -156,7 +188,6 @@ async function loadZip() {
 			return;
 		} catch (err) {
 			if ((err as DOMException)?.name === 'AbortError') throw err;
-			// Range requests failed — fall back to full download
 			entryList = [];
 			scanCount = 0;
 			zipEntryMap.clear();
@@ -164,7 +195,6 @@ async function loadZip() {
 		}
 	}
 
-	// Buffer fallback — parsing in-memory is fast, no streaming needed
 	const adapter = getAdapter(tab.source, tab.connectionId);
 	const data = await adapter.read(tab.path);
 	const result = await readZipEntriesFromBuffer(data);
@@ -206,7 +236,39 @@ async function loadTar() {
 }
 
 async function loadTarGz() {
-	// tar.gz requires full download — gzip has no random access
+	const signal = abortController!.signal;
+
+	// For remote URLs: stream-fetch → decompress → parse progressively
+	if (tab.source === 'remote' || tab.source === 'url') {
+		const url = buildHttpsUrl(tab);
+		try {
+			scanning = true;
+			const decompressedChunks: Uint8Array[] = [];
+			for await (const { entries, chunk } of streamTarGzEntriesFromUrl(url, signal)) {
+				pushEntries(entries);
+				decompressedChunks.push(chunk);
+			}
+			// Assemble decompressed buffer for file downloads
+			const totalLen = decompressedChunks.reduce((sum, c) => sum + c.length, 0);
+			const assembled = new Uint8Array(totalLen);
+			let pos = 0;
+			for (const c of decompressedChunks) {
+				assembled.set(c, pos);
+				pos += c.length;
+			}
+			tarBuffer = assembled;
+			loadMethod = 'full';
+			return;
+		} catch (err) {
+			if ((err as DOMException)?.name === 'AbortError') throw err;
+			// Fall through to full-buffer approach
+			entryList = [];
+			scanCount = 0;
+			scanning = false;
+		}
+	}
+
+	// Fallback: full download + in-memory decompress
 	const adapter = getAdapter(tab.source, tab.connectionId);
 	const compressed = await adapter.read(tab.path);
 	const data = await decompressGzip(compressed);
@@ -240,85 +302,123 @@ async function handleDownload(archiveEntry: ArchiveEntry) {
 		downloading = next;
 	}
 }
+
+const formatLabel = $derived(format === 'tar.gz' ? 'TAR.GZ' : format.toUpperCase());
+const totalDirs = $derived(contents.directories.length);
+const totalFiles = $derived(contents.files.length);
 </script>
+
+{#snippet fileDetails()}
+	{#if selectedFile}
+		{@const fileName = selectedFile.filename.split('/').pop()}
+		<div
+			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+		>
+			{t('archive.fileDetails')}
+		</div>
+		<div class="flex-1 overflow-auto p-3">
+			<dl class="space-y-2 text-xs">
+				<div>
+					<dt class="text-muted-foreground">{t('archive.fileName')}</dt>
+					<dd class="break-all font-mono text-[11px]">{fileName}</dd>
+				</div>
+				<div>
+					<dt class="text-muted-foreground">{t('archive.path')}</dt>
+					<dd class="break-all font-mono text-[10px] text-muted-foreground">{selectedFile.filename}</dd>
+				</div>
+				<div>
+					<dt class="text-muted-foreground">{t('archive.size')}</dt>
+					<dd>{formatFileSize(selectedFile.uncompressedSize)}</dd>
+				</div>
+				{#if selectedFile.compressedSize > 0 && selectedFile.compressedSize !== selectedFile.uncompressedSize}
+					<div>
+						<dt class="text-muted-foreground">{t('archive.compressed')}</dt>
+						<dd>{formatFileSize(selectedFile.compressedSize)}</dd>
+					</div>
+				{/if}
+				{#if selectedFile.lastModified}
+					<div>
+						<dt class="text-muted-foreground">{t('archive.modified')}</dt>
+						<dd class="text-[11px]">{selectedFile.lastModified.toLocaleString()}</dd>
+					</div>
+				{/if}
+			</dl>
+
+			<button
+				class="mt-4 w-full rounded bg-primary/90 px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary disabled:cursor-not-allowed disabled:opacity-40"
+				onclick={() => handleDownload(selectedFile!)}
+				disabled={downloading.has(selectedFile.filename)}
+			>
+				{#if downloading.has(selectedFile.filename)}
+					<Loader class="mr-1 inline-block h-3 w-3 animate-spin" />
+					Downloading...
+				{:else}
+					<Download class="mr-1 inline-block h-3 w-3" />
+					{t('archive.download')}
+				{/if}
+			</button>
+		</div>
+	{:else}
+		<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+			{t('archive.selectFile')}
+		</div>
+	{/if}
+{/snippet}
 
 <div class="flex h-full flex-col">
 	<!-- Header bar -->
-	<div class="flex items-center gap-1.5 border-b border-zinc-200 px-3 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800">
-		<Archive class="h-4 w-4 shrink-0 text-amber-500" />
-		<span class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">
-			{tab.name}
-		</span>
-		<Badge variant="secondary">{t('archive.badge')}</Badge>
-
-		{#if scanCount > 0}
-			<span class="text-xs text-zinc-400">
-				{scanCount.toLocaleString()} {t('archive.entries')}
+	<div class="shrink-0 border-b border-zinc-200 px-3 py-2 sm:px-4 dark:border-zinc-800">
+		<div class="flex items-center gap-1.5 sm:gap-2">
+			<Archive class="h-4 w-4 shrink-0 text-amber-500" />
+			<span class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">
+				{tab.name}
 			</span>
-		{/if}
+			<Badge variant="outline" class="text-[10px]">{formatLabel}</Badge>
 
-		{#if scanning}
-			<span class="flex items-center gap-1 text-xs text-amber-500">
-				<Loader class="h-3 w-3 animate-spin" />
-				<span class="hidden sm:inline">{t('archive.scanning')}</span>
-			</span>
-		{/if}
+			{#if scanCount > 0}
+				<span class="text-xs text-muted-foreground">
+					{scanCount.toLocaleString()} {t('archive.entries')}
+				</span>
+			{/if}
 
-		{#if loadMethod === 'range' && !scanning}
-			<Badge variant="outline" class="border-emerald-200 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400">
-				{t('archive.streamed')}
-			</Badge>
-		{:else if loadMethod === 'full' && format === 'tar.gz' && !scanning}
-			<Badge variant="outline" class="border-amber-200 text-amber-600 dark:border-amber-800 dark:text-amber-400">
-				{t('archive.fullDownload')}
-			</Badge>
-		{/if}
+			{#if scanning}
+				<span class="flex items-center gap-1 text-xs text-amber-500">
+					<Loader class="h-3 w-3 animate-spin" />
+					<span class="hidden sm:inline">{t('archive.scanning')}</span>
+				</span>
+			{/if}
 
-		{#if format !== 'zip' && format !== 'unsupported'}
-			<span class="hidden text-[10px] uppercase tracking-wider text-zinc-400 sm:inline">{format}</span>
-		{/if}
-	</div>
+			{#if loadMethod === 'range' && !scanning}
+				<Badge variant="outline" class="border-emerald-200 text-[10px] text-emerald-600 dark:border-emerald-800 dark:text-emerald-400">
+					{t('archive.streamed')}
+				</Badge>
+			{:else if loadMethod === 'full' && format === 'tar.gz' && !scanning}
+				<Badge variant="outline" class="border-amber-200 text-[10px] text-amber-600 dark:border-amber-800 dark:text-amber-400">
+					{t('archive.fullDownload')}
+				</Badge>
+			{/if}
+		</div>
 
-	<!-- Content area -->
-	<div class="flex-1 overflow-auto">
-		{#if initializing}
-			<!-- Full-page spinner only before first entries arrive -->
-			<div class="flex h-full items-center justify-center gap-2">
-				<Loader class="h-5 w-5 animate-spin text-zinc-400" />
-				<span class="text-sm text-zinc-400">{t('archive.loading')}</span>
-			</div>
-		{:else if error}
-			<div class="flex h-full items-center justify-center px-4">
-				<p class="text-sm text-red-400">{error}</p>
-			</div>
-		{:else}
-			<!-- Breadcrumbs -->
-			<nav class="border-b border-zinc-100 px-3 py-2 sm:px-4 dark:border-zinc-800/60">
-				<ol class="flex flex-wrap items-center gap-1 text-sm">
-					<li class="shrink-0">
-						{#if breadcrumbs.length > 0}
-							<button
-								class="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-								onclick={() => navigateTo('')}
-							>
-								<Archive class="inline-block h-3.5 w-3.5" />
-								<span class="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500 dark:decoration-zinc-600 dark:hover:decoration-zinc-400">{tab.name}</span>
-							</button>
-						{:else}
-							<span class="text-zinc-600 dark:text-zinc-300">
-								<Archive class="inline-block h-3.5 w-3.5" />
-								{tab.name}
-							</span>
-						{/if}
+		<!-- Breadcrumb -->
+		{#if breadcrumbs.length > 0}
+			<nav class="mt-1.5">
+				<ol class="flex flex-wrap items-center gap-1 text-xs">
+					<li>
+						<button
+							class="text-muted-foreground hover:text-foreground"
+							onclick={() => navigateTo('')}
+						>
+							<Archive class="inline-block h-3 w-3" />
+						</button>
 					</li>
 					{#each breadcrumbs as crumb, i}
 						<li class="flex items-center gap-1">
-							<ChevronRight class="h-3.5 w-3.5 text-zinc-300 dark:text-zinc-600" />
+							<ChevronRight class="h-3 w-3 text-muted-foreground/50" />
 							{#if i === breadcrumbs.length - 1}
-								<span class="text-zinc-600 dark:text-zinc-300">{crumb}</span>
+								<span class="font-medium">{crumb}</span>
 							{:else}
 								<button
-									class="text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700 hover:decoration-zinc-500 dark:text-zinc-400 dark:decoration-zinc-600 dark:hover:text-zinc-200 dark:hover:decoration-zinc-400"
+									class="text-muted-foreground hover:text-foreground"
 									onclick={() => navigateTo(breadcrumbPath(i))}
 								>
 									{crumb}
@@ -328,72 +428,159 @@ async function handleDownload(archiveEntry: ArchiveEntry) {
 					{/each}
 				</ol>
 			</nav>
-
-			<!-- File listing -->
-			<div class="divide-y divide-zinc-50 dark:divide-zinc-800/40">
-				{#if contents.directories.length === 0 && contents.files.length === 0 && !scanning}
-					<div class="px-4 py-8 text-center text-sm text-zinc-400">
-						{t('archive.empty')}
-					</div>
-				{/if}
-
-				<!-- Directories -->
-				{#each contents.directories as dir, i}
-					{#if i < MAX_DIRS}
-						{@const dirName = dir.split('/').pop()}
-						<button
-							class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm hover:bg-zinc-50 sm:px-4 dark:hover:bg-zinc-800/50"
-							onclick={() => navigateTo(dir)}
-						>
-							<Folder class="h-4 w-4 shrink-0 text-amber-500/70" />
-							<span class="truncate font-medium text-zinc-700 dark:text-zinc-300">{dirName}</span>
-							<ChevronRight class="ms-auto h-3.5 w-3.5 shrink-0 text-zinc-300 dark:text-zinc-600" />
-						</button>
-					{:else if i === MAX_DIRS}
-						<div class="px-4 py-1.5 text-xs text-zinc-400">
-							+{contents.directories.length - MAX_DIRS} more directories
-						</div>
-					{/if}
-				{/each}
-
-				<!-- Files -->
-				{#each contents.files as file, i}
-					{#if i < MAX_FILES}
-						{@const fileName = file.filename.split('/').pop()}
-						<div class="flex items-center gap-2 px-3 py-1.5 text-sm sm:px-4">
-							<File class="h-4 w-4 shrink-0 text-zinc-400/70" />
-							<span class="truncate text-zinc-600 dark:text-zinc-400">{fileName}</span>
-							<span class="ms-auto shrink-0 text-xs text-zinc-400">
-								{formatFileSize(file.uncompressedSize)}
-							</span>
-							<button
-								class="shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-								onclick={() => handleDownload(file)}
-								disabled={downloading.has(file.filename)}
-								title="Download"
-							>
-								{#if downloading.has(file.filename)}
-									<Loader class="h-3.5 w-3.5 animate-spin" />
-								{:else}
-									<Download class="h-3.5 w-3.5" />
-								{/if}
-							</button>
-						</div>
-					{:else if i === MAX_FILES}
-						<div class="px-4 py-1.5 text-xs text-zinc-400">
-							+{contents.files.length - MAX_FILES} more files
-						</div>
-					{/if}
-				{/each}
-
-				<!-- Scanning progress at bottom of listing -->
-				{#if scanning}
-					<div class="flex items-center gap-2 px-4 py-3 text-xs text-zinc-400">
-						<Loader class="h-3 w-3 animate-spin" />
-						<span>{t('archive.scanningProgress', { count: scanCount.toLocaleString() })}</span>
-					</div>
-				{/if}
-			</div>
 		{/if}
 	</div>
+
+	<!-- Content area -->
+	{#if initializing}
+		<div class="flex flex-1 items-center justify-center gap-2">
+			<Loader class="h-5 w-5 animate-spin text-zinc-400" />
+			<span class="text-sm text-zinc-400">{t('archive.loading')}</span>
+		</div>
+	{:else if error}
+		<div class="flex flex-1 items-center justify-center px-4">
+			<p class="text-sm text-red-400">{error}</p>
+		</div>
+	{:else}
+		<!-- Column browser (resizable) -->
+		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+			<!-- Column 1: Current path entries -->
+			<ResizablePane defaultSize={35} minSize={20}>
+				<div class="flex h-full flex-col">
+					<div
+						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+					>
+						{t('archive.contents')}
+						<span class="ms-1 normal-case tracking-normal">({(totalDirs + totalFiles).toLocaleString()})</span>
+					</div>
+					<div class="flex-1 overflow-auto">
+						{#if contents.directories.length === 0 && contents.files.length === 0 && !scanning}
+							<div class="p-4 text-center text-xs text-muted-foreground">
+								{t('archive.empty')}
+							</div>
+						{/if}
+
+						{#each contents.directories as dir, i}
+							{#if i < MAX_ITEMS}
+								{@const dirName = dir.split('/').pop()}
+								<button
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+									class:bg-zinc-100={selectedDir === dir}
+									class:dark:bg-zinc-800={selectedDir === dir}
+									onclick={() => selectDirectory(dir)}
+									ondblclick={() => navigateIntoDir(dir)}
+								>
+									<Folder class="size-3.5 shrink-0 text-amber-500/70" />
+									<span class="truncate font-medium">{dirName}</span>
+									<ChevronRight class="ms-auto size-3 shrink-0 text-muted-foreground" />
+								</button>
+							{:else if i === MAX_ITEMS}
+								<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
+									+{contents.directories.length - MAX_ITEMS} more
+								</div>
+							{/if}
+						{/each}
+
+						{#each contents.files as file, i}
+							{#if i < MAX_ITEMS}
+								{@const fileName = file.filename.split('/').pop()}
+								<button
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+									class:bg-zinc-100={selectedFile?.filename === file.filename}
+									class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
+									onclick={() => selectFile(file)}
+								>
+									<File class="size-3.5 shrink-0 text-muted-foreground/70" />
+									<span class="truncate">{fileName}</span>
+									<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
+										{formatFileSize(file.uncompressedSize)}
+									</span>
+								</button>
+							{:else if i === MAX_ITEMS}
+								<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
+									+{contents.files.length - MAX_ITEMS} more
+								</div>
+							{/if}
+						{/each}
+
+						{#if scanning}
+							<div class="flex items-center gap-2 px-3 py-2 text-[10px] text-muted-foreground">
+								<Loader class="h-3 w-3 animate-spin" />
+								<span>{t('archive.scanningProgress', { count: scanCount.toLocaleString() })}</span>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</ResizablePane>
+
+			<ResizableHandle />
+
+			<!-- Column 2: Selected directory contents -->
+			<ResizablePane defaultSize={35} minSize={20}>
+				<div class="flex h-full flex-col">
+					{#if selectedDir}
+						{@const dirName = selectedDir.split('/').pop()}
+						<div
+							class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+						>
+							{dirName}
+							<span class="ms-1 normal-case tracking-normal">({(selectedDirContents.directories.length + selectedDirContents.files.length).toLocaleString()})</span>
+						</div>
+						<div class="flex-1 overflow-auto">
+							{#if selectedDirContents.directories.length === 0 && selectedDirContents.files.length === 0}
+								<div class="p-4 text-center text-xs text-muted-foreground">
+									{t('archive.empty')}
+								</div>
+							{/if}
+
+							{#each selectedDirContents.directories as subDir, i}
+								{#if i < MAX_ITEMS}
+									{@const subDirName = subDir.split('/').pop()}
+									<button
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+										onclick={() => navigateIntoDir(subDir)}
+									>
+										<Folder class="size-3.5 shrink-0 text-amber-500/70" />
+										<span class="truncate font-medium">{subDirName}</span>
+										<ChevronRight class="ms-auto size-3 shrink-0 text-muted-foreground" />
+									</button>
+								{/if}
+							{/each}
+
+							{#each selectedDirContents.files as file, i}
+								{#if i < MAX_ITEMS}
+									{@const fileName = file.filename.split('/').pop()}
+									<button
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+										class:bg-zinc-100={selectedFile?.filename === file.filename}
+										class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
+										onclick={() => selectFile(file)}
+									>
+										<File class="size-3.5 shrink-0 text-muted-foreground/70" />
+										<span class="truncate">{fileName}</span>
+										<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
+											{formatFileSize(file.uncompressedSize)}
+										</span>
+									</button>
+								{/if}
+							{/each}
+						</div>
+					{:else}
+						<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+							{t('archive.selectFolder')}
+						</div>
+					{/if}
+				</div>
+			</ResizablePane>
+
+			<ResizableHandle />
+
+			<!-- Column 3: File details -->
+			<ResizablePane defaultSize={30} minSize={15}>
+				<div class="flex h-full flex-col">
+					{@render fileDetails()}
+				</div>
+			</ResizablePane>
+		</ResizablePaneGroup>
+	{/if}
 </div>

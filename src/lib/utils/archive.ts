@@ -109,7 +109,10 @@ function parseTarHeader(header: Uint8Array): ArchiveEntry | null {
 	const dec = new TextDecoder('ascii');
 	const name = dec.decode(header.slice(0, 100)).replace(/\0+$/, '');
 	const prefix = dec.decode(header.slice(345, 500)).replace(/\0+$/, '');
-	const fullName = prefix ? `${prefix}/${name}` : name;
+	let fullName = prefix ? `${prefix}/${name}` : name;
+
+	// Normalize: strip leading ./ (common in tarballs created with `tar -czf`)
+	if (fullName.startsWith('./')) fullName = fullName.slice(2);
 
 	const sizeStr = dec.decode(header.slice(124, 136)).replace(/\0+$/, '').trim();
 	const size = parseInt(sizeStr, 8) || 0;
@@ -128,6 +131,12 @@ function parseTarHeader(header: Uint8Array): ArchiveEntry | null {
 		lastModified: mtime,
 		dataOffset: 0
 	};
+}
+
+/** Returns true for bare root entries (e.g. ".", "") that should be skipped. */
+function isRootEntry(entry: ArchiveEntry): boolean {
+	const f = entry.filename.replace(/\/+$/, '');
+	return f === '' || f === '.';
 }
 
 /**
@@ -161,19 +170,19 @@ export async function* streamTarEntriesFromUrl(
 			const header = chunk.slice(localOffset, localOffset + TAR_HEADER_SIZE);
 			const entry = parseTarHeader(header);
 			if (!entry) {
-				// End-of-archive — yield remaining batch and stop
 				if (batch.length > 0) yield batch;
 				return;
 			}
 
-			entry.dataOffset = offset + localOffset + TAR_HEADER_SIZE;
-			batch.push(entry);
-
 			const dataBlocks = Math.ceil(entry.uncompressedSize / TAR_HEADER_SIZE);
 			const entryTotalSize = TAR_HEADER_SIZE + dataBlocks * TAR_HEADER_SIZE;
 
+			if (!isRootEntry(entry)) {
+				entry.dataOffset = offset + localOffset + TAR_HEADER_SIZE;
+				batch.push(entry);
+			}
+
 			if (localOffset + entryTotalSize > chunk.length) {
-				// Next header is beyond this chunk — re-fetch from there
 				offset += localOffset + entryTotalSize;
 				localOffset = chunk.length;
 			} else {
@@ -201,10 +210,13 @@ export function readTarEntriesFromBuffer(data: Uint8Array): { entryList: Archive
 		const entry = parseTarHeader(header);
 		if (!entry) break;
 
-		entry.dataOffset = offset + TAR_HEADER_SIZE;
-		entries.push(entry);
-
 		const dataBlocks = Math.ceil(entry.uncompressedSize / TAR_HEADER_SIZE);
+
+		if (!isRootEntry(entry)) {
+			entry.dataOffset = offset + TAR_HEADER_SIZE;
+			entries.push(entry);
+		}
+
 		offset += TAR_HEADER_SIZE + dataBlocks * TAR_HEADER_SIZE;
 	}
 
@@ -222,6 +234,88 @@ export async function decompressGzip(data: Uint8Array): Promise<Uint8Array> {
 	const decompressedStream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(ds);
 	const buf = await new Response(decompressedStream).arrayBuffer();
 	return new Uint8Array(buf);
+}
+
+const TAR_GZ_BATCH_SIZE = 200;
+
+/**
+ * Stream tar.gz entries by fetching the URL, piping through DecompressionStream,
+ * and parsing tar headers progressively as decompressed chunks arrive.
+ *
+ * Gzip doesn't support random access, so we must download sequentially,
+ * but entries appear immediately — no waiting for the full download.
+ *
+ * Yields { entries, chunk } so the caller can optionally accumulate raw
+ * decompressed data for later file extraction.
+ */
+export async function* streamTarGzEntriesFromUrl(
+	url: string,
+	signal?: AbortSignal
+): AsyncGenerator<{ entries: ArchiveEntry[]; chunk: Uint8Array }> {
+	const response = await fetch(url, { signal });
+	if (!response.body) throw new Error('No response body');
+
+	const ds = new DecompressionStream('gzip');
+	const decompressed = response.body.pipeThrough(ds);
+	const reader = decompressed.getReader();
+
+	let buffer = new Uint8Array(0);
+	let tarOffset = 0; // absolute byte offset in decompressed tar stream
+
+	while (true) {
+		if (signal?.aborted) return;
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		// Append new decompressed chunk to working buffer
+		const prev = buffer;
+		buffer = new Uint8Array(prev.length + value.length);
+		buffer.set(prev);
+		buffer.set(value, prev.length);
+
+		const batch: ArchiveEntry[] = [];
+		let consumed = 0;
+
+		// Parse as many complete tar entries as possible
+		while (buffer.length - consumed >= TAR_HEADER_SIZE) {
+			const header = buffer.slice(consumed, consumed + TAR_HEADER_SIZE);
+			const entry = parseTarHeader(header);
+
+			if (!entry) {
+				// End-of-archive marker (two 512-byte zero blocks)
+				if (batch.length > 0) {
+					yield { entries: batch, chunk: buffer.slice(0, consumed) };
+				}
+				return;
+			}
+
+			const dataBlocks = Math.ceil(entry.uncompressedSize / TAR_HEADER_SIZE);
+			const entryTotalSize = TAR_HEADER_SIZE + dataBlocks * TAR_HEADER_SIZE;
+
+			if (buffer.length - consumed < entryTotalSize) {
+				// Not enough data yet for header + file data, wait for more
+				break;
+			}
+
+			if (!isRootEntry(entry)) {
+				entry.dataOffset = tarOffset + consumed + TAR_HEADER_SIZE;
+				batch.push(entry);
+			}
+			consumed += entryTotalSize;
+
+			if (batch.length >= TAR_GZ_BATCH_SIZE) {
+				yield { entries: batch.splice(0), chunk: buffer.slice(0, consumed) };
+			}
+		}
+
+		// Yield any remaining entries in this chunk
+		if (batch.length > 0) {
+			yield { entries: batch, chunk: buffer.slice(0, consumed) };
+		}
+
+		tarOffset += consumed;
+		buffer = buffer.slice(consumed);
+	}
 }
 
 // ── Listing (universal) ────────────────────────────────────────────────

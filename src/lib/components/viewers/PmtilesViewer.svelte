@@ -1,40 +1,54 @@
 <script lang="ts">
-import type maplibregl from 'maplibre-gl';
-import maplibreModule from 'maplibre-gl';
+import ArchiveIcon from '@lucide/svelte/icons/archive';
+import GridIcon from '@lucide/svelte/icons/grid-3x3';
+import MapIcon from '@lucide/svelte/icons/map';
+import type { PMTiles } from 'pmtiles';
 import { onDestroy, untrack } from 'svelte';
+import { Badge } from '$lib/components/ui/badge/index.js';
+import { Button } from '$lib/components/ui/button/index.js';
+import { Separator } from '$lib/components/ui/separator/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
-import {
-	buildPmtilesLayers,
-	getPmtilesMetadata,
-	getPmtilesProtocol,
-	type PmtilesMetadata
-} from '$lib/utils/pmtiles';
+import { loadPmtiles, type PmtilesMetadata } from '$lib/utils/pmtiles';
 import { buildHttpsUrl } from '$lib/utils/url.js';
-import AttributeTable from './map/AttributeTable.svelte';
-import MapContainer from './map/MapContainer.svelte';
+import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 
 let { tab }: { tab: Tab } = $props();
+
+type ViewMode = 'map' | 'archive' | 'inspector';
 
 let loading = $state(true);
 let error = $state<string | null>(null);
 let metadata = $state<PmtilesMetadata | null>(null);
-let showInfo = $state(false);
-let selectedFeature = $state<Record<string, any> | null>(null);
-let showAttributes = $state(false);
-let bounds = $state<[number, number, number, number] | undefined>();
+let pmtilesInstance = $state<PMTiles | null>(null);
 let pmtilesUrl = $state('');
 
-// Register PMTiles protocol globally (idempotent)
-const protocol = getPmtilesProtocol();
-maplibreModule.addProtocol('pmtiles', protocol.tile);
+// Read initial view from URL hash
+const urlView = getUrlView();
+let viewMode = $state<ViewMode>(
+	urlView === 'archive' ? 'archive' : urlView === 'inspector' ? 'inspector' : 'map'
+);
 
-let mapRef: maplibregl.Map | null = null;
+// Tile inspector initial coordinates (set when navigating from archive)
+let inspectorZ = $state<number | undefined>();
+let inspectorX = $state<number | undefined>();
+let inspectorY = $state<number | undefined>();
+
+function setViewMode(mode: ViewMode) {
+	viewMode = mode;
+	updateUrlView(mode);
+}
+
+function openInInspector(z: number, x: number, y: number) {
+	inspectorZ = z;
+	inspectorX = x;
+	inspectorY = y;
+	setViewMode('inspector');
+}
 
 function cleanup() {
-	mapRef = null;
+	pmtilesInstance = null;
 	metadata = null;
 	pmtilesUrl = '';
 }
@@ -50,18 +64,19 @@ $effect(() => {
 	if (!tab) return;
 	const _tabId = tab.id;
 	untrack(() => {
-		loadMetadata();
+		load();
 	});
 });
 
-async function loadMetadata() {
+async function load() {
 	loading = true;
 	error = null;
 
 	try {
 		pmtilesUrl = buildHttpsUrl(tab);
-		metadata = await getPmtilesMetadata(pmtilesUrl);
-		bounds = metadata.bounds ?? undefined;
+		const result = await loadPmtiles(pmtilesUrl);
+		pmtilesInstance = result.pmtiles;
+		metadata = result.metadata;
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
@@ -69,181 +84,108 @@ async function loadMetadata() {
 	}
 }
 
-function onMapReady(map: maplibregl.Map) {
-	mapRef = map;
-	if (!metadata || !pmtilesUrl) return;
-
-	const sourceId = 'pmtiles-source';
-
-	if (metadata.format === 'mvt') {
-		map.addSource(sourceId, {
-			type: 'vector',
-			url: `pmtiles://${pmtilesUrl}`,
-			minzoom: metadata.minZoom,
-			maxzoom: metadata.maxZoom
-		});
-
-		const layers = buildPmtilesLayers(sourceId, metadata);
-		const layerIds: string[] = [];
-		for (const layer of layers) {
-			map.addLayer(layer);
-			layerIds.push(layer.id!);
-		}
-
-		// Selection highlight + click/hover handlers
-		setupSelectionLayer(map);
-
-		for (const layerId of layerIds) {
-			map.on('click', layerId, (e: any) => {
-				if (e.features && e.features.length > 0) {
-					selectedFeature = { ...e.features[0].properties };
-					showAttributes = true;
-					updateSelection(map, e.features[0] as GeoJSON.Feature);
-				}
-			});
-
-			map.on('mouseenter', layerId, () => {
-				map.getCanvas().style.cursor = 'pointer';
-			});
-
-			map.on('mouseleave', layerId, () => {
-				map.getCanvas().style.cursor = '';
-			});
-		}
-	} else {
-		// Raster tiles (png, jpeg, webp, avif)
-		map.addSource(sourceId, {
-			type: 'raster',
-			url: `pmtiles://${pmtilesUrl}`,
-			tileSize: 256
-		});
-
-		map.addLayer({
-			id: 'pmtiles-raster-layer',
-			type: 'raster',
-			source: sourceId,
-			paint: { 'raster-opacity': 0.85 }
-		});
-	}
-}
+const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 </script>
 
-<div class="relative flex h-full overflow-hidden">
-	{#if loading}
-		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">{t('map.loadingPmtiles')}</p>
-		</div>
-	{:else if error}
-		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-red-400">{error}</p>
-		</div>
-	{:else}
-		<div class="flex-1">
-			<MapContainer {onMapReady} {bounds} />
-		</div>
-
-		<!-- Floating metadata badge -->
-		{#if metadata}
-			<div
-				class="pointer-events-none absolute left-2 top-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+<div class="flex h-full flex-col">
+	<!-- Toolbar -->
+	{#if !loading && !error && metadata}
+		<div
+			class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
+		>
+			<!-- File info -->
+			<span
+				class="max-w-[100px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300"
 			>
-				{metadata.formatLabel} · z{metadata.minZoom}-{metadata.maxZoom}
-				{#if metadata.layers.length > 0}
-					· {metadata.layers.length} layer{metadata.layers.length > 1 ? 's' : ''}
-				{/if}
-				· {metadata.numAddressedTiles.toLocaleString()} tiles
-			</div>
-		{/if}
+				{fileName}
+			</span>
+			<Badge variant="outline" class="hidden text-[10px] sm:inline-flex">
+				{metadata.formatLabel}
+			</Badge>
+			<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+				z{metadata.minZoom}-{metadata.maxZoom} · {metadata.numAddressedTiles.toLocaleString()} tiles
+			</span>
 
-		<!-- Floating button group -->
-		<div class="absolute right-2 top-2 z-10 flex gap-1">
-			<button
-				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-				class:ring-1={showInfo}
-				class:ring-primary={showInfo}
-				onclick={() => (showInfo = !showInfo)}
-			>
-				{t('map.info')}
-			</button>
-
-			{#if selectedFeature}
-				<button
-					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
-					class:ring-1={showAttributes}
-					class:ring-primary={showAttributes}
-					onclick={() => (showAttributes = !showAttributes)}
+			<!-- View mode buttons -->
+			<div class="ms-auto flex items-center gap-1">
+				<Button
+					variant={viewMode === 'map' ? 'default' : 'outline'}
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'map'
+						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						: ''}"
+					onclick={() => setViewMode('map')}
 				>
-					{t('map.attributes')}
-				</button>
-			{/if}
-		</div>
+					<MapIcon class="size-3" />
+					<span class="hidden sm:inline">{t('pmtiles.mapView')}</span>
+				</Button>
 
-		{#if showInfo && metadata}
-			<div
-				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
-			>
-				<h3 class="mb-2 font-medium">{t('map.archiveInfo')}</h3>
-				<dl class="space-y-1.5">
-					{#if metadata.name}
-						<dt class="text-muted-foreground">{t('mapInfo.name')}</dt>
-						<dd>{metadata.name}</dd>
-					{/if}
-					{#if metadata.description}
-						<dt class="text-muted-foreground">{t('mapInfo.description')}</dt>
-						<dd class="opacity-80">{metadata.description}</dd>
-					{/if}
-					<dt class="text-muted-foreground">{t('mapInfo.specVersion')}</dt>
-					<dd>v{metadata.specVersion}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.tileFormat')}</dt>
-					<dd>{metadata.formatLabel}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.zoomRange')}</dt>
-					<dd>{metadata.minZoom} - {metadata.maxZoom}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.tileCompression')}</dt>
-					<dd>{metadata.tileCompression}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.internalCompression')}</dt>
-					<dd>{metadata.internalCompression}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.clustered')}</dt>
-					<dd>{metadata.clustered ? t('mapInfo.yes') : t('mapInfo.no')}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.addressedTiles')}</dt>
-					<dd>{metadata.numAddressedTiles.toLocaleString()}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.tileEntries')}</dt>
-					<dd>{metadata.numTileEntries.toLocaleString()}</dd>
-					<dt class="text-muted-foreground">{t('mapInfo.uniqueContents')}</dt>
-					<dd>{metadata.numTileContents.toLocaleString()}</dd>
-					{#if metadata.bounds}
-						<dt class="text-muted-foreground">{t('mapInfo.bounds')}</dt>
-						<dd class="font-mono text-[10px]">
-							{metadata.bounds.map((v) => v.toFixed(4)).join(', ')}
-						</dd>
-					{/if}
-					{#if metadata.center}
-						<dt class="text-muted-foreground">{t('mapInfo.center')}</dt>
-						<dd class="font-mono text-[10px]">
-							{metadata.center.map((v) => v.toFixed(4)).join(', ')} (z{metadata.centerZoom})
-						</dd>
-					{/if}
-					{#if metadata.layers.length > 0}
-						<dt class="text-muted-foreground">{t('mapInfo.layers')} ({metadata.layers.length})</dt>
-						{#each metadata.layers as layer}
-							<dd class="ms-2 opacity-80">- {layer}</dd>
-						{/each}
-					{/if}
-					{#if metadata.attribution}
-						<dt class="text-muted-foreground">{t('mapInfo.attribution')}</dt>
-						<dd class="opacity-80">{metadata.attribution}</dd>
-					{/if}
-					{#if metadata.version}
-						<dt class="text-muted-foreground">{t('mapInfo.dataVersion')}</dt>
-						<dd>{metadata.version}</dd>
-					{/if}
-				</dl>
+				<Button
+					variant={viewMode === 'archive' ? 'default' : 'outline'}
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'archive'
+						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						: ''}"
+					onclick={() => setViewMode('archive')}
+				>
+					<ArchiveIcon class="size-3" />
+					<span class="hidden sm:inline">{t('pmtiles.archiveView')}</span>
+				</Button>
+
+				<Button
+					variant={viewMode === 'inspector' ? 'default' : 'outline'}
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'inspector'
+						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						: ''}"
+					onclick={() => setViewMode('inspector')}
+				>
+					<GridIcon class="size-3" />
+					<span class="hidden sm:inline">{t('pmtiles.inspectorView')}</span>
+				</Button>
 			</div>
-		{/if}
-
-		<AttributeTable
-			feature={selectedFeature}
-			visible={showAttributes}
-			onClose={() => (showAttributes = false)}
-		/>
+		</div>
 	{/if}
+
+	<!-- Content area -->
+	<div class="min-h-0 flex-1 overflow-hidden">
+		{#if loading}
+			<div class="flex h-full items-center justify-center">
+				<p class="text-sm text-zinc-400">{t('map.loadingPmtiles')}</p>
+			</div>
+		{:else if error}
+			<div class="flex h-full items-center justify-center">
+				<p class="text-sm text-red-400">{error}</p>
+			</div>
+		{:else if metadata && pmtilesInstance}
+			{#if viewMode === 'map'}
+				{#await import('./pmtiles/PmtilesMapView.svelte') then mod}
+					<mod.default
+						{tab}
+						{metadata}
+						{pmtilesUrl}
+						onOpenInspector={openInInspector}
+					/>
+				{/await}
+			{:else if viewMode === 'archive'}
+				{#await import('./pmtiles/PmtilesArchiveView.svelte') then mod}
+					<mod.default
+						{metadata}
+						pmtiles={pmtilesInstance}
+						onOpenInspector={openInInspector}
+					/>
+				{/await}
+			{:else if viewMode === 'inspector'}
+				{#await import('./pmtiles/PmtilesTileInspector.svelte') then mod}
+					<mod.default
+						{metadata}
+						pmtiles={pmtilesInstance}
+						initialZ={inspectorZ}
+						initialX={inspectorX}
+						initialY={inspectorY}
+					/>
+				{/await}
+			{/if}
+		{/if}
+	</div>
 </div>

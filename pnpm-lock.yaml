@@ -68,6 +68,9 @@ importers:
       '@luma.gl/core':
         specifier: ^9.2.6
         version: 9.2.6
+      '@mapbox/vector-tile':
+        specifier: ^2.0.4
+        version: 2.0.4
       '@milkdown/kit':
         specifier: ^7.18.0
         version: 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.15)(typescript@5.9.3)
@@ -116,6 +119,9 @@ importers:
       mermaid:
         specifier: ^11.12.3
         version: 11.12.3
+      pbf:
+        specifier: ^4.0.1
+        version: 4.0.1
       pdfjs-dist:
         specifier: ^5.4.624
         version: 5.4.624
