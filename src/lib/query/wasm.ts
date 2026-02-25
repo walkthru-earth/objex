@@ -304,6 +304,7 @@ export class WasmQueryEngine implements QueryEngine {
 			// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
 			const isSpatialType =
 				upper === 'GEOMETRY' ||
+				upper === 'GEOGRAPHY' ||
 				upper === 'WKB_BLOB' ||
 				upper.includes('POINT') ||
 				upper.includes('LINESTRING') ||

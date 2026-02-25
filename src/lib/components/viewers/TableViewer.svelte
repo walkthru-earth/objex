@@ -101,6 +101,7 @@ function buildDefaultSql(offset = 0): string {
 		// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
 		const isSpatialType =
 			upper === 'GEOMETRY' ||
+			upper === 'GEOGRAPHY' ||
 			upper === 'WKB_BLOB' ||
 			upper.includes('POINT') ||
 			upper.includes('LINESTRING') ||
@@ -244,6 +245,7 @@ async function loadTable() {
 
 		// ── Fast metadata via hyparquet (runs concurrently with DuckDB boot) ──
 		let metaFromHyparquet = false;
+		let needsDuckDbCrs = false;
 		if (cloudNative && isParquet && streamable) {
 			try {
 				loadStage = t('table.readingMetadata');
@@ -257,7 +259,11 @@ async function loadTable() {
 					{ label: t('progress.source'), value: t('progress.rangeRequest') }
 				];
 
-				// Instant schema display — override geo column type to match DuckDB
+				// Instant schema display — override geo column type to match DuckDB.
+				// For GeoParquet: the primary geometry column gets promoted to GEOMETRY.
+				// For native Parquet GEOMETRY: hyparquet maps BYTE_ARRAY to BLOB,
+				// but DuckDB spatial reads it as GEOMETRY. We fix this below after
+				// findGeoColumn detects the column.
 				const geoColName = meta.geo?.primaryColumn;
 				schema = meta.schema.map((s) => ({
 					name: s.name,
@@ -339,6 +345,26 @@ async function loadTable() {
 					}
 				}
 
+				// No GeoParquet "geo" metadata — detect native Parquet GEOMETRY
+				// columns (Format 2.11+) via schema column names/types
+				if (!geoCol) {
+					const detectedGeoCol = findGeoColumn(schema);
+					if (detectedGeoCol) {
+						geoCol = detectedGeoCol;
+						// DuckDB spatial auto-promotes native Parquet GEOMETRY to GEOMETRY type.
+						// Update schema to reflect the real DuckDB type (not hyparquet's BLOB).
+						geoColType = 'GEOMETRY';
+						schema = schema.map((s) =>
+							s.name === detectedGeoCol ? { ...s, type: 'GEOMETRY' } : s
+						);
+						needsDuckDbCrs = true;
+						loadProgress = [
+							...loadProgress,
+							{ label: t('progress.geometry'), value: `${geoCol} (native Parquet)` }
+						];
+					}
+				}
+
 				hasGeo = geoCol !== null;
 				isStac = schema.some((f) => f.name === 'stac_version');
 				if (isStac) {
@@ -357,6 +383,25 @@ async function loadTable() {
 		loadStage = metaFromHyparquet ? t('table.bootingEngine') : t('table.initEngine');
 		const engine = await enginePromise;
 		if (thisGen !== loadGeneration) return;
+
+		// If hyparquet detected a geo column but couldn't determine CRS
+		// (native Parquet GEOMETRY without "geo" KV metadata), use DuckDB
+		if (metaFromHyparquet && needsDuckDbCrs && geoCol) {
+			try {
+				sourceCrs = await engine.detectCrs(connId, fileUrl, geoCol);
+				if (thisGen !== loadGeneration) return;
+				if (sourceCrs) {
+					loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
+				} else {
+					loadProgress = [
+						...loadProgress,
+						{ label: t('progress.crs'), value: 'EPSG:4326 (WGS84)' }
+					];
+				}
+			} catch {
+				// CRS detection failed — continue with WGS84 assumption
+			}
+		}
 
 		if (cloudNative && !metaFromHyparquet) {
 			// Fallback: DuckDB metadata queries

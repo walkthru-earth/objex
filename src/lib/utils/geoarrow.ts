@@ -144,6 +144,15 @@ function newBounds(): BoundsTracker {
 	return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 }
 
+/** Update bounds, skipping NaN coordinates (EMPTY geometries, invalid data). */
+function expandBounds(b: BoundsTracker, x: number, y: number) {
+	if (Number.isNaN(x) || Number.isNaN(y)) return;
+	if (x < b.minX) b.minX = x;
+	if (y < b.minY) b.minY = y;
+	if (x > b.maxX) b.maxX = x;
+	if (y > b.maxY) b.maxY = y;
+}
+
 // ─── Arrow coordinate type (shared) ─────────────────────────────────
 
 const coordField = new Field('xy', new Float64());
@@ -178,10 +187,7 @@ function buildPointData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 		const y = dv.getFloat64(h.dataOffset + 8, h.le);
 		coords[i * 2] = x;
 		coords[i * 2 + 1] = y;
-		if (x < b.minX) b.minX = x;
-		if (y < b.minY) b.minY = y;
-		if (x > b.maxX) b.maxX = x;
-		if (y > b.maxY) b.maxY = y;
+		expandBounds(b, x, y);
 	}
 
 	return makeCoordData(coords, n);
@@ -222,10 +228,7 @@ function buildLineStringData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 			const y = dv.getFloat64(off + 8, h.le);
 			coords[ci++] = x;
 			coords[ci++] = y;
-			if (x < b.minX) b.minX = x;
-			if (y < b.minY) b.minY = y;
-			if (x > b.maxX) b.maxX = x;
-			if (y > b.maxY) b.maxY = y;
+			expandBounds(b, x, y);
 			off += h.coordStride;
 		}
 	}
@@ -290,10 +293,7 @@ function buildPolygonData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 				const y = dv.getFloat64(off + 8, h.le);
 				coords[ci++] = x;
 				coords[ci++] = y;
-				if (x < b.minX) b.minX = x;
-				if (y < b.minY) b.minY = y;
-				if (x > b.maxX) b.maxX = x;
-				if (y > b.maxY) b.maxY = y;
+				expandBounds(b, x, y);
 				off += h.coordStride;
 			}
 		}
@@ -360,10 +360,7 @@ function buildMultiPointData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 				const y = dv.getFloat64(off + innerH.dataOffset + 8, innerH.le);
 				coords[ci++] = x;
 				coords[ci++] = y;
-				if (x < b.minX) b.minX = x;
-				if (y < b.minY) b.minY = y;
-				if (x > b.maxX) b.maxX = x;
-				if (y > b.maxY) b.maxY = y;
+				expandBounds(b, x, y);
 				off += innerH.dataOffset + innerH.coordStride;
 			} else {
 				coords[ci++] = 0;
@@ -447,10 +444,7 @@ function buildMultiLineStringData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 				const y = dv.getFloat64(ptOff + 8, innerH.le);
 				coords[ci++] = x;
 				coords[ci++] = y;
-				if (x < b.minX) b.minX = x;
-				if (y < b.minY) b.minY = y;
-				if (x > b.maxX) b.maxX = x;
-				if (y > b.maxY) b.maxY = y;
+				expandBounds(b, x, y);
 				ptOff += innerH.coordStride;
 			}
 			off = ptOff;
@@ -552,10 +546,7 @@ function buildMultiPolygonData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 					const y = dv.getFloat64(ringOff + 8, innerH.le);
 					coords[ci++] = x;
 					coords[ci++] = y;
-					if (x < b.minX) b.minX = x;
-					if (y < b.minY) b.minY = y;
-					if (x > b.maxX) b.maxX = x;
-					if (y > b.maxY) b.maxY = y;
+					expandBounds(b, x, y);
 					ringOff += innerH.coordStride;
 				}
 			}

@@ -42,6 +42,8 @@ export interface ParquetFileMetadata {
 function mapParquetType(col: any): string {
 	const lt = col.logical_type;
 	if (lt) {
+		// Parquet Format 2.11+ native geometry/geography types
+		if (lt.type === 'GEOMETRY' || lt.type === 'GEOGRAPHY') return 'GEOMETRY';
 		// String types
 		if (lt.type === 'STRING' || lt.type === 'UTF8') return 'VARCHAR';
 		if (lt.type === 'JSON') return 'JSON';
