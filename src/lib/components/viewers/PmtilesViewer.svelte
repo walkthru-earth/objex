@@ -5,6 +5,7 @@ import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
 import {
 	buildPmtilesLayers,
 	getPmtilesMetadata,
@@ -89,12 +90,15 @@ function onMapReady(map: maplibregl.Map) {
 			layerIds.push(layer.id!);
 		}
 
-		// Click + hover handlers for feature inspection
+		// Selection highlight + click/hover handlers
+		setupSelectionLayer(map);
+
 		for (const layerId of layerIds) {
 			map.on('click', layerId, (e: any) => {
 				if (e.features && e.features.length > 0) {
 					selectedFeature = { ...e.features[0].properties };
 					showAttributes = true;
+					updateSelection(map, e.features[0] as GeoJSON.Feature);
 				}
 			});
 

@@ -7,6 +7,20 @@
 
 import type { GeoArrowResult } from './geoarrow.js';
 
+// ─── Shared hover cursor helper ─────────────────────────────────────
+
+/**
+ * Create an onHover callback that toggles the cursor on the MapLibre canvas.
+ * With `interleaved: false`, deck.gl's own canvas has pointer-events: none,
+ * so getCursor on MapboxOverlay has no visible effect — we must set cursor
+ * directly on the MapLibre map canvas instead.
+ */
+export function hoverCursor(map: { getCanvas: () => HTMLElement }) {
+	return (info: { picked?: boolean }) => {
+		map.getCanvas().style.cursor = info.picked ? 'pointer' : '';
+	};
+}
+
 // ─── Geometry-type color palette ─────────────────────────────────────
 
 type RGBA = [number, number, number, number];
@@ -50,7 +64,10 @@ export async function loadDeckModules() {
 export interface DeckOverlayOptions {
 	layerId: string;
 	data: GeoJSON.FeatureCollection;
-	onClick?: (feature: Record<string, any>) => void;
+	/** Called with properties and the full GeoJSON Feature (for selection highlight). */
+	onClick?: (properties: Record<string, any>, feature: GeoJSON.Feature) => void;
+	/** Layer-level onHover — use hoverCursor(map) to toggle pointer on MapLibre canvas. */
+	onHover?: (info: { picked?: boolean }) => void;
 }
 
 /**
@@ -62,7 +79,7 @@ export function createDeckOverlay(
 	options: DeckOverlayOptions
 ) {
 	const { MapboxOverlay, GeoJsonLayer } = modules;
-	const { layerId, data, onClick } = options;
+	const { layerId, data, onClick, onHover } = options;
 
 	return new MapboxOverlay({
 		interleaved: false,
@@ -83,9 +100,10 @@ export function createDeckOverlay(
 				pointRadiusMaxPixels: 12,
 				autoHighlight: true,
 				highlightColor: [255, 255, 255, 100],
+				onHover,
 				onClick: (info: any) => {
 					if (info.object?.properties && onClick) {
-						onClick({ ...info.object.properties });
+						onClick({ ...info.object.properties }, info.object);
 					}
 				}
 			})
@@ -95,19 +113,23 @@ export function createDeckOverlay(
 
 // ─── GeoArrow overlay (GeoParquetMapViewer) ──────────────────────────
 
-/** Lazy-load GeoArrow deck.gl layers + MapboxOverlay. */
+/** Lazy-load GeoArrow deck.gl layers + MapboxOverlay + GeoJsonLayer (for selection). */
 export async function loadGeoArrowModules() {
-	const [{ MapboxOverlay }, geoarrowLayers] = await Promise.all([
+	const [{ MapboxOverlay }, geoarrowLayers, { GeoJsonLayer }] = await Promise.all([
 		import('@deck.gl/mapbox'),
-		import('@geoarrow/deck.gl-layers')
+		import('@geoarrow/deck.gl-layers'),
+		import('@deck.gl/layers')
 	]);
-	return { MapboxOverlay, ...geoarrowLayers };
+	return { MapboxOverlay, GeoJsonLayer, ...geoarrowLayers };
 }
 
 export interface GeoArrowOverlayOptions {
 	layerId: string;
 	geoArrowResults: GeoArrowResult[];
-	onClick?: (properties: Record<string, any>) => void;
+	/** Called with properties and the original WKB array index (for selection highlight). */
+	onClick?: (properties: Record<string, any>, sourceIndex: number) => void;
+	/** Layer-level onHover — use hoverCursor(map) to toggle pointer on MapLibre canvas. */
+	onHover?: (info: { picked?: boolean }) => void;
 }
 
 /** Create a single deck.gl layer for one GeoArrowResult. */
@@ -115,11 +137,19 @@ function createLayerForResult(
 	modules: Record<string, any>,
 	result: GeoArrowResult,
 	layerId: string,
-	onClick?: (properties: Record<string, any>) => void
+	onClick?: (properties: Record<string, any>, sourceIndex: number) => void,
+	onHover?: (info: { picked?: boolean }) => void
 ): any {
 	const { GeoArrowScatterplotLayer, GeoArrowPathLayer, GeoArrowPolygonLayer } = modules;
-	const { table, geometryType } = result;
+	const { table, geometryType, sourceIndices } = result;
 	const { fill, line } = colorsForType(geometryType);
+
+	const handleClick = (info: any) => {
+		if (!onClick) return;
+		const props = extractPickedProps(info);
+		const srcIdx = sourceIndices[info.index] ?? info.index;
+		onClick(props, srcIdx);
+	};
 
 	if (geometryType === 'point' || geometryType === 'multipoint') {
 		return new GeoArrowScatterplotLayer({
@@ -134,7 +164,8 @@ function createLayerForResult(
 			autoHighlight: true,
 			highlightColor: [255, 255, 255, 100],
 			_validate: false,
-			onClick: (info: any) => onClick?.(extractPickedProps(info))
+			onHover,
+			onClick: handleClick
 		});
 	} else if (geometryType === 'linestring' || geometryType === 'multilinestring') {
 		return new GeoArrowPathLayer({
@@ -148,7 +179,8 @@ function createLayerForResult(
 			autoHighlight: true,
 			highlightColor: [255, 255, 255, 100],
 			_validate: false,
-			onClick: (info: any) => onClick?.(extractPickedProps(info))
+			onHover,
+			onClick: handleClick
 		});
 	} else {
 		return new GeoArrowPolygonLayer({
@@ -162,27 +194,56 @@ function createLayerForResult(
 			autoHighlight: true,
 			highlightColor: [255, 255, 255, 100],
 			_validate: false,
-			onClick: (info: any) => onClick?.(extractPickedProps(info))
+			onHover,
+			onClick: handleClick
 		});
 	}
 }
 
 /**
  * Create MapboxOverlay with GeoArrow layers — one per geometry type group.
- * Accepts an array of GeoArrowResults and renders them all in a single overlay.
+ * Returns both the overlay and the data layers array (for adding selection layers later).
  */
 export function createGeoArrowOverlay(
 	modules: Record<string, any>,
 	options: GeoArrowOverlayOptions
-) {
+): { overlay: any; layers: any[] } {
 	const { MapboxOverlay } = modules;
-	const { layerId, geoArrowResults, onClick } = options;
+	const { layerId, geoArrowResults, onClick, onHover } = options;
 
 	const layers = geoArrowResults.map((result) =>
-		createLayerForResult(modules, result, `${layerId}-${result.geometryType}`, onClick)
+		createLayerForResult(modules, result, `${layerId}-${result.geometryType}`, onClick, onHover)
 	);
 
-	return new MapboxOverlay({ interleaved: false, layers });
+	return { overlay: new MapboxOverlay({ interleaved: false, layers }), layers };
+}
+
+// ─── Selection highlight layer (shared by deck.gl viewers) ──────────
+
+/**
+ * Build a deck.gl GeoJsonLayer that draws a yellow outline around a single feature.
+ * Used for QGIS-style click-selection highlight on the deck.gl canvas (which sits
+ * above MapLibre, so a native MapLibre layer would be hidden).
+ */
+export function buildSelectionLayer(
+	GeoJsonLayer: any,
+	feature: GeoJSON.Feature | null
+): any | null {
+	if (!feature) return null;
+	return new GeoJsonLayer({
+		id: 'selection-highlight',
+		data: { type: 'FeatureCollection', features: [feature] },
+		pickable: false,
+		stroked: true,
+		filled: false,
+		pointType: 'circle',
+		getLineColor: [255, 200, 0, 255],
+		getLineWidth: 3,
+		lineWidthMinPixels: 2,
+		getPointRadius: 10,
+		pointRadiusMinPixels: 8,
+		pointRadiusMaxPixels: 14
+	});
 }
 
 /** Convert GeoArrow picking result to plain object (skip geometry column). */

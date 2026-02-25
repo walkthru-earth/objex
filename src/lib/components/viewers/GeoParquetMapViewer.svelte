@@ -9,7 +9,12 @@ import { getQueryEngine } from '$lib/query/index.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { createGeoArrowOverlay, loadGeoArrowModules } from '$lib/utils/deck.js';
+import {
+	buildSelectionLayer,
+	createGeoArrowOverlay,
+	hoverCursor,
+	loadGeoArrowModules
+} from '$lib/utils/deck.js';
 import {
 	buildGeoArrowTables,
 	type GeoArrowGeomType,
@@ -53,7 +58,9 @@ let geoArrowState: {
 	geoArrowResults: GeoArrowResult[];
 } | null = null;
 let overlayRef: any = null;
+let dataLayersRef: any[] = [];
 let mapRef: maplibregl.Map | null = null;
+let wkbArraysRef: Uint8Array[] = [];
 
 /** Drill into nested coordinate arrays to find the first [lng, lat] pair. */
 function extractFirstCoord(coords: any): [number, number] | null {
@@ -107,6 +114,9 @@ async function loadGeoData() {
 		}
 
 		const modules = await loadGeoArrowModules();
+
+		// Keep WKB ref for selection highlight (no copy — same typed arrays)
+		wkbArraysRef = result.wkbArrays;
 
 		// Convert WKB → GeoArrow Arrow Tables (zero-copy direct binary read)
 		// Pass knownGeomType from metadata to skip classification pass
@@ -163,14 +173,35 @@ function onMapReady(map: maplibregl.Map) {
 	if (!geoArrowState) return;
 	mapRef = map;
 
-	const overlay = createGeoArrowOverlay(geoArrowState.modules, {
+	const { modules, geoArrowResults } = geoArrowState;
+	const GeoJsonLayer = modules.GeoJsonLayer;
+
+	const { overlay, layers: dataLayers } = createGeoArrowOverlay(modules, {
 		layerId: 'geoarrow-data',
-		geoArrowResults: geoArrowState.geoArrowResults,
-		onClick: (props) => {
+		geoArrowResults,
+		onHover: hoverCursor(map),
+		onClick: (props, sourceIndex) => {
 			selectedFeature = props;
 			showAttributes = true;
+			// Reconstruct GeoJSON Feature from WKB for selection highlight
+			const wkb = wkbArraysRef[sourceIndex];
+			if (wkb) {
+				const geom = parseWKB(wkb);
+				if (geom) {
+					const selLayer = buildSelectionLayer(GeoJsonLayer, {
+						type: 'Feature',
+						geometry: geom as GeoJSON.Geometry,
+						properties: {}
+					});
+					if (selLayer) {
+						overlay.setProps({ layers: [...dataLayers, selLayer] });
+					}
+				}
+			}
 		}
 	});
+
+	dataLayersRef = dataLayers;
 	overlayRef = overlay;
 
 	map.addControl(overlay as any);

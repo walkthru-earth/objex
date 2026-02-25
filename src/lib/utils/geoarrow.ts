@@ -34,6 +34,8 @@ export interface GeoArrowResult {
 	table: Table;
 	geometryType: GeoArrowGeomType;
 	bounds: [number, number, number, number]; // [minX, minY, maxX, maxY]
+	/** Maps local table row index → original WKB array index (for selection lookup). */
+	sourceIndices: number[];
 }
 
 /** Map DuckDB ST_GeometryType output to our normalized type. */
@@ -726,7 +728,8 @@ function buildSingleTable(
 	return {
 		table,
 		geometryType: geomType,
-		bounds: [b.minX, b.minY, b.maxX, b.maxY]
+		bounds: [b.minX, b.minY, b.maxX, b.maxY],
+		sourceIndices: indices
 	};
 }
 

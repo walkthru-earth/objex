@@ -266,6 +266,8 @@ export const en: Record<string, string> = {
 	'code.wrap': 'Wrap',
 	'code.copied': 'Copied!',
 	'code.copy': 'Copy',
+	'code.format': 'Format',
+	'code.raw': 'Raw',
 	'code.loading': 'Loading...',
 	'code.stacCatalog': 'STAC Catalog',
 	'code.stacCollection': 'STAC Collection',

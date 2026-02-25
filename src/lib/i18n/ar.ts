@@ -263,6 +263,8 @@ export const ar: Record<string, string> = {
 	'code.wrap': 'التفاف',
 	'code.copied': 'تم النسخ!',
 	'code.copy': 'نسخ',
+	'code.format': 'تنسيق',
+	'code.raw': 'خام',
 	'code.loading': 'جارٍ التحميل...',
 	'code.stacCatalog': 'كتالوج STAC',
 	'code.stacCollection': 'مجموعة STAC',

@@ -18,6 +18,7 @@ let loading = $state(true);
 let error = $state<string | null>(null);
 let wordWrap = $state(false);
 let copied = $state(false);
+let formatted = $state(false);
 const urlView = getUrlView();
 let viewMode = $state<'code' | 'stac-browser' | 'kepler' | 'maputnik'>(
 	urlView === 'stac-browser'
@@ -118,6 +119,9 @@ const languageMap: Record<string, string> = {
 
 const language = $derived(languageMap[ext] ?? 'Plain Text');
 
+/** File types that support native formatting */
+const canFormat = $derived(['.json', '.sql', '.css', '.html', '.xml'].includes(ext));
+
 // Reset iframe view mode when tab changes (component reuse across code-type tabs)
 let prevTabId = '';
 $effect(() => {
@@ -148,6 +152,59 @@ async function loadCode() {
 	} finally {
 		loading = false;
 	}
+}
+
+async function toggleFormat() {
+	if (formatted) {
+		// Restore original
+		html = await highlightCode(rawCode, lang);
+		formatted = false;
+		return;
+	}
+
+	let prettyCode = rawCode;
+	try {
+		if (ext === '.json') {
+			prettyCode = JSON.stringify(JSON.parse(rawCode), null, 2);
+		} else if (ext === '.sql') {
+			const { format: formatSql } = await import('sql-formatter');
+			prettyCode = formatSql(rawCode, { language: 'sql' });
+		} else if (ext === '.css') {
+			// Basic CSS pretty-print: newlines after { } ; and indent
+			prettyCode = rawCode
+				.replace(/\{/g, ' {\n  ')
+				.replace(/;/g, ';\n  ')
+				.replace(/\}/g, '\n}\n')
+				.replace(/\n\s*\n/g, '\n')
+				.trim();
+		} else if (ext === '.html' || ext === '.xml') {
+			// Basic XML/HTML indent
+			let indent = 0;
+			prettyCode = rawCode
+				.replace(/>\s*</g, '>\n<')
+				.split('\n')
+				.map((line) => {
+					const trimmed = line.trim();
+					if (trimmed.startsWith('</')) indent = Math.max(0, indent - 1);
+					const padded = '  '.repeat(indent) + trimmed;
+					if (
+						trimmed.startsWith('<') &&
+						!trimmed.startsWith('</') &&
+						!trimmed.endsWith('/>') &&
+						!trimmed.startsWith('<!')
+					)
+						indent++;
+					return padded;
+				})
+				.join('\n');
+		}
+	} catch {
+		// If formatting fails, keep the original
+		return;
+	}
+
+	html = await highlightCode(prettyCode, lang);
+	formatted = true;
 }
 
 function setViewMode(mode: 'code' | 'stac-browser' | 'kepler' | 'maputnik') {
@@ -218,6 +275,11 @@ async function copyCode() {
 
 			<!-- Desktop controls -->
 			<div class="hidden items-center gap-1 sm:flex">
+				{#if canFormat}
+					<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={toggleFormat}>
+						{formatted ? t('code.raw') : t('code.format')}
+					</Button>
+				{/if}
 				<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => (wordWrap = !wordWrap)}>
 					{wordWrap ? t('code.noWrap') : t('code.wrap')}
 				</Button>
@@ -257,6 +319,11 @@ async function copyCode() {
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => setViewMode('kepler')}>
 								{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
+							</DropdownMenu.Item>
+						{/if}
+						{#if canFormat}
+							<DropdownMenu.Item onclick={toggleFormat}>
+								{formatted ? t('code.raw') : t('code.format')}
 							</DropdownMenu.Item>
 						{/if}
 						<DropdownMenu.Item onclick={() => (wordWrap = !wordWrap)}>

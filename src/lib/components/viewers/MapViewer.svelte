@@ -4,6 +4,7 @@ import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import type { Tab } from '$lib/types';
+import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
@@ -149,6 +150,9 @@ function onMapReady(map: maplibregl.Map) {
 		}
 	});
 
+	// Selection highlight
+	setupSelectionLayer(map);
+
 	// Click handler
 	for (const layerId of [
 		'geojson-fill',
@@ -160,6 +164,7 @@ function onMapReady(map: maplibregl.Map) {
 			if (e.features && e.features.length > 0) {
 				selectedFeature = { ...e.features[0].properties };
 				showAttributes = true;
+				updateSelection(map, e.features[0] as GeoJSON.Feature);
 			}
 		});
 

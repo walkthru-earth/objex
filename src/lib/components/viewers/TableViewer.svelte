@@ -702,9 +702,9 @@ function setStacView() {
 
 	{#if viewMode === 'table'}
 		<!-- SQL Query Bar — hidden during schema/CRS detection, shown once query starts running -->
-		<div class="border-b border-zinc-200 px-4 py-1.5 dark:border-zinc-800" class:hidden={loading && loadStage !== t('table.runningQuery')}>
-			<div class="flex items-center gap-2">
-				<div class="flex-1">
+		<div class="border-b border-zinc-200 px-2 py-1.5 sm:px-4 dark:border-zinc-800" class:hidden={loading && loadStage !== t('table.runningQuery')}>
+			<div class="flex items-start gap-1.5 sm:gap-2">
+				<div class="min-w-0 flex-1">
 					<CodeMirrorEditor
 						value={customSql}
 						onChange={handleSqlChange}
@@ -715,14 +715,14 @@ function setStacView() {
 				</div>
 				<div class="flex shrink-0 flex-col gap-1">
 					<button
-						class="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+						class="rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:px-3"
 						onclick={runCustomSql}
 						disabled={queryRunning || loading}
 					>
 						{queryRunning ? t('table.running') : t('table.run')}
 					</button>
 					<button
-						class="rounded px-3 py-1 text-xs text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+						class="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-100 sm:px-3 dark:hover:bg-zinc-800"
 						onclick={handleFormatSql}
 					>
 						{t('table.format')}

@@ -12,7 +12,13 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { geojsonFillColor, geojsonLineColor, loadDeckModules } from '$lib/utils/deck.js';
+import {
+	buildSelectionLayer,
+	geojsonFillColor,
+	geojsonLineColor,
+	hoverCursor,
+	loadDeckModules
+} from '$lib/utils/deck.js';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -27,6 +33,7 @@ let error = $state<string | null>(null);
 let featureCount = $state(0);
 let totalFeatures = $state<number | null>(null);
 let selectedFeature = $state<Record<string, any> | null>(null);
+let selectedGeoFeature: GeoJSON.Feature | null = null;
 let showAttributes = $state(false);
 let showInfo = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
@@ -589,14 +596,19 @@ function updateLayer() {
 				pointRadiusMaxPixels: 12,
 				autoHighlight: true,
 				highlightColor: [255, 255, 255, 100],
+				onHover: mapRef ? hoverCursor(mapRef) : undefined,
 				onClick: (info: any) => {
 					if (info.object?.properties) {
 						selectedFeature = { ...info.object.properties };
+						selectedGeoFeature = info.object;
 						showAttributes = true;
+						// Re-render with selection layer
+						updateLayer();
 					}
 				}
-			})
-		]
+			}),
+			buildSelectionLayer(GeoJsonLayer, selectedGeoFeature)
+		].filter(Boolean)
 	});
 	mapRef?.triggerRepaint();
 }
