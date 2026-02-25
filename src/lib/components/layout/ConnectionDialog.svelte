@@ -4,6 +4,7 @@ import CloudIcon from '@lucide/svelte/icons/cloud';
 import LinkIcon from '@lucide/svelte/icons/link';
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import LockIcon from '@lucide/svelte/icons/lock';
+import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
 import XIcon from '@lucide/svelte/icons/x';
 import { Button } from '$lib/components/ui/button/index.js';
 import { Input } from '$lib/components/ui/input/index.js';
@@ -408,39 +409,41 @@ function handleCancel() {
 			{/if}
 		</div>
 
-		<SheetFooter class="flex-row gap-2 border-t pt-4">
+		<SheetFooter class="flex-row flex-wrap gap-2 border-t pt-4">
 			<Button
 				variant="outline"
-				size="sm"
+				size="icon-sm"
+				class="sm:h-8 sm:w-auto sm:px-3"
 				disabled={testing || saving || !bucket.trim()}
 				onclick={handleTestConnection}
+				title={t('connection.testButton')}
 			>
 				{#if testing}
-					<Loader2Icon class="me-1.5 size-4 animate-spin" />
-					{t('connection.testing')}
+					<Loader2Icon class="size-4 animate-spin" />
 				{:else}
-					{t('connection.testButton')}
+					<PlugZapIcon class="size-4" />
 				{/if}
+				<span class="hidden sm:inline">{testing ? t('connection.testing') : t('connection.testButton')}</span>
 			</Button>
 
-			<div class="flex-1"></div>
+			<div class="flex min-w-0 flex-1 justify-end gap-2">
+				<Button variant="ghost" size="sm" onclick={handleCancel} disabled={saving}>
+					{t('connection.cancel')}
+				</Button>
 
-			<Button variant="ghost" size="sm" onclick={handleCancel} disabled={saving}>
-				{t('connection.cancel')}
-			</Button>
-
-			<Button
-				size="sm"
-				disabled={!canSave || saving}
-				onclick={handleSave}
-			>
-				{#if saving}
-					<Loader2Icon class="me-1.5 size-4 animate-spin" />
-					{t('connection.saving')}
-				{:else}
-					{isEditMode ? t('connection.update') : t('connection.create')}
-				{/if}
-			</Button>
+				<Button
+					size="sm"
+					disabled={!canSave || saving}
+					onclick={handleSave}
+				>
+					{#if saving}
+						<Loader2Icon class="me-1.5 size-4 animate-spin" />
+						{t('connection.saving')}
+					{:else}
+						{isEditMode ? t('connection.update') : t('connection.create')}
+					{/if}
+				</Button>
+			</div>
 		</SheetFooter>
 	</SheetContent>
 </Sheet>

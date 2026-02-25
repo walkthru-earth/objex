@@ -84,11 +84,16 @@ $effect(() => {
 	return () => mq.removeEventListener('change', handler);
 });
 
-// Auto-close mobile sheet when a file is opened
+// Auto-close mobile sheet when a DIFFERENT file is opened.
+// Track activeTabId (primitive) instead of tabs.active (derived from array)
+// so that metadata-only updates (e.g. size from HEAD request) don't re-trigger.
+let prevMobileTabId: string | null = tabs.activeTabId;
 $effect(() => {
-	if (tabs.active) {
+	const id = tabs.activeTabId;
+	if (id && id !== prevMobileTabId) {
 		mobileSheetOpen = false;
 	}
+	prevMobileTabId = id;
 });
 
 // Auto-open desktop sidebar when a connection is activated
