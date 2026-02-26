@@ -125,6 +125,9 @@ function createConnectionsStore() {
 			connections = [...connections];
 			persistToLocalStorage(connections);
 
+			// Invalidate cached adapter for this connection
+			import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
+
 			// Update in-memory credentials.
 			if (!config.anonymous) {
 				if (config.sas_token) {
@@ -157,6 +160,8 @@ function createConnectionsStore() {
 			connections = connections.filter((c) => c.id !== id);
 			persistToLocalStorage(connections);
 			credentialStore.remove(id);
+			// Invalidate cached adapter for this connection
+			import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
 			return connections.length < before;
 		},
 
@@ -193,7 +198,7 @@ function createConnectionsStore() {
 			const prevCreds = credentialStore.get(tempId);
 			if (!hadConn) {
 				connections = [...connections, tempConn];
-				persistToLocalStorage(connections);
+				// Don't persist — this is a temp test connection
 			}
 
 			if (!config.anonymous) {
@@ -217,7 +222,7 @@ function createConnectionsStore() {
 				// Cleanup: remove temp connection if we added it
 				if (!hadConn) {
 					connections = connections.filter((c) => c.id !== tempId);
-					persistToLocalStorage(connections);
+					// Don't persist — was never in localStorage
 				}
 				// Restore previous credentials or remove temp ones
 				if (prevCreds) {
@@ -225,6 +230,8 @@ function createConnectionsStore() {
 				} else if (!hadConn) {
 					credentialStore.remove(tempId);
 				}
+				// Also clear any cached adapter for the temp connection
+				import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(tempId));
 			}
 		},
 

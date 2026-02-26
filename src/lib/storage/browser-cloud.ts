@@ -91,9 +91,22 @@ function createFetcher(conn: Connection): (url: string, init?: RequestInit) => P
  */
 export class BrowserCloudAdapter implements StorageAdapter {
 	private connectionId: string;
+	private _fetcher: ((url: string, init?: RequestInit) => Promise<Response>) | null = null;
 
 	constructor(connectionId: string) {
 		this.connectionId = connectionId;
+	}
+
+	/** Invalidate cached fetcher (call if credentials change). */
+	resetFetcher(): void {
+		this._fetcher = null;
+	}
+
+	private getFetcher(): (url: string, init?: RequestInit) => Promise<Response> {
+		if (!this._fetcher) {
+			this._fetcher = createFetcher(this.getConnection());
+		}
+		return this._fetcher;
 	}
 
 	get supportsWrite(): boolean {
@@ -115,7 +128,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	): Promise<ListPage> {
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const params = new URLSearchParams({
 			'list-type': '2',
@@ -195,7 +208,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	): Promise<Uint8Array> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(path)}`;
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const headers: Record<string, string> = {};
 		if (offset !== undefined || length !== undefined) {
@@ -215,7 +228,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	async head(path: string, signal?: AbortSignal): Promise<FileEntry> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(path)}`;
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const res = await cloudFetch(url, { method: 'HEAD', signal });
 		if (!res.ok) {
@@ -239,7 +252,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	async put(key: string, data: Uint8Array, contentType?: string): Promise<WriteResult> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(key)}`;
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const headers: Record<string, string> = {};
 		if (contentType) headers['Content-Type'] = contentType;
@@ -260,7 +273,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	async delete(key: string): Promise<void> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(key)}`;
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const res = await cloudFetch(url, { method: 'DELETE' });
 		if (!res.ok && res.status !== 204) {
@@ -276,7 +289,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		// List all objects under prefix (no delimiter → recursive)
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const keys: string[] = [];
 		let continuationToken: string | undefined;
@@ -313,7 +326,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 	async copy(srcKey: string, destKey: string): Promise<WriteResult> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(destKey)}`;
-		const cloudFetch = createFetcher(conn);
+		const cloudFetch = this.getFetcher();
 
 		const res = await cloudFetch(url, {
 			method: 'PUT',

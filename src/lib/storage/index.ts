@@ -6,24 +6,40 @@ import { UrlAdapter } from './url-adapter.js';
 
 export type { StorageAdapter } from './adapter.js';
 
+const adapterCache = new Map<string, StorageAdapter>();
+// Singleton UrlAdapter — stateless, no connection needed
+const urlAdapter = new UrlAdapter();
+
 /**
  * Returns the appropriate storage adapter for the given source.
- * - 'url': direct HTTPS fetch (no connection needed)
- * - 'remote': connection-based adapter (Azure or S3-compatible)
+ * Caches adapter instances per connectionId.
  */
 export function getAdapter(source: 'remote' | 'url', connectionId?: string): StorageAdapter {
 	if (source === 'url') {
-		return new UrlAdapter();
+		return urlAdapter;
 	}
 
 	if (!connectionId) {
 		throw new Error('A connectionId is required for remote storage adapters.');
 	}
 
+	let adapter = adapterCache.get(connectionId);
+	if (adapter) return adapter;
+
 	const conn = connectionStore.getById(connectionId);
 	if (conn?.provider === 'azure') {
-		return new BrowserAzureAdapter(connectionId);
+		adapter = new BrowserAzureAdapter(connectionId);
+	} else {
+		adapter = new BrowserCloudAdapter(connectionId);
 	}
 
-	return new BrowserCloudAdapter(connectionId);
+	adapterCache.set(connectionId, adapter);
+	return adapter;
+}
+
+/**
+ * Clear cached adapter for a connection (call on connection update/delete).
+ */
+export function clearAdapterCache(connectionId: string): void {
+	adapterCache.delete(connectionId);
 }
