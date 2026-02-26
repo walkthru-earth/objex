@@ -195,19 +195,17 @@ $effect(() => {
 });
 
 // Build blob URL for HTML rendering
+// Only reads isHtml + rawCode as dependencies; cleanup revokes via captured local ref
 $effect(() => {
 	if (!isHtml || !rawCode) {
-		if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
 		htmlBlobUrl = '';
 		return;
 	}
-	if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
 	const blob = new Blob([rawCode], { type: 'text/html' });
-	htmlBlobUrl = URL.createObjectURL(blob);
+	const url = URL.createObjectURL(blob);
+	htmlBlobUrl = url;
 
-	return () => {
-		if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
-	};
+	return () => URL.revokeObjectURL(url);
 });
 
 async function toggleFormat() {
