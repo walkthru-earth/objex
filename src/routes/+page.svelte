@@ -240,8 +240,9 @@ const pageDescription = $derived.by(() => {
 
 							<!-- URL pattern hint with cycling extension -->
 							<button
+								dir="ltr"
 								onclick={copyUrlPattern}
-								class="group mt-4 flex w-full max-w-md items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-start transition-colors hover:border-border hover:bg-muted/70"
+								class="group mt-4 flex w-full max-w-md items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted/70"
 							>
 								<code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[11px] sm:text-xs">
 									<span class="text-muted-foreground/50">{displayHost}/</span><span class="text-muted-foreground">?url=…/data</span><span class="relative inline-block w-[var(--ext-w)] overflow-hidden align-bottom transition-[width] duration-300" style="height: 1lh; --ext-w: {currentFormat.ext.length * 0.62}em">{#key currentFormat.ext}<span
