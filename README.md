@@ -17,7 +17,7 @@ graph LR
 |-------|------|
 | Framework | SvelteKit 2 + Svelte 5 (static adapter, CSR-only) |
 | Styling | Tailwind CSS 4 + bits-ui (headless Svelte primitives) |
-| Query engine | DuckDB-WASM (in-browser SQL) |
+| Query engine | DuckDB-WASM (in-browser SQL, cancellable via `conn.send()` / `cancelSent()`) |
 | Maps | MapLibre GL 5 + deck.gl 9 |
 | Storage auth | aws4fetch (SigV4) / Azure SAS |
 | Code quality | Biome + svelte-check |
@@ -55,7 +55,7 @@ graph TD
 
     subgraph Core["Core"]
         SA["StorageAdapter<br/>browser-cloud / browser-azure / url-adapter"]
-        DDB["DuckDB-WASM<br/>+ httpfs + spatial"]
+        DDB["DuckDB-WASM<br/>+ httpfs + spatial<br/>+ cancellable queries"]
         WKB["WKB Parser<br/>→ GeoArrow"]
         FI["File Icons Registry<br/>(ext → viewer)"]
     end
@@ -193,6 +193,25 @@ The TableViewer + GeoParquetMapViewer share a unified query pipeline:
 5. **WKB extraction** — `ST_AsWKB()` adds a `__wkb` column alongside table data
 6. **GeoArrow rendering** — `buildGeoArrowTables()` splits mixed WKBs by geometry type → one deck.gl layer per type (Point, LineString, Polygon, Multi*)
 
+### Query Cancellation
+
+DuckDB-WASM runs all queries on a single Web Worker. Data queries use `conn.send()` (non-blocking, poll-based) instead of `conn.query()` (blocking) so they can be cancelled mid-execution:
+
+- **Graceful cancel** — `conn.cancelSent()` interrupts the query between Arrow batches
+- **Force cancel** — `db.terminate()` kills the worker entirely (last resort, auto-reinitializes on next query)
+- **Tab close** — cleanup cancels any in-flight query handle to unblock the worker immediately
+
+Metadata queries (`getSchema`, `getRowCount`, `detectCrs`) remain on `conn.query()` — they're fast and don't need cancellation.
+
+### Near-Zero-Copy Extraction
+
+Map attribute extraction uses type-aware bulk reads to minimize allocations:
+
+- **Numeric columns** (Int, Float, Double, Decimal, BigInt) — Arrow's `.toArray()` returns a zero-copy typed array view over the buffer, then `Array.from()` for downstream compat
+- **WKB geometry** — `Uint8Array` from Arrow column `.get(i)` is used directly (no copy when already a `Uint8Array`)
+- **Binary columns** (BLOB, BYTEA, WKB_BLOB) — skipped during map attribute extraction (not useful for tooltips, expensive to serialize)
+- **DuckDB version** — injected at build time from `package.json` via Vite `define` (never hardcoded)
+
 ## URL Sharing
 
 URLs encode the full viewer state for shareable links:
@@ -249,7 +268,7 @@ src/
 │   │   └── ui/          # Headless primitives (bits-ui)
 │   ├── stores/          # Svelte 5 rune stores
 │   ├── storage/         # Cloud adapters (S3, Azure, URL)
-│   ├── query/           # DuckDB-WASM engine
+│   ├── query/           # DuckDB-WASM engine (cancellable queries, type-aware extraction)
 │   ├── utils/           # WKB parser, GeoArrow, URL state, archive streaming
 │   ├── i18n/            # Translations (en, ar)
 │   └── file-icons/      # Extension → viewer/icon registry
@@ -274,6 +293,8 @@ This app handles large cloud datasets entirely in the browser. Follow these rule
 - **Use `$state.snapshot()` before passing state to external libraries** — deck.gl, MapLibre, DuckDB, Arrow all expect plain objects, not Svelte proxies
 - **Use `listPage()` with `PAGE_SIZE` for large directory listings** — fetch 200 entries per API call, render immediately, load more on scroll via IntersectionObserver sentinel
 - **Read dependencies synchronously in `$effect`** — any value read after `await` or inside `setTimeout` is NOT tracked by Svelte's reactivity
+- **Use `engine.queryCancellable()` for data queries** — returns a `QueryHandle` with `cancel()` synchronously, so cancellation is available before results arrive. Store the handle and cancel it in cleanup. Use `engine.forceCancel()` only as a last resort (kills the worker)
+- **Use type-aware bulk extraction for Arrow columns** — `extractColumnBulk()` / `appendColumnBulk()` use `.toArray()` for numeric types (zero-copy typed array) and per-element `.get(i)` only for complex types. Skip binary columns when extracting map attributes
 
 ### Don't
 
@@ -284,6 +305,8 @@ This app handles large cloud datasets entirely in the browser. Follow these rule
 - **Don't create `document.addEventListener` without removal** — track listeners and remove in cleanup; if added in a drag handler, guard against mid-drag component destruction
 - **Don't use `async` as the `$effect` callback** — it returns a Promise, not a cleanup function. Use an inner async IIFE with a cancellation flag instead
 - **Don't create deep `$derived` chains** (>2-3 levels) — known Svelte 5 bug causes exponential recomputation. Flatten into a single `$derived.by` block
+- **Don't use `conn.query()` for long-running data queries** — it blocks the single DuckDB Web Worker synchronously, queuing all other tabs behind it. Use `conn.send()` via `queryCancellable()` instead
+- **Don't forget to cancel query handles in cleanup** — an uncancelled query keeps the worker busy, blocking all other tabs until it finishes
 
 ### Viewer Checklist
 
@@ -300,6 +323,8 @@ When adding a new viewer component:
 [ ] URL.revokeObjectURL() for any blob URLs created
 [ ] WebGL/canvas resources explicitly disposed
 [ ] No document.addEventListener without matching removal
+[ ] Cancel query handles (activeHandle/mapQueryHandle) in cleanup
+[ ] Clear any setTimeout timers (forceCancelTimer) in cleanup
 ```
 
 See `docs/performance-audit.md` and `docs/svelte5-performance-guide.md` for full details.
