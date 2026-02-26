@@ -276,7 +276,16 @@ const pageDescription = $derived.by(() => {
 		<Sheet.Root bind:open={mobileSheetOpen}>
 			<Sheet.Content
 				side="left"
-				class="{hasBrowserConnection ? 'w-[85vw]' : 'w-[75vw]'} gap-0 p-0 [&>button:last-child]:hidden"
+				class="w-[85vw] gap-0 p-0 [&>button:last-child]:hidden"
+				onInteractOutside={(e: Event) => {
+					// Prevent bits-ui DismissibleLayer from closing the sheet when
+					// portaled elements (tooltips, context menus) trigger outside-interaction.
+					// The overlay click still works because we only block non-overlay targets.
+					const target = e.target as HTMLElement | null;
+					if (target && !target.closest('[data-slot="sheet-overlay"]')) {
+						e.preventDefault();
+					}
+				}}
 			>
 				<Sheet.Header class="flex flex-row items-center justify-between border-b px-3 py-2">
 					<Sheet.Title class="text-sm font-medium">{t('mobile.fileExplorer')}</Sheet.Title>

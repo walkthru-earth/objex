@@ -196,6 +196,9 @@ async function ensureCredentials(connection: Connection): Promise<boolean> {
 }
 
 async function handleBrowseConnection(connection: Connection) {
+	// Skip if this connection is already being browsed — avoids clearing entries
+	// and re-fetching, which causes DOM churn that can close the mobile Sheet.
+	if (browser.activeConnection?.id === connection.id) return;
 	if (!(await ensureCredentials(connection))) return;
 	browser.browse(connection);
 	syncUrlParam(connection);
