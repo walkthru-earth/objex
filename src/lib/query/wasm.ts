@@ -40,7 +40,6 @@ function elapsed(start: number): string {
 }
 
 let dbPromise: Promise<any> | null = null;
-let geoConversionDisabled = false;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -112,7 +111,14 @@ async function getDB() {
 			// "Geoparquet metadata does not have a version". We handle geometry
 			// detection, CRS, and WKB conversion ourselves via hyparquet metadata
 			// and explicit ST_GeomFromWKB() calls, so auto-conversion is not needed.
-			await conn.query('SET enable_geoparquet_conversion = false');
+			// SET GLOBAL applies to all future connections (no per-connection overhead).
+			try {
+				await conn.query('SET GLOBAL enable_geoparquet_conversion = false');
+				geoConversionGlobal = true;
+			} catch {
+				// SET GLOBAL not supported — fall back to per-connection SET
+				await conn.query('SET enable_geoparquet_conversion = false');
+			}
 			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
 			await conn.close();
@@ -130,16 +136,16 @@ async function getDB() {
 	return dbPromise;
 }
 
+let geoConversionGlobal = false;
+
 /**
  * Ensure GeoParquet auto-conversion is disabled on this connection.
- * It's a GLOBAL setting — once set, it persists for the DB instance.
- * The flag avoids redundant SET calls on subsequent connections.
+ * If SET GLOBAL succeeded during init, this is a no-op.
+ * Otherwise falls back to per-connection SET.
  */
 async function ensureGeoConversionDisabled(conn: any): Promise<void> {
-	if (geoConversionDisabled) return;
+	if (geoConversionGlobal) return;
 	await conn.query('SET enable_geoparquet_conversion = false');
-	geoConversionDisabled = true;
-	log('ensureGeoConversionDisabled → SET applied');
 }
 
 // ─── CRS detection helpers ───────────────────────────────────────────
@@ -402,12 +408,14 @@ export class WasmQueryEngine implements QueryEngine {
 			const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 			let wkbExpr: string;
-			let geomExpr: string;
+			let geomExpr: string | null;
 
 			if (isWkbBlob && !sourceCrs) {
-				// Already WKB — use directly, no conversion needed
+				// Already WKB — use directly, no spatial function calls needed.
+				// Avoids ST_GeomFromWKB which can fail if DuckDB auto-converted
+				// the column to GEOMETRY despite enable_geoparquet_conversion=false.
 				wkbExpr = quoted;
-				geomExpr = `ST_GeomFromWKB(${quoted})`;
+				geomExpr = null; // geometry type detected client-side from WKB headers
 			} else {
 				geomExpr = isSpatialType
 					? quoted
@@ -427,10 +435,10 @@ export class WasmQueryEngine implements QueryEngine {
 				wkbExpr = `ST_AsWKB(${geomExpr})`;
 			}
 
-			// Wrap query: WKB for binary geometry, ST_GeometryType for type detection
-			const mapSql = `SELECT *, ${wkbExpr} AS __wkb,
-				ST_GeometryType(${geomExpr}) AS __geom_type
-				FROM (${sql}) __src`;
+			// Wrap query: WKB for binary geometry, optional ST_GeometryType
+			const mapSql = geomExpr
+				? `SELECT *, ${wkbExpr} AS __wkb, ST_GeometryType(${geomExpr}) AS __geom_type FROM (${sql}) __src`
+				: `SELECT *, ${wkbExpr} AS __wkb FROM (${sql}) __src`;
 			const result = await conn.query(mapSql);
 
 			// Extract raw WKB binary column — .get(i) returns Uint8Array from Arrow v17
@@ -438,17 +446,20 @@ export class WasmQueryEngine implements QueryEngine {
 			const wkbArrays: Uint8Array[] = [];
 			for (let i = 0; i < wkbCol.length; i++) {
 				const v = wkbCol.get(i);
-				if (v) wkbArrays.push(v instanceof Uint8Array ? v : new Uint8Array(v));
+				// Copy: Arrow .get() returns buffer views that may be invalidated
+				if (v) wkbArrays.push(v instanceof Uint8Array ? v.slice() : new Uint8Array(v));
 			}
 
-			// Detect geometry type from first non-null row
+			// Detect geometry type from first non-null row (if available)
 			const typeCol = result.getChild('__geom_type');
 			let geometryType = 'POINT';
-			for (let i = 0; i < typeCol.length; i++) {
-				const t = typeCol.get(i);
-				if (t) {
-					geometryType = String(t);
-					break;
+			if (typeCol) {
+				for (let i = 0; i < typeCol.length; i++) {
+					const t = typeCol.get(i);
+					if (t) {
+						geometryType = String(t);
+						break;
+					}
 				}
 			}
 
@@ -788,7 +799,18 @@ export class WasmQueryEngine implements QueryEngine {
 					}
 
 					for (const row of batch.toArray()) {
-						rows.push(typeof row.toJSON === 'function' ? row.toJSON() : row);
+						const json: Record<string, any> =
+							typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+						// Binary columns return Uint8Array views into the Arrow
+						// RecordBatch buffer. The streaming reader can reclaim/reuse
+						// buffers between batches (especially for cached queries),
+						// making stale views. Copy them so row data survives.
+						for (const key in json) {
+							if (json[key] instanceof Uint8Array) {
+								json[key] = (json[key] as Uint8Array).slice();
+							}
+						}
+						rows.push(json);
 					}
 				}
 
@@ -859,11 +881,12 @@ export class WasmQueryEngine implements QueryEngine {
 				const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 				let wkbExpr: string;
-				let geomExpr: string;
+				let geomExpr: string | null;
 
 				if (isWkbBlob && !sourceCrs) {
+					// Already WKB — use directly, no spatial function calls needed.
 					wkbExpr = quoted;
-					geomExpr = `ST_GeomFromWKB(${quoted})`;
+					geomExpr = null; // geometry type detected client-side from WKB headers
 				} else {
 					geomExpr = isSpatialType
 						? quoted
@@ -876,9 +899,9 @@ export class WasmQueryEngine implements QueryEngine {
 					wkbExpr = `ST_AsWKB(${geomExpr})`;
 				}
 
-				const mapSql = `SELECT *, ${wkbExpr} AS __wkb,
-					ST_GeometryType(${geomExpr}) AS __geom_type
-					FROM (${sql}) __src`;
+				const mapSql = geomExpr
+					? `SELECT *, ${wkbExpr} AS __wkb, ST_GeometryType(${geomExpr}) AS __geom_type FROM (${sql}) __src`
+					: `SELECT *, ${wkbExpr} AS __wkb FROM (${sql}) __src`;
 
 				const reader = await conn.send(mapSql);
 
@@ -915,7 +938,9 @@ export class WasmQueryEngine implements QueryEngine {
 					const typeCol = batch.getChild('__geom_type');
 					for (let i = 0; i < batch.numRows; i++) {
 						const v = wkbCol?.get(i);
-						if (v) wkbArrays.push(v instanceof Uint8Array ? v : new Uint8Array(v));
+						// .get(i) returns a Uint8Array view into the batch buffer —
+						// copy it so data survives buffer reuse across batches.
+						if (v) wkbArrays.push(v instanceof Uint8Array ? v.slice() : new Uint8Array(v));
 
 						if (!geometryTypeDetected && typeCol) {
 							const t = typeCol.get(i);
@@ -979,7 +1004,7 @@ export class WasmQueryEngine implements QueryEngine {
 			logWarn('forceCancel → terminate error:', err);
 		} finally {
 			dbPromise = null;
-			geoConversionDisabled = false;
+			geoConversionGlobal = false;
 			log('forceCancel → done, next getDB() will reinitialize');
 		}
 	}

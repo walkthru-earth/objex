@@ -344,6 +344,8 @@ export const ar: Record<string, string> = {
 		'يستخدم هذا الملف صيغة {{type}} غير مدعومة لعرض الخريطة. يمكن عرض ملفات COG بصيغة RGB فقط.',
 	'map.noGeoColumn': 'لم يتم اكتشاف عمود هندسي في المخطط',
 	'map.noData': 'لا تتوفر بيانات لعرض الخريطة',
+	'map.webglLost': 'فُقد سياق WebGL',
+	'map.retry': 'إعادة المحاولة',
 	'map.noFeatures': 'لم يتم العثور على معالم في ملف FlatGeobuf',
 	'map.layers': 'طبقة',
 	'map.layersPlural': 'طبقات',

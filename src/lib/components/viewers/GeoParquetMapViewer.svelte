@@ -2,15 +2,14 @@
 import LocateIcon from '@lucide/svelte/icons/locate';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy } from 'svelte';
-import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
-import { getQueryEngine, type MapQueryHandle, QueryCancelledError } from '$lib/query/index.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import {
 	buildSelectionLayer,
+	createGeoArrowLayers,
 	createGeoArrowOverlay,
 	hoverCursor,
 	loadGeoArrowModules
@@ -20,8 +19,7 @@ import {
 	type GeoArrowGeomType,
 	type GeoArrowResult
 } from '$lib/utils/geoarrow.js';
-import { buildDuckDbUrl } from '$lib/utils/url.js';
-import { findGeoColumn, parseWKB } from '$lib/utils/wkb.js';
+import { parseWKB } from '$lib/utils/wkb.js';
 import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -55,7 +53,7 @@ let bounds = $state<[number, number, number, number] | undefined>();
 
 let firstFeatureCoord = $state<[number, number] | null>(null);
 
-let mapQueryHandle: MapQueryHandle | null = null;
+let loadGen = 0;
 
 let geoArrowState: {
 	modules: Record<string, any>;
@@ -78,16 +76,15 @@ function flyToFirstFeature() {
 	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
 }
 
+// mapData is read synchronously in loadGeoData (before any await),
+// so Svelte 5 tracks it as a dependency. The effect re-fires when
+// mapData changes — on initial load, pagination, sort, page size change.
 $effect(() => {
 	if (!tab || schema.length === 0) return;
 	loadGeoData();
 });
 
 function cleanup() {
-	if (mapQueryHandle) {
-		mapQueryHandle.cancel();
-		mapQueryHandle = null;
-	}
 	if (overlayRef && mapRef) {
 		try {
 			mapRef.removeControl(overlayRef);
@@ -109,29 +106,42 @@ $effect(() => {
 onDestroy(cleanup);
 
 async function loadGeoData() {
-	loading = true;
+	const gen = ++loadGen;
 	error = null;
 
-	try {
-		// Use pre-loaded map data from TableViewer (unified query) or fetch independently
-		const result = mapData && mapData.rowCount > 0 ? mapData : await fetchMapData();
+	// Always use preloaded map data from TableViewer's unified query.
+	// No independent fetch — avoids duplicate DuckDB queries.
+	// The $effect re-fires when mapData changes (tracked read below).
+	if (!mapData || mapData.rowCount === 0) {
+		loading = true;
+		return; // Wait — effect will re-fire when mapData arrives
+	}
 
-		if (!result || result.rowCount === 0) {
-			error = t('map.noData');
-			loading = false;
-			return;
-		}
+	try {
+		const result = mapData;
 
 		const modules = await loadGeoArrowModules();
+		if (gen !== loadGen) return;
 
 		// Keep WKB ref for selection highlight (no copy — same typed arrays)
 		wkbArraysRef = result.wkbArrays;
 
 		// Convert WKB → GeoArrow Arrow Tables (zero-copy direct binary read)
-		// Pass knownGeomType from metadata to skip classification pass
-		const geoArrowResults = buildGeoArrowTables(result.wkbArrays, result.attributes, knownGeomType);
+		// Skip knownGeomType for custom queries — the user's SQL may return
+		// different geometry types or join different tables.
+		const effectiveGeomType = isCustomQuery ? undefined : knownGeomType;
+		const geoArrowResults = buildGeoArrowTables(
+			result.wkbArrays,
+			result.attributes,
+			effectiveGeomType
+		);
 
 		if (geoArrowResults.length === 0) {
+			console.warn('[GeoMap] Empty geoArrow results:', {
+				wkbCount: result.wkbArrays.length,
+				effectiveGeomType,
+				gen
+			});
 			error = t('map.noData');
 			loading = false;
 			return;
@@ -148,49 +158,46 @@ async function loadGeoData() {
 			if (parsed) firstFeatureCoord = extractFirstCoord(parsed.coordinates);
 		}
 
+		// If map is already alive, update overlay in-place (no remount)
+		if (overlayRef && mapRef) {
+			const newLayers = createGeoArrowLayers(modules, {
+				layerId: 'geoarrow-data',
+				geoArrowResults,
+				onHover: hoverCursor(mapRef),
+				onClick: handleFeatureClick
+			});
+			dataLayersRef = newLayers;
+			overlayRef.setProps({ layers: newLayers });
+		}
+
 		loading = false;
 	} catch (err) {
-		if (err instanceof QueryCancelledError) {
-			// Silent cancellation — user switched tabs or cancelled
-			loading = false;
-			return;
-		}
+		if (gen !== loadGen) return;
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	}
 }
 
-async function fetchMapData(): Promise<MapQueryResult> {
-	const geoCol = findGeoColumn(schema);
-	if (!geoCol) throw new Error(t('map.noGeoColumn'));
-
-	const geoField = schema.find((f) => f.name === geoCol);
-	const geomColType = geoField?.type ?? 'GEOMETRY';
-
-	const fileUrl = buildDuckDbUrl(tab);
-	const source = buildDuckDbSource(tab.path, fileUrl);
-	const baseSql = `SELECT * FROM ${source} LIMIT ${settings.featureLimit}`;
-	const connId = tab.connectionId ?? '';
-
-	const engine = await getQueryEngine();
-
-	// Detect CRS if not already provided by parent (standalone map loading)
-	let crs = sourceCrs;
-	if (crs === null) {
-		crs = await engine.detectCrs(connId, fileUrl, geoCol);
-	}
-
-	if (engine.queryForMapCancellable) {
-		const handle = engine.queryForMapCancellable(connId, baseSql, geoCol, geomColType, crs);
-		mapQueryHandle = handle;
-		try {
-			return await handle.result;
-		} finally {
-			mapQueryHandle = null;
+function handleFeatureClick(props: Record<string, any>, sourceIndex: number) {
+	selectedFeature = props;
+	showAttributes = true;
+	// Reconstruct GeoJSON Feature from WKB for selection highlight
+	if (!geoArrowState || !overlayRef) return;
+	const GeoJsonLayer = geoArrowState.modules.GeoJsonLayer;
+	const wkb = wkbArraysRef[sourceIndex];
+	if (wkb) {
+		const geom = parseWKB(wkb);
+		if (geom) {
+			const selLayer = buildSelectionLayer(GeoJsonLayer, {
+				type: 'Feature',
+				geometry: geom as GeoJSON.Geometry,
+				properties: {}
+			});
+			if (selLayer) {
+				overlayRef.setProps({ layers: [...dataLayersRef, selLayer] });
+			}
 		}
 	}
-
-	return engine.queryForMap(connId, baseSql, geoCol, geomColType, crs);
 }
 
 function onMapReady(map: maplibregl.Map) {
@@ -198,31 +205,12 @@ function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
 
 	const { modules, geoArrowResults } = geoArrowState;
-	const GeoJsonLayer = modules.GeoJsonLayer;
 
 	const { overlay, layers: dataLayers } = createGeoArrowOverlay(modules, {
 		layerId: 'geoarrow-data',
 		geoArrowResults,
 		onHover: hoverCursor(map),
-		onClick: (props, sourceIndex) => {
-			selectedFeature = props;
-			showAttributes = true;
-			// Reconstruct GeoJSON Feature from WKB for selection highlight
-			const wkb = wkbArraysRef[sourceIndex];
-			if (wkb) {
-				const geom = parseWKB(wkb);
-				if (geom) {
-					const selLayer = buildSelectionLayer(GeoJsonLayer, {
-						type: 'Feature',
-						geometry: geom as GeoJSON.Geometry,
-						properties: {}
-					});
-					if (selLayer) {
-						overlay.setProps({ layers: [...dataLayers, selLayer] });
-					}
-				}
-			}
-		}
+		onClick: handleFeatureClick
 	});
 
 	dataLayersRef = dataLayers;

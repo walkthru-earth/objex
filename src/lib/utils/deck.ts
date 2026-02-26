@@ -218,6 +218,19 @@ export function createGeoArrowOverlay(
 	return { overlay: new MapboxOverlay({ interleaved: false, layers }), layers };
 }
 
+/**
+ * Create GeoArrow layers without an overlay — for in-place overlay updates.
+ */
+export function createGeoArrowLayers(
+	modules: Record<string, any>,
+	options: GeoArrowOverlayOptions
+): any[] {
+	const { layerId, geoArrowResults, onClick, onHover } = options;
+	return geoArrowResults.map((result) =>
+		createLayerForResult(modules, result, `${layerId}-${result.geometryType}`, onClick, onHover)
+	);
+}
+
 // ─── Selection highlight layer (shared by deck.gl viewers) ──────────
 
 /**

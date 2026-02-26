@@ -213,6 +213,8 @@ $effect(() => {
 				updateUrlView('');
 			}
 			loadTable();
+		} else {
+			console.warn('[TableViewer] $effect re-fired but tab unchanged, skipping loadTable', tabId);
 		}
 	});
 });
@@ -257,6 +259,13 @@ async function forceCancel() {
 
 async function loadTable() {
 	const thisGen = ++loadGeneration;
+
+	// Cancel in-flight query from a previous load to prevent duplicate concurrent queries
+	if (activeHandle) {
+		activeHandle.cancel();
+		activeHandle = null;
+	}
+
 	loading = true;
 	error = null;
 	geoCol = null;
@@ -657,7 +666,6 @@ async function loadPage(page: number) {
 async function runCustomSql() {
 	queryRunning = true;
 	error = null;
-	mapData = null;
 	isCustomQuery = true;
 	loadStage = t('table.runningCustomQuery');
 	const start = performance.now();

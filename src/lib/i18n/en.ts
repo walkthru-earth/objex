@@ -344,6 +344,8 @@ export const en: Record<string, string> = {
 		'This COG uses {{type}} format which is not supported for map rendering. Only RGB COGs can be displayed.',
 	'map.noGeoColumn': 'No geometry column detected in schema',
 	'map.noData': 'No data available for map view',
+	'map.webglLost': 'WebGL context lost',
+	'map.retry': 'Retry',
 	'map.noFeatures': 'No features found in FlatGeobuf file',
 	'map.layers': 'layer',
 	'map.layersPlural': 'layers',
