@@ -261,6 +261,49 @@ Works with any S3-compatible API: **AWS S3**, **Cloudflare R2**, **Google GCS**,
 
 Credentials stay in-memory (never persisted to disk). Connection configs (without secrets) saved to localStorage.
 
+## Performance Guidelines
+
+This app handles large cloud datasets entirely in the browser. Follow these rules to keep it fast.
+
+### Do
+
+- **Use `$state.raw` for large arrays** — table rows, GeoJSON features, file tree nodes. Regular `$state` wraps in deep Proxy which freezes the browser at 1000+ items
+- **Register with `tabResources`** — every viewer holding heavy data must call `tabResources.register(tab.id, cleanup)` so the LRU eviction can free memory when tabs exceed the alive limit
+- **Pass `AbortSignal` to `adapter.read()`** — all storage adapter read methods accept an optional `signal` parameter. Use it in viewer `$effect` cleanup to cancel in-flight downloads on tab switch
+- **Use `$effect` return for cleanup** — return a cleanup function from `$effect` to cancel AbortControllers, revoke blob URLs, and disconnect observers
+- **Use `$state.snapshot()` before passing state to external libraries** — deck.gl, MapLibre, DuckDB, Arrow all expect plain objects, not Svelte proxies
+- **Use `listPage()` with `PAGE_SIZE` for large directory listings** — fetch 200 entries per API call, render immediately, load more on scroll via IntersectionObserver sentinel
+- **Read dependencies synchronously in `$effect`** — any value read after `await` or inside `setTimeout` is NOT tracked by Svelte's reactivity
+
+### Don't
+
+- **Don't use `$state` on arrays with 100+ items** — use `$state.raw` and update by reassignment
+- **Don't skip `onDestroy`** — even with `tabResources`, add `onDestroy(cleanup)` as a safety net for component unmount
+- **Don't hold module-level references to heavy objects** — if a module-level variable caches data (GeoTIFF, Arrow tables), null it in `cleanup()`
+- **Don't call `mermaid.initialize()` on every render** — it's a global singleton, initialize once
+- **Don't create `document.addEventListener` without removal** — track listeners and remove in cleanup; if added in a drag handler, guard against mid-drag component destruction
+- **Don't use `async` as the `$effect` callback** — it returns a Promise, not a cleanup function. Use an inner async IIFE with a cancellation flag instead
+- **Don't create deep `$derived` chains** (>2-3 levels) — known Svelte 5 bug causes exponential recomputation. Flatten into a single `$derived.by` block
+
+### Viewer Checklist
+
+When adding a new viewer component:
+
+```
+[ ] cleanup() function that nulls all heavy state
+[ ] $effect with tabResources.register(tab.id, cleanup) + return unregister
+[ ] onDestroy(cleanup) as safety net
+[ ] AbortController in load $effect, signal passed to adapter.read()
+[ ] $effect return aborts the controller
+[ ] Large data arrays use $state.raw
+[ ] Generation counter or abort check after every await
+[ ] URL.revokeObjectURL() for any blob URLs created
+[ ] WebGL/canvas resources explicitly disposed
+[ ] No document.addEventListener without matching removal
+```
+
+See `docs/performance-audit.md` and `docs/svelte5-performance-guide.md` for full details.
+
 ## License
 
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — hi@walkthru.earth
