@@ -20,14 +20,16 @@ let wordWrap = $state(false);
 let copied = $state(false);
 let formatted = $state(false);
 const urlView = getUrlView();
-let viewMode = $state<'code' | 'stac-browser' | 'kepler' | 'maputnik'>(
+let viewMode = $state<'code' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo'>(
 	urlView === 'stac-browser'
 		? 'stac-browser'
 		: urlView === 'kepler'
 			? 'kepler'
 			: urlView === 'maputnik'
 				? 'maputnik'
-				: 'code'
+				: urlView === 'marimo'
+					? 'marimo'
+					: 'code'
 );
 
 type JsonKind =
@@ -38,6 +40,18 @@ type JsonKind =
 	| 'stac-item'
 	| 'kepler'
 	| null;
+
+/** Detect if a .py file is a marimo notebook (first 512 bytes contain both markers) */
+function isMarimoNotebook(code: string): boolean {
+	const header = code.slice(0, 512);
+	return header.includes('import marimo') && header.includes('marimo.App');
+}
+
+/** Detect if a .md file is a marimo notebook (first 512 bytes contain marimo-version:) */
+function isMarimoMarkdown(code: string): boolean {
+	const header = code.slice(0, 512);
+	return header.includes('marimo-version:');
+}
 
 /** Detect if JSON is a MapLibre style, TileJSON, STAC object, or Kepler.gl config */
 function detectJsonKind(code: string): JsonKind {
@@ -117,6 +131,13 @@ const languageMap: Record<string, string> = {
 	'.vue': 'Vue'
 };
 
+const isMarimo = $derived(
+	(ext === '.py' && isMarimoNotebook(rawCode)) ||
+		((ext === '.md' || ext === '.qmd') && isMarimoMarkdown(rawCode))
+);
+
+let marimoSrc = $state('');
+
 const language = $derived(languageMap[ext] ?? 'Plain Text');
 
 /** File types that support native formatting */
@@ -153,6 +174,18 @@ async function loadCode() {
 		loading = false;
 	}
 }
+
+// Build marimo playground URL when marimo notebook is detected
+$effect(() => {
+	if (!isMarimo || !rawCode) {
+		marimoSrc = '';
+		return;
+	}
+	import('lz-string').then(({ compressToEncodedURIComponent }) => {
+		const compressed = compressToEncodedURIComponent(rawCode);
+		marimoSrc = `https://marimo.app?embed=true&mode=read#code/${compressed}`;
+	});
+});
 
 async function toggleFormat() {
 	if (formatted) {
@@ -207,7 +240,7 @@ async function toggleFormat() {
 	formatted = true;
 }
 
-function setViewMode(mode: 'code' | 'stac-browser' | 'kepler' | 'maputnik') {
+function setViewMode(mode: 'code' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo') {
 	viewMode = viewMode === mode ? 'code' : mode;
 	updateUrlView(viewMode);
 }
@@ -273,6 +306,20 @@ async function copyCode() {
 				</Button>
 			{/if}
 
+			{#if isMarimo}
+				<Badge variant="outline" class="hidden border-green-200 text-green-600 sm:inline-flex dark:border-green-800 dark:text-green-300">
+					{t('code.marimoNotebook')}
+				</Badge>
+				<Button
+					variant={viewMode === 'marimo' ? 'default' : 'outline'}
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs {viewMode !== 'marimo' ? 'border-green-300 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950' : ''}"
+					onclick={() => setViewMode('marimo')}
+				>
+					{viewMode === 'marimo' ? t('code.code') : t('code.openPlayground')}
+				</Button>
+			{/if}
+
 			<!-- Desktop controls -->
 			<div class="hidden items-center gap-1 sm:flex">
 				{#if canFormat}
@@ -321,6 +368,14 @@ async function copyCode() {
 								{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
 							</DropdownMenu.Item>
 						{/if}
+						{#if isMarimo}
+							<DropdownMenu.Item disabled>
+								{t('code.marimoNotebook')}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setViewMode('marimo')}>
+								{viewMode === 'marimo' ? t('code.code') : t('code.openPlayground')}
+							</DropdownMenu.Item>
+						{/if}
 						{#if canFormat}
 							<DropdownMenu.Item onclick={toggleFormat}>
 								{formatted ? t('code.raw') : t('code.format')}
@@ -363,6 +418,16 @@ async function copyCode() {
 				class="h-full w-full border-0"
 				title="Maputnik Style Editor"
 				allow="clipboard-read; clipboard-write; fullscreen"
+			></iframe>
+		</div>
+	{:else if viewMode === 'marimo' && marimoSrc}
+		<div class="flex-1 overflow-hidden">
+			<iframe
+				src={marimoSrc}
+				class="h-full w-full border-0"
+				title="marimo Playground"
+				sandbox="allow-scripts allow-same-origin allow-downloads allow-popups"
+				allow="fullscreen"
 			></iframe>
 		</div>
 	{:else}

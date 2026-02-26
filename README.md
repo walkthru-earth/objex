@@ -8,7 +8,7 @@ graph LR
     App --> Browse[File Tree]
     App --> Query["DuckDB-WASM<br/>SQL Engine"]
     App --> Map["MapLibre + deck.gl<br/>Geo Visualization"]
-    App --> View["16+ Viewers<br/>Tables, Code, PDF, 3D, Point Cloud..."]
+    App --> View["18+ Viewers<br/>Tables, Code, Notebooks, PDF, 3D, Point Cloud..."]
 ```
 
 ## Stack
@@ -42,7 +42,8 @@ graph TD
         ZARR["ZarrViewer<br/>+ ZarrMapViewer"]
         COPC["CopcViewer"]
         DB["DatabaseViewer"]
-        CODE["CodeViewer<br/>+ StyleEditorOverlay"]
+        CODE["CodeViewer<br/>+ StyleEditorOverlay<br/>+ marimo detection"]
+        NB["NotebookViewer"]
         PDF["PdfViewer"]
         IMG["ImageViewer"]
         MODEL["ModelViewer<br/>(3D)"]
@@ -89,6 +90,7 @@ graph TD
 | **Geo vector** | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf | DuckDB + MapLibre / deck.gl |
 | **Geo raster** | Cloud Optimized GeoTIFF, PMTiles (vector + raster), Zarr v2/v3 | geotiff.js / MapLibre / deck.gl |
 | **Point cloud** | COPC, LAZ, LAS | [viewer.copc.io](https://viewer.copc.io) (iframe) |
+| **Notebooks** | Jupyter (.ipynb), marimo (.py) | notebookjs / marimo WASM playground |
 | **Code** | 30+ languages (Python, TS, Rust, Go, SQL, etc.) | Shiki syntax highlighting |
 | **Config** | JSON, XML, YAML, TOML, INI, .env | Shiki syntax highlighting |
 | **Documents** | Markdown, PDF, plain text, logs | Milkdown / pdf.js |
@@ -121,6 +123,13 @@ graph TD
 | **StacMapViewer** | STAC GeoParquet | [stac-map](https://developmentseed.org/stac-map) by Development Seed (iframe) | `#stac` |
 | **CopcViewer** | COPC, LAZ, LAS | [viewer.copc.io](https://viewer.copc.io) (iframe) | — |
 
+### Notebook Viewers
+
+| Viewer | Formats | Powered by | URL Hash |
+|--------|---------|------------|----------|
+| **NotebookViewer** | Jupyter (.ipynb) | [notebookjs](https://github.com/jsvine/notebookjs), [Marked](https://github.com/markedjs/marked), [Shiki](https://github.com/shikijs/shiki), [ansi_up](https://github.com/drudru/ansi_up) | — |
+| **CodeViewer** (marimo) | marimo notebooks (.py, .md) | [marimo WASM playground](https://marimo.app) (iframe), [lz-string](https://github.com/pieroxy/lz-string) | `#marimo` |
+
 ### Document & Code Viewers
 
 | Viewer | Formats | Powered by | URL Hash |
@@ -144,12 +153,14 @@ graph TD
 | **ArchiveViewer** | ZIP, TAR, GZ, TGZ, 7Z, RAR, BZ2 | [zip.js](https://github.com/nicbarker/zip.js) (streaming + progressive chunking) | — |
 | **RawViewer** | Any (fallback) | Custom hex dump | — |
 
-### Smart JSON Detection
+### Smart Content Detection
 
-The CodeViewer auto-detects special JSON files and offers contextual actions:
+The CodeViewer auto-detects special files by content and offers contextual actions:
 
-| JSON Kind | Detection | Action | URL Hash |
-|-----------|-----------|--------|----------|
+| Kind | Detection | Action | URL Hash |
+|------|-----------|--------|----------|
+| **marimo Notebook** | `.py`: `import marimo` + `marimo.App` in first 512 bytes | "Playground" — opens [marimo WASM playground](https://marimo.app) (iframe) | `#marimo` |
+| **marimo Markdown** | `.md`: `marimo-version:` in first 512 bytes | "Playground" — opens [marimo WASM playground](https://marimo.app) (iframe) | `#marimo` |
 | **MapLibre Style** | `version === 8` + `sources` + `layers` | "Edit Style" — opens [Maputnik](https://maplibre.org/maputnik/) (iframe) | `#maputnik` |
 | **TileJSON** | `tilejson` + `tiles` | Badge only | — |
 | **STAC Catalog** | `type === "Catalog"` + `stac_version` | "Browse" — opens [STAC Browser](https://radiantearth.github.io/stac-browser/) (iframe) | `#stac-browser` |
@@ -169,6 +180,7 @@ The CodeViewer auto-detects special JSON files and offers contextual actions:
 | Maputnik | [MapLibre Maputnik](https://maplibre.org/maputnik/) | CodeViewer |
 | Kepler.gl | [Kepler.gl Demo](https://kepler.gl/demo) | CodeViewer |
 | COPC Viewer | [viewer.copc.io](https://viewer.copc.io) | CopcViewer |
+| marimo Playground | [marimo.app](https://marimo.app) | CodeViewer (marimo detection) |
 
 ## Geospatial Pipeline
 
@@ -200,6 +212,7 @@ https://walkthru.earth/objex/?url=<storage-url>#<view>
 | `#maputnik` | Maputnik style editor |
 | `#stac-browser` | STAC Browser |
 | `#kepler` | Kepler.gl map |
+| `#marimo` | marimo WASM playground |
 
 ## i18n
 
@@ -228,7 +241,7 @@ src/
 ├── routes/              # Single-page app (SPA)
 ├── lib/
 │   ├── components/
-│   │   ├── viewers/     # 16+ file-type viewers
+│   │   ├── viewers/     # 18+ file-type viewers
 │   │   ├── browser/     # File tree, breadcrumbs, upload
 │   │   ├── layout/      # Sidebar, tabs, status bar
 │   │   ├── editor/      # CodeMirror SQL editor

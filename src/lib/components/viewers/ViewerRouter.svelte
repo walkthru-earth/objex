@@ -61,6 +61,10 @@ const viewerKind = $derived(getViewerKind(ext));
 	{#await import('./CopcViewer.svelte') then { default: CopcViewer }}
 		<CopcViewer {tab} />
 	{/await}
+{:else if viewerKind === 'notebook'}
+	{#await import('./NotebookViewer.svelte') then { default: NotebookViewer }}
+		<NotebookViewer {tab} />
+	{/await}
 {:else}
 	<RawViewer {tab} />
 {/if}

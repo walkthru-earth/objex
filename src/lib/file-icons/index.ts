@@ -41,6 +41,7 @@ export type ViewerKind =
 	| 'database'
 	| 'zarr'
 	| 'copc'
+	| 'notebook'
 	| 'raw';
 
 export type DuckDbReadFn = 'read_parquet' | 'read_csv' | 'read_json' | 'ST_Read';
@@ -1025,6 +1026,18 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		queryable: false,
 		duckdbReadFn: null,
 		mimeType: 'application/octet-stream'
+	},
+
+	// ── Notebooks ───────────────────────────────────────────────────────
+	'.ipynb': {
+		icon: 'BookOpen',
+		color: 'text-orange-600 dark:text-orange-400',
+		label: 'Jupyter Notebook',
+		category: 'code',
+		viewer: 'notebook',
+		queryable: false,
+		duckdbReadFn: null,
+		mimeType: 'application/x-ipynb+json'
 	},
 
 	// ── Special ─────────────────────────────────────────────────────────

@@ -289,6 +289,8 @@ export const ar: Record<string, string> = {
 	'code.keplerGl': 'Kepler.gl',
 	'code.openKepler': 'فتح الخريطة',
 	'code.code': 'كود',
+	'code.marimoNotebook': 'دفتر marimo',
+	'code.openPlayground': 'ساحة التجربة',
 
 	// Table Status Bar
 	'statusBar.runningQuery': 'جارٍ تنفيذ الاستعلام...',
@@ -421,6 +423,13 @@ export const ar: Record<string, string> = {
 	// Mobile
 	'mobile.openSidebar': 'فتح متصفح الملفات',
 	'mobile.fileExplorer': 'مستكشف الملفات',
+
+	// Notebook Viewer
+	'notebook.badge': 'دفتر Jupyter',
+	'notebook.cells': 'خلايا',
+	'notebook.loading': 'جارٍ تحميل الدفتر...',
+	'notebook.hideCode': 'إخفاء الكود',
+	'notebook.showCode': 'إظهار الكود',
 
 	// Locale
 	'locale.toggle': 'اللغة'
