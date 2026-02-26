@@ -16,6 +16,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection, FileEntry } from '$lib/types.js';
+import { getNativeScheme } from '$lib/utils/url.js';
 import { syncUrlParam } from '$lib/utils/url-state.js';
 
 let {
@@ -212,22 +213,7 @@ function buildNativeUri(path: string): string {
 	return `${scheme}://${conn.bucket}/${path}`;
 }
 
-function getNativeScheme(provider: string): string {
-	switch (provider) {
-		case 'gcs':
-			return 'gs';
-		case 'azure':
-			return 'az';
-		case 'r2':
-			return 'r2';
-		case 'storj':
-			return 'sj';
-		case 'minio':
-			return 's3';
-		default:
-			return 's3';
-	}
-}
+// getNativeScheme imported from $lib/utils/url.js
 
 function encodeKeyPath(key: string): string {
 	return key

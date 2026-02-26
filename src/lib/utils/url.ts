@@ -27,21 +27,42 @@ export function buildHttpsUrl(tab: Tab): string {
 	return `https://s3.${conn.region || 'us-east-1'}.amazonaws.com/${conn.bucket}/${cleanPath}`;
 }
 
+/** Map provider to its native URI scheme prefix. */
+export function getNativeScheme(provider: string): string {
+	switch (provider) {
+		case 'gcs':
+			return 'gs';
+		case 'azure':
+			return 'az';
+		case 'r2':
+			return 'r2';
+		case 'storj':
+			return 'sj';
+		case 'minio':
+			return 's3';
+		default:
+			return 's3';
+	}
+}
+
 /**
- * Build an S3 protocol URL (s3://bucket/path).
+ * Build a provider-native protocol URL (s3://bucket/path, sj://bucket/path, etc.).
  */
 export function buildStorageUrl(tab: Tab): string {
 	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
 	if (!conn) return tab.path;
 
-	return `s3://${conn.bucket}/${tab.path.replace(/^\//, '')}`;
+	const scheme = getNativeScheme(conn.provider);
+	return `${scheme}://${conn.bucket}/${tab.path.replace(/^\//, '')}`;
 }
 
 /**
  * Build the URL that DuckDB should use for queries.
- * - S3-compatible (anonymous or authenticated): s3:// — DuckDB handles both via httpfs
- *   with configured region/endpoint. Unsigned for anonymous, SigV4 when credentials set.
- * - Azure: always HTTPS URL with SAS token appended (DuckDB uses httpfs)
+ * - Azure: always HTTPS URL with SAS token appended
+ * - Anonymous with custom endpoint (Storj, R2, etc.): HTTPS URL — no S3 config needed,
+ *   avoids endpoint/auth complexity, works directly via httpfs
+ * - AWS S3 (no endpoint): s3:// — DuckDB routes via configured region
+ * - Authenticated with endpoint: s3:// — needs S3 endpoint config for SigV4 signing
  */
 export function buildDuckDbUrl(tab: Tab): string {
 	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
@@ -52,9 +73,14 @@ export function buildDuckDbUrl(tab: Tab): string {
 		return buildHttpsUrl(tab);
 	}
 
-	// S3-compatible: always use s3:// protocol so DuckDB uses its configured
-	// S3 settings (region, endpoint, url_style). This works for both anonymous
-	// (unsigned requests) and authenticated (SigV4).
+	// Anonymous connections with custom endpoints (Storj, R2, Wasabi, etc.)
+	// use HTTPS directly — simpler and avoids S3 endpoint configuration.
+	if (conn.anonymous && conn.endpoint) {
+		return buildHttpsUrl(tab);
+	}
+
+	// S3-compatible with credentials: use s3:// protocol so DuckDB uses its
+	// configured S3 settings (region, endpoint, url_style) for SigV4 signing.
 	// Decode percent-encoded paths (e.g. Arabic filenames) so DuckDB's httpfs
 	// doesn't double-encode them (%D9%85 → %25D9%2585).
 	const rawPath = safeDecodeURIComponent(tab.path.replace(/^\//, ''));
