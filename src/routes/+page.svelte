@@ -88,6 +88,9 @@ const FORMAT_HINTS = [
 	{ ext: '.pdf', hash: '', color: 'text-red-400' },
 	{ ext: '.laz', hash: '', color: 'text-emerald-400' },
 	{ ext: '.json', hash: '#code', color: 'text-yellow-400' },
+	{ ext: '.json', hash: '#maputnik', color: 'text-yellow-400' },
+	{ ext: '.json', hash: '#stac-browser', color: 'text-yellow-400' },
+	{ ext: '.json', hash: '#kepler', color: 'text-yellow-400' },
 	{ ext: '.glb', hash: '', color: 'text-orange-400' }
 ] as const;
 let extIndex = $state(0);
@@ -241,11 +244,15 @@ const pageDescription = $derived.by(() => {
 								class="group mt-4 flex w-full max-w-md items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-start transition-colors hover:border-border hover:bg-muted/70"
 							>
 								<code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[11px] sm:text-xs">
-									<span class="text-muted-foreground/50">{displayHost}/</span><span class="text-muted-foreground">?url=…/data</span><span class="relative inline-block w-[var(--ext-w)] overflow-hidden align-bottom transition-[width] duration-300" style="height: 1lh; --ext-w: {(currentFormat.ext + currentFormat.hash).length * 0.62}em">{#key extIndex}<span
+									<span class="text-muted-foreground/50">{displayHost}/</span><span class="text-muted-foreground">?url=…/data</span><span class="relative inline-block w-[var(--ext-w)] overflow-hidden align-bottom transition-[width] duration-300" style="height: 1lh; --ext-w: {currentFormat.ext.length * 0.62}em">{#key currentFormat.ext}<span
 												class="absolute inset-x-0 top-0 font-bold {currentFormat.color}"
 												in:fly={{ y: 18, duration: 300, easing: cubicOut }}
 												out:fly={{ y: -18, duration: 300, easing: cubicOut }}
-											>{currentFormat.ext}{#if currentFormat.hash}<span class="font-normal text-muted-foreground/70">{currentFormat.hash}</span>{/if}</span>{/key}</span>
+											>{currentFormat.ext}</span>{/key}</span>{#if currentFormat.hash}<span class="relative inline-block w-[var(--hash-w)] overflow-hidden align-bottom transition-[width] duration-300" style="height: 1lh; --hash-w: {currentFormat.hash.length * 0.62}em">{#key currentFormat.hash}<span
+												class="absolute inset-x-0 top-0 text-muted-foreground/70"
+												in:fly={{ y: 18, duration: 300, easing: cubicOut }}
+												out:fly={{ y: -18, duration: 300, easing: cubicOut }}
+											>{currentFormat.hash}</span>{/key}</span>{/if}
 								</code>
 								<span class="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground">
 									{#if copied}
