@@ -1,5 +1,4 @@
 <script lang="ts">
-import { tableFromIPC } from 'apache-arrow';
 import { onDestroy } from 'svelte';
 import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -62,28 +61,14 @@ async function loadDatabase() {
 				connId,
 				`ATTACH '${tab.path}' AS db (READ_ONLY); SHOW TABLES;`
 			);
-			if (result.arrowBytes.length > 0) {
-				const table = tableFromIPC(result.arrowBytes);
-				tables = [];
-				for (let i = 0; i < table.numRows; i++) {
-					const name = table.getChild('name')?.get(i);
-					if (name) tables.push(name);
-				}
-			}
+			tables = (result.rows ?? []).map((row) => row.name).filter((name): name is string => !!name);
 		} else {
 			// SQLite via DuckDB's sqlite scanner
 			const result = await engine.query(
 				connId,
 				`INSTALL sqlite; LOAD sqlite; SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;`
 			);
-			if (result.arrowBytes.length > 0) {
-				const table = tableFromIPC(result.arrowBytes);
-				tables = [];
-				for (let i = 0; i < table.numRows; i++) {
-					const name = table.getChild('name')?.get(i);
-					if (name) tables.push(name);
-				}
-			}
+			tables = (result.rows ?? []).map((row) => row.name).filter((name): name is string => !!name);
 		}
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
@@ -100,20 +85,8 @@ async function selectTable(tableName: string) {
 		const engine = await getQueryEngine();
 		const connId = tab.connectionId ?? '';
 		const result = await engine.query(connId, `SELECT * FROM "${tableName}" LIMIT 100`);
-
-		if (result.arrowBytes.length > 0) {
-			const table = tableFromIPC(result.arrowBytes);
-			columns = table.schema.fields.map((f) => f.name);
-			const newRows: Record<string, any>[] = [];
-			for (let i = 0; i < table.numRows; i++) {
-				const row: Record<string, any> = {};
-				for (const col of columns) {
-					row[col] = table.getChild(col)?.get(i);
-				}
-				newRows.push(row);
-			}
-			rows = newRows;
-		}
+		columns = result.columns;
+		rows = result.rows ?? [];
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 	} finally {

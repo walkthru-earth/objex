@@ -1,4 +1,3 @@
-import { tableFromIPC } from 'apache-arrow';
 import type { QueryResult } from '$lib/query/engine';
 import { getQueryEngine } from '$lib/query/index.js';
 
@@ -22,24 +21,7 @@ export class EvidenceContext {
 		const transformedSql = this.transformPaths(sql);
 
 		const result = await engine.query(this.connId, transformedSql);
-
-		if (result.arrowBytes.length === 0) {
-			this.results.set(queryName, { result, rows: [] });
-			return [];
-		}
-
-		const table = tableFromIPC(result.arrowBytes);
-		const columns = table.schema.fields.map((f) => f.name);
-		const rows: Record<string, any>[] = [];
-
-		for (let i = 0; i < table.numRows; i++) {
-			const row: Record<string, any> = {};
-			for (const col of columns) {
-				row[col] = table.getChild(col)?.get(i);
-			}
-			rows.push(row);
-		}
-
+		const rows = result.rows ?? [];
 		this.results.set(queryName, { result, rows });
 		return rows;
 	}
@@ -77,8 +59,7 @@ export class EvidenceContext {
 
 	getColumns(queryName: string): string[] {
 		const entry = this.results.get(queryName);
-		if (!entry || entry.result.arrowBytes.length === 0) return [];
-		const table = tableFromIPC(entry.result.arrowBytes);
-		return table.schema.fields.map((f) => f.name);
+		if (!entry) return [];
+		return entry.result.columns;
 	}
 }
