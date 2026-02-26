@@ -833,6 +833,8 @@ async function loadCog(map: maplibregl.Map) {
 			const ctx = canvas.getContext('2d')!;
 			ctx.putImageData(new ImageData(rgba, pvW, pvH), 0, 0);
 			const dataUrl = canvas.toDataURL();
+			canvas.width = 0;
+			canvas.height = 0;
 
 			const clamped = preFlightBounds;
 			cogInfo = {
@@ -980,6 +982,8 @@ async function loadCog(map: maplibregl.Map) {
 			const ctx = canvas.getContext('2d')!;
 			ctx.putImageData(new ImageData(rgba, readW, readH), 0, 0);
 			const dataUrl = canvas.toDataURL();
+			canvas.width = 0;
+			canvas.height = 0;
 
 			const clamped = preFlightBounds;
 			cogInfo = {
@@ -1259,6 +1263,8 @@ function cleanup() {
 	}
 	mapRef = null;
 	overlayRef = null;
+	capturedV2Geotiff = null;
+	currentV3Tiff = null;
 }
 
 $effect(() => {

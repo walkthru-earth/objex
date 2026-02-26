@@ -83,7 +83,12 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		return conn;
 	}
 
-	async listPage(path: string, continuationToken?: string, pageSize?: number): Promise<ListPage> {
+	async listPage(
+		path: string,
+		continuationToken?: string,
+		pageSize?: number,
+		signal?: AbortSignal
+	): Promise<ListPage> {
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
 		const sas = getSasQuery(conn);
@@ -98,7 +103,7 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		if (pageSize) params.set('maxresults', String(pageSize));
 
 		const url = appendSas(`${baseUrl}?${params}`, sas);
-		const res = await fetch(url);
+		const res = await fetch(url, { signal });
 		if (!res.ok) {
 			const body = await res.text().catch(() => '');
 			throw new Error(`Azure list failed (${res.status}): ${body || res.statusText}`);
@@ -160,7 +165,12 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		return all;
 	}
 
-	async read(path: string, offset?: number, length?: number): Promise<Uint8Array> {
+	async read(
+		path: string,
+		offset?: number,
+		length?: number,
+		signal?: AbortSignal
+	): Promise<Uint8Array> {
 		const conn = this.getConnection();
 		const url = appendSas(`${buildBaseUrl(conn)}/${encodeKey(path)}`, getSasQuery(conn));
 
@@ -171,7 +181,7 @@ export class BrowserAzureAdapter implements StorageAdapter {
 			headers.Range = `bytes=${start}-${end}`;
 		}
 
-		const res = await fetch(url, { headers });
+		const res = await fetch(url, { headers, signal });
 		if (!res.ok && res.status !== 206) {
 			throw new Error(`Azure get failed (${res.status}): ${res.statusText}`);
 		}
@@ -179,11 +189,11 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		return new Uint8Array(await res.arrayBuffer());
 	}
 
-	async head(path: string): Promise<FileEntry> {
+	async head(path: string, signal?: AbortSignal): Promise<FileEntry> {
 		const conn = this.getConnection();
 		const url = appendSas(`${buildBaseUrl(conn)}/${encodeKey(path)}`, getSasQuery(conn));
 
-		const res = await fetch(url, { method: 'HEAD' });
+		const res = await fetch(url, { method: 'HEAD', signal });
 		if (!res.ok) {
 			throw new Error(`Azure head failed (${res.status}): ${res.statusText}`);
 		}

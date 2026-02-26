@@ -6,6 +6,7 @@ import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
+import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
@@ -35,6 +36,12 @@ let showTileBounds = $state(false);
 let inspectMode = $state(false);
 let layerVisibility = $state<Record<string, boolean>>({});
 let inspectPopup: maplibregl.Popup | null = null;
+
+onDestroy(() => {
+	inspectPopup?.remove();
+	inspectPopup = null;
+	mapRef = null;
+});
 
 // Initialize layer visibility
 $effect(() => {

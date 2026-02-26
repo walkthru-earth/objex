@@ -77,6 +77,7 @@ async function getDB() {
 		const workerScript = await fetch(bundle.mainWorker!).then((r) => r.blob());
 		const workerUrl = URL.createObjectURL(workerScript);
 		const worker = new Worker(workerUrl);
+		URL.revokeObjectURL(workerUrl);
 		const logger = new duckdb.ConsoleLogger();
 		const db = new duckdb.AsyncDuckDB(logger, worker);
 

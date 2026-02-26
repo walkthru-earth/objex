@@ -1,11 +1,13 @@
 <script lang="ts">
 import { tableFromIPC } from 'apache-arrow';
+import { onDestroy } from 'svelte';
 import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getQueryEngine } from '$lib/query/index.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import TableGrid from './TableGrid.svelte';
 
@@ -25,6 +27,21 @@ $effect(() => {
 	loadDatabase();
 });
 
+function cleanup() {
+	tables = [];
+	rows = [];
+	columns = [];
+	selectedTable = null;
+}
+
+$effect(() => {
+	if (!tab) return;
+	const unregister = tabResources.register(tab.id, cleanup);
+	return unregister;
+});
+
+onDestroy(cleanup);
+
 async function loadDatabase() {
 	loading = true;
 	error = null;
@@ -40,10 +57,7 @@ async function loadDatabase() {
 		const ext = tab.extension.toLowerCase();
 
 		if (ext === 'duckdb') {
-			// DuckDB native file
-			const adapter = getAdapter(tab.source, tab.connectionId);
-			const data = await adapter.read(tab.path);
-			// We'd need to register this file with DuckDB — for now query via path
+			// DuckDB native file — query via path
 			const result = await engine.query(
 				connId,
 				`ATTACH '${tab.path}' AS db (READ_ONLY); SHOW TABLES;`

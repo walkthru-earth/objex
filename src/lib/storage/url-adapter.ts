@@ -9,7 +9,12 @@ import type { StorageAdapter } from './adapter.js';
 export class UrlAdapter implements StorageAdapter {
 	readonly supportsWrite = false;
 
-	async read(url: string, offset?: number, length?: number): Promise<Uint8Array> {
+	async read(
+		url: string,
+		offset?: number,
+		length?: number,
+		signal?: AbortSignal
+	): Promise<Uint8Array> {
 		const headers: Record<string, string> = {};
 		if (offset !== undefined && length !== undefined) {
 			headers.Range = `bytes=${offset}-${offset + length - 1}`;
@@ -17,13 +22,13 @@ export class UrlAdapter implements StorageAdapter {
 			headers.Range = `bytes=${offset}-`;
 		}
 
-		const res = await fetch(url, { headers });
+		const res = await fetch(url, { headers, signal });
 		if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 		return new Uint8Array(await res.arrayBuffer());
 	}
 
-	async head(url: string): Promise<FileEntry> {
-		const res = await fetch(url, { method: 'HEAD' });
+	async head(url: string, signal?: AbortSignal): Promise<FileEntry> {
+		const res = await fetch(url, { method: 'HEAD', signal });
 		if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 		const name = url.split('/').pop()?.split('?')[0] || 'file';
 		const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';

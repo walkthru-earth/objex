@@ -179,6 +179,13 @@ $effect(() => {
 	prevActiveTabId = id;
 });
 
+$effect(() => {
+	const openIds = new Set(tabs.items.map((t) => t.id));
+	for (const id of tabViewModes.keys()) {
+		if (!openIds.has(id)) tabViewModes.delete(id);
+	}
+});
+
 // Keep-alive tabs: only the most recently used tabs stay mounted.
 // Switching between alive tabs is instant (no re-loading).
 const aliveTabs = $derived(tabs.aliveTabs);

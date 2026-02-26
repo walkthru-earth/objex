@@ -3,6 +3,7 @@ import type maplibregl from 'maplibre-gl';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
 import AttributeTable from './map/AttributeTable.svelte';
@@ -12,7 +13,7 @@ let { tab }: { tab: Tab } = $props();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
-let geojsonData = $state<any>(null);
+let geojsonData = $state.raw<any>(null);
 let selectedFeature = $state<Record<string, any> | null>(null);
 let showAttributes = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
@@ -22,9 +23,19 @@ $effect(() => {
 	loadGeoJson();
 });
 
-onDestroy(() => {
+function cleanup() {
 	geojsonData = null;
+	selectedFeature = null;
+	bounds = undefined;
+}
+
+$effect(() => {
+	if (!tab) return;
+	const unregister = tabResources.register(tab.id, cleanup);
+	return unregister;
 });
+
+onDestroy(cleanup);
 
 async function loadGeoJson() {
 	loading = true;

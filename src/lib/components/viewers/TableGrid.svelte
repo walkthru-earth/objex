@@ -7,6 +7,7 @@ import ColumnsIcon from '@lucide/svelte/icons/columns-3';
 import CopyIcon from '@lucide/svelte/icons/copy';
 import RowsIcon from '@lucide/svelte/icons/rows-3';
 import XIcon from '@lucide/svelte/icons/x';
+import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import {
 	classifyType,
@@ -68,6 +69,7 @@ const columnCategories = $derived(
 
 // ── Resizable columns ──
 
+let resizeCleanup: (() => void) | null = null;
 let columnWidths = $state<Record<string, number>>({});
 
 const tableWidth = $derived(
@@ -86,10 +88,17 @@ function startResize(col: string, e: MouseEvent) {
 	function onUp() {
 		document.removeEventListener('mousemove', onMove);
 		document.removeEventListener('mouseup', onUp);
+		resizeCleanup = null;
 	}
 	document.addEventListener('mousemove', onMove);
 	document.addEventListener('mouseup', onUp);
+	resizeCleanup = () => {
+		document.removeEventListener('mousemove', onMove);
+		document.removeEventListener('mouseup', onUp);
+	};
 }
+
+onDestroy(() => resizeCleanup?.());
 
 function resetWidth(col: string) {
 	delete columnWidths[col];

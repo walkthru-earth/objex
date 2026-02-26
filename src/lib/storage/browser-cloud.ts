@@ -107,7 +107,12 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		return conn;
 	}
 
-	async listPage(path: string, continuationToken?: string, pageSize?: number): Promise<ListPage> {
+	async listPage(
+		path: string,
+		continuationToken?: string,
+		pageSize?: number,
+		signal?: AbortSignal
+	): Promise<ListPage> {
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
 		const cloudFetch = createFetcher(conn);
@@ -120,7 +125,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		if (continuationToken) params.set('continuation-token', continuationToken);
 		if (pageSize) params.set('max-keys', String(pageSize));
 
-		const res = await cloudFetch(`${baseUrl}?${params}`);
+		const res = await cloudFetch(`${baseUrl}?${params}`, { signal });
 		if (!res.ok) {
 			const body = await res.text().catch(() => '');
 			throw new Error(`List failed (${res.status}): ${body || res.statusText}`);
@@ -182,7 +187,12 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		return all;
 	}
 
-	async read(path: string, offset?: number, length?: number): Promise<Uint8Array> {
+	async read(
+		path: string,
+		offset?: number,
+		length?: number,
+		signal?: AbortSignal
+	): Promise<Uint8Array> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(path)}`;
 		const cloudFetch = createFetcher(conn);
@@ -194,7 +204,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 			headers.Range = `bytes=${start}-${end}`;
 		}
 
-		const res = await cloudFetch(url, { headers });
+		const res = await cloudFetch(url, { headers, signal });
 		if (!res.ok && res.status !== 206) {
 			throw new Error(`Fetch failed (${res.status}): ${res.statusText}`);
 		}
@@ -202,12 +212,12 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		return new Uint8Array(await res.arrayBuffer());
 	}
 
-	async head(path: string): Promise<FileEntry> {
+	async head(path: string, signal?: AbortSignal): Promise<FileEntry> {
 		const conn = this.getConnection();
 		const url = `${buildBaseUrl(conn)}/${encodeKey(path)}`;
 		const cloudFetch = createFetcher(conn);
 
-		const res = await cloudFetch(url, { method: 'HEAD' });
+		const res = await cloudFetch(url, { method: 'HEAD', signal });
 		if (!res.ok) {
 			throw new Error(`Head failed (${res.status}): ${res.statusText}`);
 		}

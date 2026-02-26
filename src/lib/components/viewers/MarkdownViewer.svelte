@@ -15,6 +15,7 @@ import {
 	parseMarkdownDocument
 } from '$lib/utils/markdown-sql';
 
+let mermaidInitialized = false;
 const CAIRO_FONT = '"Cairo", sans-serif';
 const SYSTEM_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
@@ -144,16 +145,19 @@ async function renderMermaidDiagrams() {
 		const mermaid = (await import('mermaid')).default;
 		// Always use Cairo — it supports both Arabic and Latin scripts
 		const fontFamily = CAIRO_FONT;
-		mermaid.initialize({
-			startOnLoad: false,
-			theme: 'default',
-			securityLevel: 'loose',
-			fontFamily: fontFamily,
-			themeVariables: { fontFamily },
-			flowchart: { useMaxWidth: true },
-			sequence: { useMaxWidth: true },
-			gantt: { useMaxWidth: true }
-		});
+		if (!mermaidInitialized) {
+			mermaid.initialize({
+				startOnLoad: false,
+				theme: 'default',
+				securityLevel: 'loose',
+				fontFamily: fontFamily,
+				themeVariables: { fontFamily },
+				flowchart: { useMaxWidth: true },
+				sequence: { useMaxWidth: true },
+				gantt: { useMaxWidth: true }
+			});
+			mermaidInitialized = true;
+		}
 		await mermaid.run({ nodes: mermaidNodes as NodeListOf<HTMLElement> });
 
 		// Post-process SVGs: make responsive + force font on all text elements

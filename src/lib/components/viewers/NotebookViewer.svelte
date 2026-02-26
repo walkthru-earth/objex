@@ -1,10 +1,12 @@
 <script lang="ts">
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { highlightCode } from '$lib/utils/shiki';
 
@@ -23,6 +25,21 @@ $effect(() => {
 	if (!tab) return;
 	loadNotebook();
 });
+
+function cleanup() {
+	rawContent = '';
+	if (container) {
+		container.innerHTML = '';
+	}
+}
+
+$effect(() => {
+	if (!tab) return;
+	const unregister = tabResources.register(tab.id, cleanup);
+	return unregister;
+});
+
+onDestroy(cleanup);
 
 async function loadNotebook() {
 	loading = true;

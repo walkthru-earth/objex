@@ -9,12 +9,17 @@ export interface ListPage {
 
 export interface StorageAdapter {
 	// Read operations
-	list(path: string): Promise<FileEntry[]>;
-	read(path: string, offset?: number, length?: number): Promise<Uint8Array>;
-	head(path: string): Promise<FileEntry>;
+	list(path: string, signal?: AbortSignal): Promise<FileEntry[]>;
+	read(path: string, offset?: number, length?: number, signal?: AbortSignal): Promise<Uint8Array>;
+	head(path: string, signal?: AbortSignal): Promise<FileEntry>;
 
 	/** Fetch a single page of listing results. Supports progressive rendering. */
-	listPage?(path: string, continuationToken?: string, pageSize?: number): Promise<ListPage>;
+	listPage?(
+		path: string,
+		continuationToken?: string,
+		pageSize?: number,
+		signal?: AbortSignal
+	): Promise<ListPage>;
 
 	// Write operations
 	put(key: string, data: Uint8Array, contentType?: string): Promise<WriteResult>;

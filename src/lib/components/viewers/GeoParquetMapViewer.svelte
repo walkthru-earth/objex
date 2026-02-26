@@ -92,6 +92,7 @@ function cleanup() {
 	overlayRef = null;
 	mapRef = null;
 	geoArrowState = null;
+	wkbArraysRef = [];
 }
 
 $effect(() => {

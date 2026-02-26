@@ -39,7 +39,7 @@ let pageSize = $state(settings.featureLimit);
 
 let schema = $state<SchemaField[]>([]);
 let columns = $state<string[]>([]);
-let rows = $state<Record<string, any>[]>([]);
+let rows = $state.raw<Record<string, any>[]>([]);
 let totalRows = $state<number | null>(null);
 let currentPage = $state(1);
 let loading = $state(true);
@@ -75,7 +75,7 @@ let isCustomQuery = $state(false);
 let geoCol = $state<string | null>(null);
 let geoColType = $state<string>('');
 let sourceCrs = $state<string | null>(null);
-let mapData = $state<MapQueryResult | null>(null);
+let mapData = $state.raw<MapQueryResult | null>(null);
 let knownGeomType = $state<GeoArrowGeomType | undefined>(undefined);
 let metadataBounds = $state<[number, number, number, number] | null>(null);
 
