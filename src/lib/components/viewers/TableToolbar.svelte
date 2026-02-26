@@ -73,7 +73,7 @@ let jumpPageEditing = $state(false);
 let jumpPageValue = $state('');
 let copiedType = $state<string | null>(null);
 
-const PAGE_SIZES = [100, 500, 1000, 5000];
+const PAGE_SIZES = [1000, 5000, 10_000, 100_000];
 
 const providerLabel = $derived.by(() => {
 	if (!tab.connectionId) return null;

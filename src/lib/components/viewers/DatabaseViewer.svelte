@@ -84,7 +84,7 @@ async function selectTable(tableName: string) {
 	try {
 		const engine = await getQueryEngine();
 		const connId = tab.connectionId ?? '';
-		const result = await engine.query(connId, `SELECT * FROM "${tableName}" LIMIT 100`);
+		const result = await engine.query(connId, `SELECT * FROM "${tableName}" LIMIT 1000`);
 		columns = result.columns;
 		rows = result.rows ?? [];
 	} catch (err) {

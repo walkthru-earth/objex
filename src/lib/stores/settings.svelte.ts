@@ -11,7 +11,7 @@ interface PersistedSettings {
 
 function loadSettings(): PersistedSettings {
 	if (typeof window === 'undefined') {
-		return { theme: 'system', locale: 'en', featureLimit: 100 };
+		return { theme: 'system', locale: 'en', featureLimit: 1000 };
 	}
 	try {
 		const raw = localStorage.getItem(SETTINGS_KEY);
@@ -26,7 +26,7 @@ function loadSettings(): PersistedSettings {
 	} catch {
 		// ignore parse errors
 	}
-	return { theme: 'system', locale: 'en', featureLimit: 100 };
+	return { theme: 'system', locale: 'en', featureLimit: 1000 };
 }
 
 function persistSettings(settings: PersistedSettings): void {
