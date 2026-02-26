@@ -34,13 +34,18 @@ let label = $derived(t(`theme.${settings.theme}`));
 
 <Tooltip>
 	<TooltipTrigger>
-		<button
-			class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
-			onclick={toggle}
-			aria-label={t('theme.tooltip', { mode: label })}
-		>
-			<CurrentIcon class="size-4" />
-		</button>
+		{#snippet child({ props })}
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				class="rounded-lg text-muted-foreground hover:text-foreground"
+				onclick={toggle}
+				aria-label={t('theme.tooltip', { mode: label })}
+				{...props}
+			>
+				<CurrentIcon class="size-4" />
+			</Button>
+		{/snippet}
 	</TooltipTrigger>
 	<TooltipContent side="right">
 		{t('theme.tooltip', { mode: label })}

@@ -16,6 +16,7 @@ import {
 	SheetHeader,
 	SheetTitle
 } from '$lib/components/ui/sheet/index.js';
+import { Switch } from '$lib/components/ui/switch/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
@@ -331,18 +332,7 @@ function handleCancel() {
 
 			<!-- Anonymous Access -->
 			<div class="flex items-center gap-3">
-				<button
-					type="button"
-					role="switch"
-					aria-checked={anonymous}
-					aria-label={t('connection.anonymous')}
-					class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background {anonymous ? 'bg-primary' : 'bg-input'}"
-					onclick={() => { anonymous = !anonymous; }}
-				>
-					<span
-						class="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform {anonymous ? 'ltr:translate-x-4 rtl:-translate-x-4' : 'translate-x-0'}"
-					></span>
-				</button>
+				<Switch bind:checked={anonymous} aria-label={t('connection.anonymous')} />
 				<span class="text-sm font-medium">{t('connection.anonymous')}</span>
 			</div>
 
