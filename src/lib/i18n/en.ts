@@ -291,6 +291,8 @@ export const en: Record<string, string> = {
 	'code.code': 'Code',
 	'code.marimoNotebook': 'marimo Notebook',
 	'code.openPlayground': 'Playground',
+	'code.preview': 'Preview',
+	'code.viewSource': 'View Source',
 
 	// Table Status Bar
 	'statusBar.runningQuery': 'Running query...',

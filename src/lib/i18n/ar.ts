@@ -291,6 +291,8 @@ export const ar: Record<string, string> = {
 	'code.code': 'كود',
 	'code.marimoNotebook': 'دفتر marimo',
 	'code.openPlayground': 'ساحة التجربة',
+	'code.preview': 'معاينة',
+	'code.viewSource': 'عرض المصدر',
 
 	// Table Status Bar
 	'statusBar.runningQuery': 'جارٍ تنفيذ الاستعلام...',

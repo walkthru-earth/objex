@@ -20,17 +20,22 @@ let wordWrap = $state(false);
 let copied = $state(false);
 let formatted = $state(false);
 const urlView = getUrlView();
-let viewMode = $state<'code' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo'>(
-	urlView === 'stac-browser'
-		? 'stac-browser'
-		: urlView === 'kepler'
-			? 'kepler'
-			: urlView === 'maputnik'
-				? 'maputnik'
-				: urlView === 'marimo'
-					? 'marimo'
-					: 'code'
-);
+function getInitialViewMode():
+	| 'code'
+	| 'render'
+	| 'stac-browser'
+	| 'kepler'
+	| 'maputnik'
+	| 'marimo' {
+	if (urlView === 'stac-browser') return 'stac-browser';
+	if (urlView === 'kepler') return 'kepler';
+	if (urlView === 'maputnik') return 'maputnik';
+	if (urlView === 'marimo') return 'marimo';
+	if (urlView === 'code') return 'code';
+	if (tab.extension.toLowerCase() === 'html') return 'render';
+	return 'code';
+}
+let viewMode = $state(getInitialViewMode());
 
 type JsonKind =
 	| 'maplibre-style'
@@ -72,6 +77,7 @@ function detectJsonKind(code: string): JsonKind {
 }
 
 const ext = $derived(`.${tab.extension.toLowerCase()}`);
+const isHtml = $derived(ext === '.html');
 const lang = $derived(extensionToShikiLang(ext));
 const jsonKind = $derived(ext === '.json' ? detectJsonKind(rawCode) : null);
 const isStacJson = $derived(jsonKind?.startsWith('stac-') ?? false);
@@ -137,6 +143,7 @@ const isMarimo = $derived(
 );
 
 let marimoSrc = $state('');
+let htmlBlobUrl = $state('');
 
 const language = $derived(languageMap[ext] ?? 'Plain Text');
 
@@ -148,7 +155,7 @@ let prevTabId = '';
 $effect(() => {
 	const id = tab.id;
 	if (prevTabId && prevTabId !== id) {
-		viewMode = 'code';
+		viewMode = isHtml ? 'render' : 'code';
 		updateUrlView('');
 	}
 	prevTabId = id;
@@ -185,6 +192,22 @@ $effect(() => {
 		const compressed = compressToEncodedURIComponent(rawCode);
 		marimoSrc = `https://marimo.app?embed=true&mode=read#code/${compressed}`;
 	});
+});
+
+// Build blob URL for HTML rendering
+$effect(() => {
+	if (!isHtml || !rawCode) {
+		if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
+		htmlBlobUrl = '';
+		return;
+	}
+	if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
+	const blob = new Blob([rawCode], { type: 'text/html' });
+	htmlBlobUrl = URL.createObjectURL(blob);
+
+	return () => {
+		if (htmlBlobUrl) URL.revokeObjectURL(htmlBlobUrl);
+	};
 });
 
 async function toggleFormat() {
@@ -240,9 +263,9 @@ async function toggleFormat() {
 	formatted = true;
 }
 
-function setViewMode(mode: 'code' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo') {
-	viewMode = viewMode === mode ? 'code' : mode;
-	updateUrlView(viewMode);
+function setViewMode(mode: 'code' | 'render' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo') {
+	viewMode = viewMode === mode ? (isHtml ? 'render' : 'code') : mode;
+	updateUrlView(viewMode === 'render' ? '' : viewMode);
 }
 
 async function copyCode() {
@@ -320,6 +343,17 @@ async function copyCode() {
 				</Button>
 			{/if}
 
+			{#if isHtml}
+				<Button
+					variant={viewMode === 'code' ? 'default' : 'outline'}
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs"
+					onclick={() => setViewMode('code')}
+				>
+					{viewMode === 'code' ? t('code.preview') : t('code.viewSource')}
+				</Button>
+			{/if}
+
 			<!-- Desktop controls -->
 			<div class="hidden items-center gap-1 sm:flex">
 				{#if canFormat}
@@ -376,6 +410,11 @@ async function copyCode() {
 								{viewMode === 'marimo' ? t('code.code') : t('code.openPlayground')}
 							</DropdownMenu.Item>
 						{/if}
+						{#if isHtml}
+							<DropdownMenu.Item onclick={() => setViewMode('code')}>
+								{viewMode === 'code' ? t('code.preview') : t('code.viewSource')}
+							</DropdownMenu.Item>
+						{/if}
 						{#if canFormat}
 							<DropdownMenu.Item onclick={toggleFormat}>
 								{formatted ? t('code.raw') : t('code.format')}
@@ -418,6 +457,15 @@ async function copyCode() {
 				class="h-full w-full border-0"
 				title="Maputnik Style Editor"
 				allow="clipboard-read; clipboard-write; fullscreen"
+			></iframe>
+		</div>
+	{:else if viewMode === 'render' && htmlBlobUrl}
+		<div class="flex-1 overflow-hidden">
+			<iframe
+				src={htmlBlobUrl}
+				class="h-full w-full border-0"
+				title={tab.name}
+				sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
 			></iframe>
 		</div>
 	{:else if viewMode === 'marimo' && marimoSrc}
