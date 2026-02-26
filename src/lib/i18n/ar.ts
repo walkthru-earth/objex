@@ -74,6 +74,12 @@ export const ar: Record<string, string> = {
 	'fileTree.noMatch': 'لا توجد ملفات مطابقة',
 	'fileTree.emptyBucket': 'حاوية فارغة',
 	'fileTree.expandDir': 'توسيع المجلد',
+	'fileTree.copyHttpUrl': 'نسخ رابط HTTPS',
+	'fileTree.copyNativeUri': 'نسخ رابط {scheme}',
+	'fileTree.copyPath': 'نسخ المسار',
+	'fileTree.copyName': 'نسخ الاسم',
+	'fileTree.open': 'فتح',
+	'fileTree.copied': 'تم النسخ!',
 
 	// File Row
 	'fileRow.rename': 'إعادة تسمية {name}',

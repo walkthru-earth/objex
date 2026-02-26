@@ -74,6 +74,12 @@ export const en: Record<string, string> = {
 	'fileTree.noMatch': 'No matching files',
 	'fileTree.emptyBucket': 'Empty bucket',
 	'fileTree.expandDir': 'Expand directory',
+	'fileTree.copyHttpUrl': 'Copy HTTPS URL',
+	'fileTree.copyNativeUri': 'Copy {scheme} URI',
+	'fileTree.copyPath': 'Copy path',
+	'fileTree.copyName': 'Copy name',
+	'fileTree.open': 'Open',
+	'fileTree.copied': 'Copied!',
 
 	// File Row
 	'fileRow.rename': 'Rename {name}',

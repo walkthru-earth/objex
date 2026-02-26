@@ -1,7 +1,7 @@
 import { connectionStore } from '$lib/stores/connections.svelte.js';
 import { type AzureCredentials, credentialStore } from '$lib/stores/credentials.svelte.js';
 import type { Connection, FileEntry, WriteResult } from '$lib/types.js';
-import type { StorageAdapter } from './adapter.js';
+import type { ListPage, StorageAdapter } from './adapter.js';
 
 // --- Helpers ---
 
@@ -83,74 +83,81 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		return conn;
 	}
 
-	async list(path: string): Promise<FileEntry[]> {
+	async listPage(path: string, continuationToken?: string, pageSize?: number): Promise<ListPage> {
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
 		const sas = getSasQuery(conn);
 
+		const params = new URLSearchParams({
+			restype: 'container',
+			comp: 'list',
+			delimiter: '/'
+		});
+		if (path) params.set('prefix', path);
+		if (continuationToken) params.set('marker', continuationToken);
+		if (pageSize) params.set('maxresults', String(pageSize));
+
+		const url = appendSas(`${baseUrl}?${params}`, sas);
+		const res = await fetch(url);
+		if (!res.ok) {
+			const body = await res.text().catch(() => '');
+			throw new Error(`Azure list failed (${res.status}): ${body || res.statusText}`);
+		}
+
+		const xml = await res.text();
+		const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
 		const entries: FileEntry[] = [];
-		let marker: string | undefined;
 
-		do {
-			const params = new URLSearchParams({
-				restype: 'container',
-				comp: 'list',
-				delimiter: '/'
+		// Parse <BlobPrefix> (directories)
+		for (const bp of doc.querySelectorAll('BlobPrefix')) {
+			const prefix = bp.querySelector('Name')?.textContent ?? '';
+			if (!prefix) continue;
+			const dirName = nameFromKey(prefix);
+			entries.push({
+				name: dirName,
+				path: prefix,
+				is_dir: true,
+				size: 0,
+				modified: 0,
+				extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
 			});
-			if (path) params.set('prefix', path);
-			if (marker) params.set('marker', marker);
+		}
 
-			const url = appendSas(`${baseUrl}?${params}`, sas);
-			const res = await fetch(url);
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				throw new Error(`Azure list failed (${res.status}): ${body || res.statusText}`);
-			}
+		// Parse <Blob> (files)
+		for (const blob of doc.querySelectorAll('Blobs > Blob')) {
+			const key = blob.querySelector('Name')?.textContent ?? '';
+			if (!key || key === path || key.endsWith('/')) continue;
+			const name = nameFromKey(key);
+			const size = parseInt(
+				blob.querySelector('Properties > Content-Length')?.textContent ?? '0',
+				10
+			);
+			const lastMod = blob.querySelector('Properties > Last-Modified')?.textContent ?? '';
+			entries.push({
+				name,
+				path: key,
+				is_dir: false,
+				size,
+				modified: lastMod ? Date.parse(lastMod) || 0 : 0,
+				extension: extensionFromName(name)
+			});
+		}
 
-			const xml = await res.text();
-			const doc = new DOMParser().parseFromString(xml, 'application/xml');
+		const nextMarker = doc.querySelector('NextMarker')?.textContent || undefined;
 
-			// Parse <BlobPrefix> (directories)
-			for (const bp of doc.querySelectorAll('BlobPrefix')) {
-				const prefix = bp.querySelector('Name')?.textContent ?? '';
-				if (!prefix) continue;
-				const dirName = nameFromKey(prefix);
-				entries.push({
-					name: dirName,
-					path: prefix,
-					is_dir: true,
-					size: 0,
-					modified: 0,
-					extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
-				});
-			}
+		return { entries, continuationToken: nextMarker, hasMore: !!nextMarker };
+	}
 
-			// Parse <Blob> (files)
-			for (const blob of doc.querySelectorAll('Blobs > Blob')) {
-				const key = blob.querySelector('Name')?.textContent ?? '';
-				if (!key || key === path || key.endsWith('/')) continue;
-				const name = nameFromKey(key);
-				const size = parseInt(
-					blob.querySelector('Properties > Content-Length')?.textContent ?? '0',
-					10
-				);
-				const lastMod = blob.querySelector('Properties > Last-Modified')?.textContent ?? '';
-				entries.push({
-					name,
-					path: key,
-					is_dir: false,
-					size,
-					modified: lastMod ? Date.parse(lastMod) || 0 : 0,
-					extension: extensionFromName(name)
-				});
-			}
-
-			// Pagination
-			const nextMarker = doc.querySelector('NextMarker')?.textContent;
-			marker = nextMarker || undefined;
-		} while (marker);
-
-		return entries;
+	async list(path: string): Promise<FileEntry[]> {
+		const all: FileEntry[] = [];
+		let token: string | undefined;
+		do {
+			const page = await this.listPage(path, token);
+			all.push(...page.entries);
+			token = page.continuationToken;
+		} while (token);
+		return all;
 	}
 
 	async read(path: string, offset?: number, length?: number): Promise<Uint8Array> {

@@ -2,7 +2,7 @@ import { AwsClient } from 'aws4fetch';
 import { connectionStore } from '$lib/stores/connections.svelte.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
 import type { Connection, FileEntry, WriteResult } from '$lib/types.js';
-import type { StorageAdapter } from './adapter.js';
+import type { ListPage, StorageAdapter } from './adapter.js';
 
 // --- Helpers ---
 
@@ -107,71 +107,79 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		return conn;
 	}
 
-	async list(path: string): Promise<FileEntry[]> {
+	async listPage(path: string, continuationToken?: string, pageSize?: number): Promise<ListPage> {
 		const conn = this.getConnection();
 		const baseUrl = buildBaseUrl(conn);
 		const cloudFetch = createFetcher(conn);
 
+		const params = new URLSearchParams({
+			'list-type': '2',
+			delimiter: '/'
+		});
+		if (path) params.set('prefix', path);
+		if (continuationToken) params.set('continuation-token', continuationToken);
+		if (pageSize) params.set('max-keys', String(pageSize));
+
+		const res = await cloudFetch(`${baseUrl}?${params}`);
+		if (!res.ok) {
+			const body = await res.text().catch(() => '');
+			throw new Error(`List failed (${res.status}): ${body || res.statusText}`);
+		}
+
+		const xml = await res.text();
+		const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
 		const entries: FileEntry[] = [];
-		let continuationToken: string | undefined;
 
-		do {
-			const params = new URLSearchParams({
-				'list-type': '2',
-				delimiter: '/'
+		// Parse <CommonPrefixes> (directories)
+		for (const cp of doc.querySelectorAll('CommonPrefixes')) {
+			const prefix = cp.querySelector('Prefix')?.textContent ?? '';
+			if (!prefix) continue;
+			const dirName = nameFromKey(prefix);
+			entries.push({
+				name: decodeKey(dirName),
+				path: prefix,
+				is_dir: true,
+				size: 0,
+				modified: 0,
+				extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
 			});
-			if (path) params.set('prefix', path);
-			if (continuationToken) params.set('continuation-token', continuationToken);
+		}
 
-			const res = await cloudFetch(`${baseUrl}?${params}`);
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				throw new Error(`List failed (${res.status}): ${body || res.statusText}`);
-			}
+		// Parse <Contents> (files)
+		for (const item of doc.querySelectorAll('Contents')) {
+			const key = item.querySelector('Key')?.textContent ?? '';
+			if (!key || key === path || key.endsWith('/')) continue;
+			const name = decodeKey(nameFromKey(key));
+			const size = parseInt(item.querySelector('Size')?.textContent ?? '0', 10);
+			const lastMod = item.querySelector('LastModified')?.textContent ?? '';
+			entries.push({
+				name,
+				path: key,
+				is_dir: false,
+				size,
+				modified: lastMod ? Date.parse(lastMod) || 0 : 0,
+				extension: extensionFromName(name)
+			});
+		}
 
-			const xml = await res.text();
-			const doc = new DOMParser().parseFromString(xml, 'application/xml');
+		const isTruncated = doc.querySelector('IsTruncated')?.textContent === 'true';
+		const nextToken = isTruncated
+			? (doc.querySelector('NextContinuationToken')?.textContent ?? undefined)
+			: undefined;
 
-			// Parse <CommonPrefixes> (directories)
-			for (const cp of doc.querySelectorAll('CommonPrefixes')) {
-				const prefix = cp.querySelector('Prefix')?.textContent ?? '';
-				if (!prefix) continue;
-				const dirName = nameFromKey(prefix);
-				entries.push({
-					name: decodeKey(dirName),
-					path: prefix,
-					is_dir: true,
-					size: 0,
-					modified: 0,
-					extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
-				});
-			}
+		return { entries, continuationToken: nextToken, hasMore: !!nextToken };
+	}
 
-			// Parse <Contents> (files)
-			for (const item of doc.querySelectorAll('Contents')) {
-				const key = item.querySelector('Key')?.textContent ?? '';
-				if (!key || key === path || key.endsWith('/')) continue;
-				const name = decodeKey(nameFromKey(key));
-				const size = parseInt(item.querySelector('Size')?.textContent ?? '0', 10);
-				const lastMod = item.querySelector('LastModified')?.textContent ?? '';
-				entries.push({
-					name,
-					path: key,
-					is_dir: false,
-					size,
-					modified: lastMod ? Date.parse(lastMod) || 0 : 0,
-					extension: extensionFromName(name)
-				});
-			}
-
-			// Check for pagination
-			const isTruncated = doc.querySelector('IsTruncated')?.textContent === 'true';
-			continuationToken = isTruncated
-				? (doc.querySelector('NextContinuationToken')?.textContent ?? undefined)
-				: undefined;
-		} while (continuationToken);
-
-		return entries;
+	async list(path: string): Promise<FileEntry[]> {
+		const all: FileEntry[] = [];
+		let token: string | undefined;
+		do {
+			const page = await this.listPage(path, token);
+			all.push(...page.entries);
+			token = page.continuationToken;
+		} while (token);
+		return all;
 	}
 
 	async read(path: string, offset?: number, length?: number): Promise<Uint8Array> {
