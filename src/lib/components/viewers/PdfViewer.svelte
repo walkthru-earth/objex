@@ -21,6 +21,7 @@ const LOAD_TIMEOUT_MS = 20_000;
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let canvasEl: HTMLCanvasElement | undefined = $state();
 let pdfDoc = $state.raw<PDFDocumentProxy | null>(null);
 let currentPage = $state(1);
@@ -56,6 +57,10 @@ function cancelActiveTask() {
 }
 
 async function loadPdf() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 	cancelActiveTask();
@@ -63,12 +68,13 @@ async function loadPdf() {
 	pdfDoc = null;
 
 	try {
-		const doc = await loadPdfData();
+		const doc = await loadPdfData(signal);
 		pdfDoc = doc;
 		totalPages = doc.numPages;
 		currentPage = 1;
 	} catch (err: any) {
-		// Ignore cancellation errors (destroyed loading task)
+		// Ignore cancellation errors (destroyed loading task) and aborts
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		if (err?.name === 'PasswordException' || err?.message?.includes('destroy')) return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
@@ -76,7 +82,7 @@ async function loadPdf() {
 	}
 }
 
-async function loadPdfData(): Promise<PDFDocumentProxy> {
+async function loadPdfData(signal: AbortSignal): Promise<PDFDocumentProxy> {
 	// Try streaming from URL first (range requests for progressive page rendering)
 	if (canStreamDirectly(tab)) {
 		try {
@@ -90,7 +96,7 @@ async function loadPdfData(): Promise<PDFDocumentProxy> {
 	}
 	// Fall back to full download via storage adapter
 	const adapter = getAdapter(tab.source, tab.connectionId);
-	const data = await adapter.read(tab.path);
+	const data = await adapter.read(tab.path, undefined, undefined, signal);
 	const task = await loadPdfDocument(data);
 	activeTask = task;
 	return await withTimeout(task.promise, LOAD_TIMEOUT_MS);
@@ -150,6 +156,8 @@ function zoomOut() {
 }
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	cancelActiveTask();
 	pdfDoc?.destroy();
 	pdfDoc = null;

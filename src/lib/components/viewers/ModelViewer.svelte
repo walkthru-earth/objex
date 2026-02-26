@@ -20,6 +20,7 @@ import {
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let canvasEl: HTMLCanvasElement | undefined = $state();
 let modelScene: ModelScene | null = null;
 let loading = $state(true);
@@ -33,6 +34,10 @@ $effect(() => {
 });
 
 async function loadModelFile() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
@@ -42,11 +47,12 @@ async function loadModelFile() {
 		modelScene = createModelScene(canvasEl);
 
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
+		const data = await adapter.read(tab.path, undefined, undefined, signal);
 		const info = await loadModel(modelScene.scene, modelScene.camera, data, tab.extension);
 		meshCount = info.meshCount;
 		vertexCount = info.vertexCount;
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
@@ -76,6 +82,8 @@ function fullscreen() {
 }
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	if (modelScene) {
 		disposeModelScene(modelScene);
 		modelScene = null;

@@ -23,6 +23,7 @@ const mimeMap: Record<string, string> = {
 	aac: 'audio/aac'
 };
 
+let abortController: AbortController | null = null;
 let mediaSrc = $state<string | null>(null);
 let blobUrl = $state<string | null>(null);
 let loading = $state(true);
@@ -37,6 +38,8 @@ async function loadMedia() {
 	loading = true;
 	error = null;
 	cleanup();
+	abortController = new AbortController();
+	const { signal } = abortController;
 
 	try {
 		if (canStreamDirectly(tab)) {
@@ -47,13 +50,14 @@ async function loadMedia() {
 		} else {
 			// Authenticated S3 — download via storage adapter (blob fallback)
 			const adapter = getAdapter(tab.source, tab.connectionId);
-			const data = await adapter.read(tab.path);
+			const data = await adapter.read(tab.path, undefined, undefined, signal);
 			const mime = mimeMap[tab.extension.toLowerCase()] || 'application/octet-stream';
 			const blob = new Blob([data as unknown as BlobPart], { type: mime });
 			blobUrl = URL.createObjectURL(blob);
 			mediaSrc = blobUrl;
 		}
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
@@ -61,6 +65,8 @@ async function loadMedia() {
 }
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	if (blobUrl) {
 		URL.revokeObjectURL(blobUrl);
 		blobUrl = null;

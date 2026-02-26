@@ -29,6 +29,7 @@ const mimeMap: Record<string, string> = {
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let imgSrc = $state<string | null>(null);
 let blobUrl = $state<string | null>(null);
 let loading = $state(true);
@@ -51,6 +52,8 @@ async function loadImage() {
 	loading = true;
 	error = null;
 	cleanup();
+	abortController = new AbortController();
+	const { signal } = abortController;
 	resetView();
 
 	try {
@@ -60,7 +63,7 @@ async function loadImage() {
 		} else {
 			// Authenticated S3 — download via storage adapter
 			const adapter = getAdapter(tab.source, tab.connectionId);
-			const data = await adapter.read(tab.path);
+			const data = await adapter.read(tab.path, undefined, undefined, signal);
 			const ext = tab.extension.toLowerCase();
 			const blob = new Blob([data as unknown as BlobPart], {
 				type: mimeMap[ext] || 'application/octet-stream'
@@ -69,6 +72,7 @@ async function loadImage() {
 			imgSrc = blobUrl;
 		}
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
@@ -137,6 +141,8 @@ function handleDblClick() {
 }
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	if (blobUrl) {
 		URL.revokeObjectURL(blobUrl);
 		blobUrl = null;

@@ -12,6 +12,7 @@ import { highlightCode } from '$lib/utils/shiki';
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let container = $state<HTMLDivElement | null>(null);
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -27,6 +28,8 @@ $effect(() => {
 });
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	rawContent = '';
 	if (container) {
 		container.innerHTML = '';
@@ -42,12 +45,16 @@ $effect(() => {
 onDestroy(cleanup);
 
 async function loadNotebook() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
+		const data = await adapter.read(tab.path, undefined, undefined, signal);
 		rawContent = new TextDecoder().decode(data);
 		const notebook = JSON.parse(rawContent);
 
@@ -61,6 +68,7 @@ async function loadNotebook() {
 
 		await renderNotebook(notebook);
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;

@@ -11,6 +11,7 @@ import MapContainer from './map/MapContainer.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let loading = $state(true);
 let error = $state<string | null>(null);
 let geojsonData = $state.raw<any>(null);
@@ -24,6 +25,8 @@ $effect(() => {
 });
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	geojsonData = null;
 	selectedFeature = null;
 	bounds = undefined;
@@ -38,12 +41,16 @@ $effect(() => {
 onDestroy(cleanup);
 
 async function loadGeoJson() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
+		const data = await adapter.read(tab.path, undefined, undefined, signal);
 		const text = new TextDecoder().decode(data);
 		geojsonData = JSON.parse(text);
 
@@ -54,6 +61,7 @@ async function loadGeoJson() {
 			bounds = computeBounds(geojsonData);
 		}
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;

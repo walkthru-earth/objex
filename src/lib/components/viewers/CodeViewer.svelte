@@ -1,10 +1,12 @@
 <script lang="ts">
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl } from '$lib/utils/url.js';
@@ -12,6 +14,7 @@ import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let html = $state('');
 let rawCode = $state('');
 let loading = $state(true);
@@ -161,21 +164,38 @@ $effect(() => {
 	prevTabId = id;
 });
 
+function cleanup() {
+	abortController?.abort();
+	abortController = null;
+}
+
+$effect(() => {
+	if (!tab) return;
+	const unregister = tabResources.register(tab.id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
+
 $effect(() => {
 	if (!tab) return;
 	loadCode();
 });
 
 async function loadCode() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
+		const data = await adapter.read(tab.path, undefined, undefined, signal);
 		rawCode = new TextDecoder().decode(data);
 		html = await highlightCode(rawCode, lang);
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;

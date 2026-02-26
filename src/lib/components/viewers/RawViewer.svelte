@@ -1,7 +1,9 @@
 <script lang="ts">
+import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { formatFileSize } from '$lib/utils/format';
 import { generateHexDump, type HexRow } from '$lib/utils/hex';
@@ -10,11 +12,26 @@ let { tab }: { tab: Tab } = $props();
 
 const MAX_BYTES = 8192;
 
+let abortController: AbortController | null = null;
 let rows = $state<HexRow[]>([]);
 let fileSize = $state(0);
 let loading = $state(true);
 let error = $state<string | null>(null);
 let truncated = $state(false);
+
+function cleanup() {
+	abortController?.abort();
+	abortController = null;
+	rows = [];
+	fileSize = 0;
+}
+
+$effect(() => {
+	if (!tab) return;
+	const unregister = tabResources.register(tab.id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
 
 $effect(() => {
 	if (!tab) return;
@@ -22,18 +39,23 @@ $effect(() => {
 });
 
 async function loadHexDump() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const meta = await adapter.head(tab.path);
+		const meta = await adapter.head(tab.path, signal);
 		fileSize = meta.size;
 
-		const data = await adapter.read(tab.path, 0, MAX_BYTES);
+		const data = await adapter.read(tab.path, 0, MAX_BYTES, signal);
 		truncated = fileSize > MAX_BYTES;
 		rows = generateHexDump(data);
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;

@@ -21,6 +21,7 @@ const SYSTEM_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
 
 let { tab }: { tab: Tab } = $props();
 
+let abortController: AbortController | null = null;
 let html = $state('');
 let rawMarkdown = $state('');
 let loading = $state(true);
@@ -34,6 +35,8 @@ let contentDir = $state<'ltr' | 'rtl'>('ltr');
 let contentEl: HTMLElement | undefined = $state();
 
 function cleanup() {
+	abortController?.abort();
+	abortController = null;
 	html = '';
 	rawMarkdown = '';
 	sqlResults = new Map();
@@ -52,12 +55,16 @@ $effect(() => {
 });
 
 async function loadMarkdown() {
+	abortController?.abort();
+	abortController = new AbortController();
+	const { signal } = abortController;
+
 	loading = true;
 	error = null;
 
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
-		const data = await adapter.read(tab.path);
+		const data = await adapter.read(tab.path, undefined, undefined, signal);
 		rawMarkdown = new TextDecoder().decode(data);
 
 		const isRTL = detectRTL(rawMarkdown);
@@ -107,6 +114,7 @@ async function loadMarkdown() {
 			html = processDirection(rendered, isRTL);
 		}
 	} catch (err) {
+		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
