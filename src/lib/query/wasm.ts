@@ -40,6 +40,7 @@ function elapsed(start: number): string {
 }
 
 let dbPromise: Promise<any> | null = null;
+let geoConversionDisabled = false;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -105,6 +106,13 @@ async function getDB() {
 				INIT_TIMEOUT_MS,
 				'extension install (httpfs + spatial)'
 			);
+			// Disable auto-conversion of GeoParquet metadata → GEOMETRY type.
+			// Some files use legacy GeoParquet metadata (schema_version 0.x without
+			// "version" field) which causes DuckDB's spatial extension to throw
+			// "Geoparquet metadata does not have a version". We handle geometry
+			// detection, CRS, and WKB conversion ourselves via hyparquet metadata
+			// and explicit ST_GeomFromWKB() calls, so auto-conversion is not needed.
+			await conn.query('SET enable_geoparquet_conversion = false');
 			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
 			await conn.close();
@@ -120,6 +128,18 @@ async function getDB() {
 	});
 
 	return dbPromise;
+}
+
+/**
+ * Ensure GeoParquet auto-conversion is disabled on this connection.
+ * It's a GLOBAL setting — once set, it persists for the DB instance.
+ * The flag avoids redundant SET calls on subsequent connections.
+ */
+async function ensureGeoConversionDisabled(conn: any): Promise<void> {
+	if (geoConversionDisabled) return;
+	await conn.query('SET enable_geoparquet_conversion = false');
+	geoConversionDisabled = true;
+	log('ensureGeoConversionDisabled → SET applied');
 }
 
 // ─── CRS detection helpers ───────────────────────────────────────────
@@ -292,6 +312,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 		const tConn = performance.now();
 		log(`query → connected in ${elapsed(t0)}`);
 
@@ -352,6 +373,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log(`queryForMap → geomCol: ${geomCol}, type: ${geomColType}, crs: ${sourceCrs ?? 'WGS84'}`);
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -460,6 +482,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getSchema →', path);
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -490,6 +513,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getRowCount →', path);
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -540,6 +564,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getSchemaAndCrs →', path);
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -642,6 +667,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log(`detectCrs → standalone call for "${geomCol}"`, path);
 		const db = await getDB();
 		const conn = await db.connect();
+		await ensureGeoConversionDisabled(conn);
 		try {
 			if (connId) {
 				await this.configureStorage(conn, connId);
@@ -732,6 +758,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			const db = await getDB();
 			conn = await db.connect();
+			await ensureGeoConversionDisabled(conn);
 			log(`queryCancellable → connected in ${elapsed(t0)}`);
 
 			try {
@@ -811,6 +838,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			const db = await getDB();
 			conn = await db.connect();
+			await ensureGeoConversionDisabled(conn);
 
 			try {
 				if (connId) {
@@ -951,6 +979,7 @@ export class WasmQueryEngine implements QueryEngine {
 			logWarn('forceCancel → terminate error:', err);
 		} finally {
 			dbPromise = null;
+			geoConversionDisabled = false;
 			log('forceCancel → done, next getDB() will reinitialize');
 		}
 	}

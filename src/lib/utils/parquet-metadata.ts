@@ -30,6 +30,8 @@ export interface ParquetFileMetadata {
 	schema: { name: string; type: string }[];
 	/** GeoParquet "geo" metadata if present. */
 	geo: GeoParquetMeta | null;
+	/** True when file has legacy GeoParquet metadata (schema_version 0.x without "version" field). */
+	legacyGeoParquet: boolean;
 	/** Tool that created the file (e.g. "pyarrow 15.0.0"). */
 	createdBy: string | null;
 	/** Number of row groups. */
@@ -125,10 +127,20 @@ export async function readParquetMetadata(url: string): Promise<ParquetFileMetad
 
 	// GeoParquet "geo" key-value metadata
 	let geo: GeoParquetMeta | null = null;
+	let legacyGeoParquet = false;
 	const geoKv = metadata.key_value_metadata?.find((kv: any) => kv.key === 'geo');
 	if (geoKv) {
 		try {
 			const geoJson = JSON.parse(geoKv.value ?? '');
+
+			// Detect legacy GeoParquet (schema_version 0.x without "version" field).
+			// Early geopandas (<0.12) wrote schema_version instead of version.
+			// DuckDB's spatial extension rejects these files with:
+			// "Geoparquet metadata does not have a version"
+			if (geoJson.schema_version && !geoJson.version) {
+				legacyGeoParquet = true;
+			}
+
 			geo = {
 				primaryColumn: geoJson.primary_column ?? 'geometry',
 				columns: {}
@@ -169,7 +181,7 @@ export async function readParquetMetadata(url: string): Promise<ParquetFileMetad
 		}
 	}
 
-	return { rowCount, schema, geo, createdBy, numRowGroups, compression };
+	return { rowCount, schema, geo, legacyGeoParquet, createdBy, numRowGroups, compression };
 }
 
 /**

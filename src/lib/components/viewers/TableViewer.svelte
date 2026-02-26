@@ -301,15 +301,13 @@ async function loadTable() {
 					{ label: t('progress.source'), value: t('progress.rangeRequest') }
 				];
 
-				// Instant schema display — override geo column type to match DuckDB.
-				// For GeoParquet: the primary geometry column gets promoted to GEOMETRY.
-				// For native Parquet GEOMETRY: hyparquet maps BYTE_ARRAY to BLOB,
-				// but DuckDB spatial reads it as GEOMETRY. We fix this below after
-				// findGeoColumn detects the column.
-				const geoColName = meta.geo?.primaryColumn;
+				// Instant schema display — use hyparquet-detected types as-is.
+				// mapParquetType() returns 'GEOMETRY' for native Parquet GEOMETRY
+				// logical type (Format 2.11+) and 'BLOB' for plain BYTE_ARRAY.
+				// This matches what DuckDB reports with enable_geoparquet_conversion=false.
 				schema = meta.schema.map((s) => ({
 					name: s.name,
-					type: geoColName && s.name === geoColName ? 'GEOMETRY' : s.type,
+					type: s.type,
 					nullable: true
 				}));
 				columns = schema.map((f) => f.name);
@@ -350,10 +348,12 @@ async function loadTable() {
 
 				if (meta.geo) {
 					geoCol = meta.geo.primaryColumn;
-					// DuckDB with spatial extension auto-promotes GeoParquet
-					// geometry columns from BLOB to GEOMETRY. Match DuckDB's type
-					// for correct SQL generation (ST_AsWKB vs ST_GeomFromWKB).
-					geoColType = 'GEOMETRY';
+					// Use hyparquet-detected type — matches what DuckDB reports:
+					// - Native Parquet GEOMETRY logical type → 'GEOMETRY'
+					// - Plain BYTE_ARRAY (WKB) → 'BLOB'
+					// enable_geoparquet_conversion=false only disables "geo" KV metadata
+					// validation; native Parquet GEOMETRY is handled by DuckDB core.
+					geoColType = meta.schema.find((s) => s.name === geoCol)?.type ?? 'BLOB';
 					sourceCrs = extractEpsgFromGeoMeta(meta.geo);
 					const geomTypes = extractGeometryTypes(meta.geo);
 					if (geomTypes.length === 1) knownGeomType = geomTypes[0];
@@ -393,12 +393,9 @@ async function loadTable() {
 					const detectedGeoCol = findGeoColumn(schema);
 					if (detectedGeoCol) {
 						geoCol = detectedGeoCol;
-						// DuckDB spatial auto-promotes native Parquet GEOMETRY to GEOMETRY type.
-						// Update schema to reflect the real DuckDB type (not hyparquet's BLOB).
-						geoColType = 'GEOMETRY';
-						schema = schema.map((s) =>
-							s.name === detectedGeoCol ? { ...s, type: 'GEOMETRY' } : s
-						);
+						// Use hyparquet-detected type: GEOMETRY for native logical type, BLOB for BYTE_ARRAY.
+						const schemaType = schema.find((s) => s.name === detectedGeoCol)?.type ?? 'BLOB';
+						geoColType = schemaType;
 						needsDuckDbCrs = true;
 						loadProgress = [
 							...loadProgress,

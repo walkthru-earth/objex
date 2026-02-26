@@ -184,14 +184,68 @@ The CodeViewer auto-detects special files by content and offers contextual actio
 
 ## Geospatial Pipeline
 
-The TableViewer + GeoParquetMapViewer share a unified query pipeline:
+The TableViewer + GeoParquetMapViewer share a unified query pipeline that handles all versions of GeoParquet, native Parquet geometry, and non-geo tabular files through a single code path.
 
-1. **Schema detection** — DuckDB reads Parquet metadata (cheap range requests, no full download)
-2. **Geometry column detection** — scans schema for known geo types (GEOMETRY, WKB_BLOB, BLOB, JSON geo columns)
-3. **CRS detection** — reads GeoParquet `"geo"` KV metadata → native Parquet 2.11 logical_type → fallback WGS84
-4. **CRS reprojection** — `ST_Transform(..., always_xy := true)` for non-WGS84 sources
-5. **WKB extraction** — `ST_AsWKB()` adds a `__wkb` column alongside table data
-6. **GeoArrow rendering** — `buildGeoArrowTables()` splits mixed WKBs by geometry type → one deck.gl layer per type (Point, LineString, Polygon, Multi*)
+### Stage 1: Metadata Detection (hyparquet fast path)
+
+Before DuckDB-WASM finishes booting, hyparquet reads the Parquet footer via a single HTTP range request (~512 KB):
+
+| What | How | Fallback |
+|------|-----|----------|
+| Row count | Sum of `row_groups[].num_rows` | DuckDB `parquet_file_metadata()` |
+| Schema | `mapParquetType()` maps logical/physical types | DuckDB `DESCRIBE SELECT *` |
+| GeoParquet metadata | Parse `"geo"` KV metadata key | DuckDB `parquet_kv_metadata()` |
+| Legacy GeoParquet | Detect `schema_version` without `version` (geopandas <0.12) | — |
+| Native Parquet GEOMETRY | `logical_type.type === 'GEOMETRY'` (Format 2.11+) | `findGeoColumn()` heuristic |
+| CRS | PROJJSON from `geo.columns[col].crs` | DuckDB `parquet_schema()` logical_type |
+| Bbox | `geo.columns[col].bbox` → initial map bounds | — |
+| Geometry types | `geo.columns[col].geometry_types` → deck.gl layer hint | WKB type byte detection |
+
+### Stage 2: Geometry Column Detection
+
+Five-priority heuristic in `findGeoColumn()`:
+
+1. Column type contains a geo keyword (`GEOMETRY`, `POINT`, `POLYGON`, `LINESTRING`, etc.)
+2. Well-known column name + binary type (`geometry`, `geom`, `wkb_geometry`, `the_geom`, `shape`)
+3. Well-known column name, any type
+4. Name contains geo hint (`geom`, `wkt`, `shape`) + binary type
+5. Name contains geo hint, any type
+
+### Stage 3: DuckDB GeoParquet Conversion Bypass
+
+DuckDB's spatial extension auto-promotes GeoParquet BLOB columns to GEOMETRY type via the `"geo"` KV metadata. This fails on legacy files (missing `"version"` field) with: `"Geoparquet metadata does not have a version"`.
+
+**Fix**: `enable_geoparquet_conversion` is set to `false` globally at DB initialization. This only disables the "geo" KV metadata validation path — native Parquet GEOMETRY (Format 2.11+ logical type) is still handled by DuckDB core and read as `GEOMETRY`. The column type (`geoColType`) is determined from hyparquet's `mapParquetType()`: native GEOMETRY logical type → `GEOMETRY`, plain BYTE_ARRAY → `BLOB`.
+
+| File type | hyparquet type | DuckDB type | SQL path |
+|-----------|---------------|-------------|----------|
+| GeoParquet + native GEOMETRY (WGS84) | GEOMETRY | GEOMETRY | `ST_AsWKB("geometry") AS __wkb` |
+| GeoParquet + native GEOMETRY (non-WGS84) | GEOMETRY | GEOMETRY | `ST_AsWKB(ST_Transform("geometry", ...))` |
+| Legacy GeoParquet v0.x + native GEOMETRY | GEOMETRY | GEOMETRY | Same (no version validation error) |
+| GeoParquet, plain WKB (WGS84) | BLOB | BLOB | `"geometry" AS __wkb` (zero-copy pass-through) |
+| GeoParquet, plain WKB (non-WGS84) | BLOB | BLOB | `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` |
+| GeoJSON column | VARCHAR | VARCHAR | `ST_AsWKB(ST_GeomFromGeoJSON("geometry"))` |
+| Non-geo Parquet / CSV | — | — | `SELECT * FROM source` (no geometry handling) |
+
+### Stage 4: CRS Detection & Reprojection
+
+Three strategies in priority order:
+
+1. **GeoParquet `"geo"` KV metadata** — PROJJSON `crs.id.authority === "EPSG"` (authoritative, skips further detection)
+2. **Native Parquet 2.11 `logical_type`** — parses `GeometryType(crs=srid:NNNN)`, `crs={PROJJSON}`, or `crs=projjson:key_ref`
+3. **Fallback** — assume WGS84 (EPSG:4326)
+
+Non-WGS84 sources are reprojected with `ST_Transform(..., always_xy := true)` to ensure correct lon/lat axis order regardless of CRS authority convention.
+
+### Stage 5: WKB Extraction & Map Rendering
+
+1. **Table query** — `SELECT * EXCLUDE("geometry"), wkb_expr AS __wkb FROM source LIMIT N OFFSET M`
+   - GEOMETRY type: `ST_AsWKB("geometry")` — converts native type to WKB
+   - BLOB type (WGS84): `"geometry"` — zero-copy pass-through (already WKB)
+   - BLOB type (non-WGS84): `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` — parse, reproject, serialize
+2. **Map query** — wraps user SQL: `SELECT *, wkb_expr AS __wkb, ST_GeometryType(geom_expr) AS __geom_type FROM (user_sql) __src`
+3. **GeoArrow conversion** — `buildGeoArrowTables()` parses WKB arrays, splits by geometry type (Point, LineString, Polygon, Multi*)
+4. **deck.gl rendering** — one `GeoArrowScatterplotLayer` / `GeoArrowPathLayer` / `GeoArrowSolidPolygonLayer` per geometry type
 
 ### Query Cancellation
 
@@ -209,6 +263,7 @@ Map attribute extraction uses type-aware bulk reads to minimize allocations:
 
 - **Numeric columns** (Int, Float, Double, Decimal, BigInt) — Arrow's `.toArray()` returns a zero-copy typed array view over the buffer, then `Array.from()` for downstream compat
 - **WKB geometry** — `Uint8Array` from Arrow column `.get(i)` is used directly (no copy when already a `Uint8Array`)
+- **WGS84 WKB pass-through** — BLOB column renamed to `__wkb` without any conversion (no `ST_GeomFromWKB` / `ST_AsWKB` round-trip)
 - **Binary columns** (BLOB, BYTEA, WKB_BLOB) — skipped during map attribute extraction (not useful for tooltips, expensive to serialize)
 - **DuckDB version** — injected at build time from `package.json` via Vite `define` (never hardcoded)
 
