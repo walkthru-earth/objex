@@ -126,4 +126,8 @@
   :root[lang="ar"] {
     font-family: "Cairo", sans-serif;
   }
+  /* Cairo font variable — available for components that render Arabic content */
+  :root {
+    --font-cairo: "Cairo", sans-serif;
+  }
 }

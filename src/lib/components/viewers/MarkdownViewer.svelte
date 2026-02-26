@@ -15,6 +15,9 @@ import {
 	parseMarkdownDocument
 } from '$lib/utils/markdown-sql';
 
+const CAIRO_FONT = '"Cairo", sans-serif';
+const SYSTEM_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
 let { tab }: { tab: Tab } = $props();
 
 let html = $state('');
@@ -102,14 +105,33 @@ async function loadMarkdown() {
 			let rendered = await renderMarkdown(rawMarkdown);
 			html = processDirection(rendered, isRTL);
 		}
-
-		// Render mermaid diagrams after DOM update
-		await tick();
-		await renderMermaidDiagrams();
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 	} finally {
 		loading = false;
+	}
+
+	// After loading is false and DOM has mounted the article
+	if (!error) {
+		await tick();
+		await renderMermaidDiagrams();
+		wireCodeCopyButtons();
+	}
+}
+
+function wireCodeCopyButtons() {
+	if (!contentEl) return;
+	for (const btn of contentEl.querySelectorAll('.code-copy-btn')) {
+		btn.addEventListener('click', async () => {
+			const code = decodeURIComponent((btn as HTMLElement).dataset.code ?? '');
+			try {
+				await navigator.clipboard.writeText(code);
+				btn.classList.add('copied');
+				setTimeout(() => btn.classList.remove('copied'), 2000);
+			} catch {
+				// clipboard not available
+			}
+		});
 	}
 }
 
@@ -120,17 +142,21 @@ async function renderMermaidDiagrams() {
 
 	try {
 		const mermaid = (await import('mermaid')).default;
+		// Always use Cairo — it supports both Arabic and Latin scripts
+		const fontFamily = CAIRO_FONT;
 		mermaid.initialize({
 			startOnLoad: false,
 			theme: 'default',
 			securityLevel: 'loose',
+			fontFamily: fontFamily,
+			themeVariables: { fontFamily },
 			flowchart: { useMaxWidth: true },
 			sequence: { useMaxWidth: true },
 			gantt: { useMaxWidth: true }
 		});
 		await mermaid.run({ nodes: mermaidNodes as NodeListOf<HTMLElement> });
 
-		// Make SVGs responsive
+		// Post-process SVGs: make responsive + force font on all text elements
 		for (const node of mermaidNodes) {
 			const svg = node.querySelector('svg');
 			if (!svg) continue;
@@ -141,6 +167,21 @@ async function renderMermaidDiagrams() {
 			}
 			svg.removeAttribute('width');
 			svg.removeAttribute('height');
+
+			// Force Cairo on SVG root
+			svg.style.fontFamily = fontFamily;
+
+			// Force font on all text/tspan elements inside the SVG
+			for (const el of svg.querySelectorAll('text, tspan')) {
+				(el as SVGElement).style.fontFamily = fontFamily;
+			}
+
+			// Force font on foreignObject content (used by some diagram types)
+			for (const el of svg.querySelectorAll(
+				'foreignObject div, foreignObject span, foreignObject p'
+			)) {
+				(el as HTMLElement).style.fontFamily = fontFamily;
+			}
 		}
 	} catch (err) {
 		console.warn('Mermaid rendering failed:', err);
@@ -206,6 +247,7 @@ async function saveMarkdown(markdown: string) {
 				bind:this={contentEl}
 				dir={contentDir}
 				class="prose prose-zinc dark:prose-invert max-w-none p-6 lg:p-8"
+				class:md-rtl={contentDir === 'rtl'}
 			>
 				{@html html}
 
@@ -224,7 +266,68 @@ async function saveMarkdown(markdown: string) {
 </div>
 
 <style>
-	/* ========== CODE BLOCKS — always LTR ========== */
+	/* ========== FONT — Cairo for RTL content (supports Arabic + Latin) ========== */
+	article.md-rtl {
+		font-family: var(--font-cairo, "Cairo", sans-serif);
+	}
+
+	/* ========== CODE BLOCK WRAPPER (copy button + shiki) ========== */
+	article :global(.code-block-wrapper) {
+		position: relative;
+		margin: 1rem 0;
+	}
+	article :global(.code-copy-btn) {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 8px;
+		border: none;
+		border-radius: 4px;
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.6);
+		cursor: pointer;
+		font-size: 11px;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	article :global(.code-block-wrapper:hover .code-copy-btn) {
+		opacity: 1;
+	}
+	article :global(.code-copy-btn:hover) {
+		background: rgba(255, 255, 255, 0.2);
+		color: rgba(255, 255, 255, 0.9);
+	}
+	article :global(.code-copy-btn.copied) {
+		opacity: 1;
+		color: #4ade80;
+	}
+	article :global(.code-copy-btn.copied)::after {
+		content: '✓';
+		margin-left: 2px;
+	}
+	article :global(.code-lang) {
+		text-transform: uppercase;
+		font-weight: 500;
+		letter-spacing: 0.03em;
+	}
+	/* Dark mode: swap copy button colors for light code block bg */
+	:global(.dark) article :global(.code-copy-btn) {
+		background: rgba(0, 0, 0, 0.1);
+		color: rgba(0, 0, 0, 0.5);
+	}
+	:global(.dark) article :global(.code-copy-btn:hover) {
+		background: rgba(0, 0, 0, 0.2);
+		color: rgba(0, 0, 0, 0.8);
+	}
+	:global(.dark) article :global(.code-copy-btn.copied) {
+		color: #16a34a;
+	}
+
+	/* ========== CODE BLOCKS — always LTR, reversed theme ========== */
 	article :global(pre) {
 		direction: ltr;
 		text-align: left;
@@ -234,11 +337,11 @@ async function saveMarkdown(markdown: string) {
 		font-size: 0.9em;
 		line-height: 1.5;
 	}
-	/* Fallback for plain pre blocks not styled by Shiki */
+	/* Fallback for plain pre blocks not styled by Shiki (reversed: dark in light) */
 	article :global(pre:not([style])) {
-		background-color: #f6f8fa;
-		color: #24292e;
-		border: 1px solid #e1e4e8;
+		background-color: #24292e;
+		color: #e1e4e8;
+		border: 1px solid #444d56;
 	}
 	article :global(code) {
 		direction: ltr;
@@ -345,10 +448,11 @@ async function saveMarkdown(markdown: string) {
 	}
 
 	/* ========== DARK MODE OVERRIDES ========== */
+	/* Reversed fallback: light code blocks in dark mode */
 	:global(.dark) article :global(pre:not([style])) {
-		background-color: #1e1e2e;
-		color: #cdd6f4;
-		border-color: #313244;
+		background-color: #f6f8fa;
+		color: #24292e;
+		border-color: #e1e4e8;
 	}
 	:global(.dark) article :global(:not(pre) > code) {
 		background-color: rgba(110, 118, 129, 0.3);

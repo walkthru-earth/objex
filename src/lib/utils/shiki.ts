@@ -72,6 +72,11 @@ export function getTheme(): BundledTheme {
 	return isDarkMode() ? 'github-dark' : 'github-light';
 }
 
+/** Reversed theme for code blocks inside documents (dark on light, light on dark). */
+export function getReversedTheme(): BundledTheme {
+	return isDarkMode() ? 'github-light' : 'github-dark';
+}
+
 async function getHighlighter(): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> {
 	if (!highlighterPromise) {
 		highlighterPromise = import('shiki').then((mod) =>
@@ -87,6 +92,17 @@ async function getHighlighter(): Promise<HighlighterGeneric<BundledLanguage, Bun
 export async function highlightCode(code: string, lang?: BundledLanguage): Promise<string> {
 	const highlighter = await getHighlighter();
 	const theme = getTheme();
+
+	return highlighter.codeToHtml(code, {
+		lang: lang ?? 'text',
+		theme
+	});
+}
+
+/** Highlight with reversed theme (for code blocks inside documents). */
+export async function highlightCodeReversed(code: string, lang?: BundledLanguage): Promise<string> {
+	const highlighter = await getHighlighter();
+	const theme = getReversedTheme();
 
 	return highlighter.codeToHtml(code, {
 		lang: lang ?? 'text',

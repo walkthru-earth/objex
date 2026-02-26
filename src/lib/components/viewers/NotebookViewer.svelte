@@ -179,9 +179,9 @@ async function copyRaw() {
 		margin: 0 auto;
 	}
 
-	/* notebookjs cell styles */
+	/* notebookjs cell styles — inherit app font (Cairo for Arabic, system sans for others) */
 	.notebook-content :global(.nb-notebook) {
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family: inherit;
 	}
 
 	.notebook-content :global(.nb-cell) {
