@@ -9,6 +9,7 @@ import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
 import { cubicOut } from 'svelte/easing';
 import { fly } from 'svelte/transition';
+import { base } from '$app/paths';
 import FileTreeSidebar from '$lib/components/browser/FileTreeSidebar.svelte';
 import Sidebar from '$lib/components/layout/Sidebar.svelte';
 import StatusBar from '$lib/components/layout/StatusBar.svelte';
@@ -75,21 +76,26 @@ let mobileSheetOpen = $state(false);
 let desktopSidebarOpen = $state(false);
 
 // Extension cycling for the URL hint animation
+// Each entry shows the extension + its default #view hash
 const FORMAT_HINTS = [
-	{ ext: '.parquet', color: 'text-purple-400' },
-	{ ext: '.csv', color: 'text-green-400' },
-	{ ext: '.tif', color: 'text-amber-400' },
-	{ ext: '.fgb', color: 'text-cyan-400' },
-	{ ext: '.pmtiles', color: 'text-blue-400' },
-	{ ext: '.pdf', color: 'text-red-400' },
-	{ ext: '.laz', color: 'text-emerald-400' },
-	{ ext: '.json', color: 'text-yellow-400' },
-	{ ext: '.glb', color: 'text-orange-400' }
+	{ ext: '.parquet', hash: '#table', color: 'text-purple-400' },
+	{ ext: '.parquet', hash: '#map', color: 'text-purple-400' },
+	{ ext: '.csv', hash: '#table', color: 'text-green-400' },
+	{ ext: '.geojson', hash: '#map', color: 'text-emerald-400' },
+	{ ext: '.tif', hash: '', color: 'text-amber-400' },
+	{ ext: '.fgb', hash: '', color: 'text-cyan-400' },
+	{ ext: '.pmtiles', hash: '', color: 'text-blue-400' },
+	{ ext: '.pdf', hash: '', color: 'text-red-400' },
+	{ ext: '.laz', hash: '', color: 'text-emerald-400' },
+	{ ext: '.json', hash: '#code', color: 'text-yellow-400' },
+	{ ext: '.glb', hash: '', color: 'text-orange-400' }
 ] as const;
 let extIndex = $state(0);
 let copied = $state(false);
 const currentFormat = $derived(FORMAT_HINTS[extIndex]);
-const origin = typeof window !== 'undefined' ? window.location.origin : '';
+// Auto-detect host + base path (works on any host, including /objex/ subpath)
+const appBase = typeof window !== 'undefined' ? window.location.origin + base : '';
+const displayHost = typeof window !== 'undefined' ? window.location.host + base : '';
 
 $effect(() => {
 	if (hasActiveTab) return;
@@ -100,7 +106,8 @@ $effect(() => {
 });
 
 function copyUrlPattern() {
-	const text = `${origin}/?url=https://example.com/data${currentFormat.ext}`;
+	const f = currentFormat;
+	const text = `${appBase}/?url=https://example.com/data${f.ext}${f.hash}`;
 	navigator.clipboard.writeText(text);
 	copied = true;
 	setTimeout(() => (copied = false), 1500);
@@ -233,20 +240,12 @@ const pageDescription = $derived.by(() => {
 								onclick={copyUrlPattern}
 								class="group mt-4 flex w-full max-w-md items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-start transition-colors hover:border-border hover:bg-muted/70"
 							>
-								<code class="flex min-w-0 flex-1 flex-wrap items-center text-[11px] leading-relaxed sm:text-xs">
-									<span class="text-muted-foreground/60">{origin}/?url=</span>
-									<span class="text-muted-foreground">https://…/data</span>
-									<span class="relative inline-flex h-[1.4em] items-center overflow-hidden">
-										{#key extIndex}
-											<span
-												class="font-bold {currentFormat.color}"
-												in:fly={{ y: 14, duration: 350, easing: cubicOut }}
-												out:fly={{ y: -14, duration: 350, easing: cubicOut }}
-											>
-												{currentFormat.ext}
-											</span>
-										{/key}
-									</span>
+								<code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[11px] sm:text-xs">
+									<span class="text-muted-foreground/50">{displayHost}/</span><span class="text-muted-foreground">?url=…/data</span><span class="relative inline-block w-[var(--ext-w)] overflow-hidden align-bottom transition-[width] duration-300" style="height: 1lh; --ext-w: {(currentFormat.ext + currentFormat.hash).length * 0.62}em">{#key extIndex}<span
+												class="absolute inset-x-0 top-0 font-bold {currentFormat.color}"
+												in:fly={{ y: 18, duration: 300, easing: cubicOut }}
+												out:fly={{ y: -18, duration: 300, easing: cubicOut }}
+											>{currentFormat.ext}{#if currentFormat.hash}<span class="font-normal text-muted-foreground/70">{currentFormat.hash}</span>{/if}</span>{/key}</span>
 								</code>
 								<span class="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground">
 									{#if copied}

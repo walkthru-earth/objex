@@ -16,7 +16,7 @@ graph LR
 | Layer | Tech |
 |-------|------|
 | Framework | SvelteKit 2 + Svelte 5 (static adapter, CSR-only) |
-| Styling | TailwindCSS 4 + shadcn-svelte (bits-ui) |
+| Styling | Tailwind CSS 4 + bits-ui (headless Svelte primitives) |
 | Query engine | DuckDB-WASM (in-browser SQL) |
 | Maps | MapLibre GL 5 + deck.gl 9 |
 | Storage auth | aws4fetch (SigV4) / Azure SAS |
