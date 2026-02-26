@@ -33,15 +33,14 @@ let label = $derived(t(`theme.${settings.theme}`));
 </script>
 
 <Tooltip>
-	<TooltipTrigger>
+	<TooltipTrigger onclick={toggle}>
 		{#snippet child({ props })}
 			<Button
+				{...props}
 				variant="ghost"
 				size="icon-sm"
 				class="rounded-lg text-muted-foreground hover:text-foreground"
-				onclick={toggle}
 				aria-label={t('theme.tooltip', { mode: label })}
-				{...props}
 			>
 				<CurrentIcon class="size-4" />
 			</Button>

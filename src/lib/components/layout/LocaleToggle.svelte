@@ -1,4 +1,5 @@
 <script lang="ts">
+import LanguagesIcon from '@lucide/svelte/icons/languages';
 import { Button } from '$lib/components/ui/button/index.js';
 import { Tooltip, TooltipContent, TooltipTrigger } from '$lib/components/ui/tooltip/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -12,21 +13,20 @@ const label = $derived(settings.locale === 'en' ? 'EN' : 'AR');
 </script>
 
 <Tooltip>
-	<TooltipTrigger>
+	<TooltipTrigger onclick={toggle}>
 		{#snippet child({ props })}
 			<Button
+				{...props}
 				variant="ghost"
 				size="icon-sm"
-				class="rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground"
-				onclick={toggle}
+				class="rounded-lg text-muted-foreground hover:text-foreground"
 				aria-label={t('locale.toggle')}
-				{...props}
 			>
-				{label}
+				<LanguagesIcon class="size-4" />
 			</Button>
 		{/snippet}
 	</TooltipTrigger>
 	<TooltipContent side="right">
-		{t('locale.toggle')}
+		{label} — {t('locale.toggle')}
 	</TooltipContent>
 </Tooltip>

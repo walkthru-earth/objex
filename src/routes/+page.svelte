@@ -1,11 +1,14 @@
 <script lang="ts">
+import CheckIcon from '@lucide/svelte/icons/check';
 import CloudIcon from '@lucide/svelte/icons/cloud';
+import CopyIcon from '@lucide/svelte/icons/copy';
 import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
-import LayersIcon from '@lucide/svelte/icons/layers';
 import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
+import { cubicOut } from 'svelte/easing';
+import { fly } from 'svelte/transition';
 import FileTreeSidebar from '$lib/components/browser/FileTreeSidebar.svelte';
 import Sidebar from '$lib/components/layout/Sidebar.svelte';
 import StatusBar from '$lib/components/layout/StatusBar.svelte';
@@ -70,6 +73,38 @@ let hasActiveTab = $derived(tabs.active !== null && tabs.active !== undefined);
 let hasBrowserConnection = $derived(browser.activeConnection !== null);
 let mobileSheetOpen = $state(false);
 let desktopSidebarOpen = $state(false);
+
+// Extension cycling for the URL hint animation
+const FORMAT_HINTS = [
+	{ ext: '.parquet', color: 'text-purple-400' },
+	{ ext: '.csv', color: 'text-green-400' },
+	{ ext: '.tif', color: 'text-amber-400' },
+	{ ext: '.fgb', color: 'text-cyan-400' },
+	{ ext: '.pmtiles', color: 'text-blue-400' },
+	{ ext: '.pdf', color: 'text-red-400' },
+	{ ext: '.laz', color: 'text-emerald-400' },
+	{ ext: '.json', color: 'text-yellow-400' },
+	{ ext: '.glb', color: 'text-orange-400' }
+] as const;
+let extIndex = $state(0);
+let copied = $state(false);
+const currentFormat = $derived(FORMAT_HINTS[extIndex]);
+const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+$effect(() => {
+	if (hasActiveTab) return;
+	const id = setInterval(() => {
+		extIndex = (extIndex + 1) % FORMAT_HINTS.length;
+	}, 2000);
+	return () => clearInterval(id);
+});
+
+function copyUrlPattern() {
+	const text = `${origin}/?url=https://example.com/data${currentFormat.ext}`;
+	navigator.clipboard.writeText(text);
+	copied = true;
+	setTimeout(() => (copied = false), 1500);
+}
 
 // Responsive: use matchMedia instead of CSS dual-rendering
 // so viewers are mounted only once (not duplicated in hidden DOM).
@@ -172,7 +207,7 @@ const pageDescription = $derived.by(() => {
 			{/each}
 		{/if}
 		{#if !hasActiveTab}
-			<div class="flex h-full items-center justify-center">
+			<div class="flex h-full items-center justify-center px-6">
 				<div class="flex flex-col items-center gap-3 text-center">
 					<div class="flex size-14 items-center justify-center rounded-2xl bg-muted">
 						{#if hasBrowserConnection}
@@ -192,10 +227,36 @@ const pageDescription = $derived.by(() => {
 							<p class="max-w-sm text-sm text-muted-foreground">
 								{t('page.noFileDescription')}
 							</p>
-							<div class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-								<LayersIcon class="size-3.5" />
-								<span>{t('page.supportsFormats')}</span>
-							</div>
+
+							<!-- URL pattern hint with cycling extension -->
+							<button
+								onclick={copyUrlPattern}
+								class="group mt-4 flex w-full max-w-md items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-start transition-colors hover:border-border hover:bg-muted/70"
+							>
+								<code class="flex min-w-0 flex-1 flex-wrap items-center text-[11px] leading-relaxed sm:text-xs">
+									<span class="text-muted-foreground/60">{origin}/?url=</span>
+									<span class="text-muted-foreground">https://…/data</span>
+									<span class="relative inline-flex h-[1.4em] items-center overflow-hidden">
+										{#key extIndex}
+											<span
+												class="font-bold {currentFormat.color}"
+												in:fly={{ y: 14, duration: 350, easing: cubicOut }}
+												out:fly={{ y: -14, duration: 350, easing: cubicOut }}
+											>
+												{currentFormat.ext}
+											</span>
+										{/key}
+									</span>
+								</code>
+								<span class="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground">
+									{#if copied}
+										<CheckIcon class="size-3.5 text-green-500" />
+									{:else}
+										<CopyIcon class="size-3.5" />
+									{/if}
+								</span>
+							</button>
+
 							<div class="mt-4 flex items-center gap-2">
 								<button
 									onclick={() => {

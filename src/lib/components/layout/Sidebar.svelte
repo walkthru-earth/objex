@@ -192,6 +192,7 @@ async function ensureCredentials(connection: Connection): Promise<boolean> {
 	// No credentials — open the dialog so the user can re-enter them
 	editingConnection = connection;
 	dialogOpen = true;
+
 	return false;
 }
 
