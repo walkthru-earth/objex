@@ -215,17 +215,15 @@ Five-priority heuristic in `findGeoColumn()`:
 
 DuckDB's spatial extension auto-promotes GeoParquet BLOB columns to GEOMETRY type via the `"geo"` KV metadata. This fails on legacy files (missing `"version"` field) with: `"Geoparquet metadata does not have a version"`.
 
-**Fix**: `enable_geoparquet_conversion` is set to `false` globally at DB initialization. This only disables the "geo" KV metadata validation path — native Parquet GEOMETRY (Format 2.11+ logical type) is still handled by DuckDB core and read as `GEOMETRY`. The column type (`geoColType`) is determined from hyparquet's `mapParquetType()`: native GEOMETRY logical type → `GEOMETRY`, plain BYTE_ARRAY → `BLOB`.
+**Fix**: `enable_geoparquet_conversion` is set to `false` globally at DB initialization. DuckDB WASM v1.33 does not support native Parquet GEOMETRY (a v1.5 feature), so with conversion disabled ALL geometry columns are read as `BLOB`. The `geoColType` is always `'BLOB'` for GeoParquet files. hyparquet's `mapParquetType()` may report `'GEOMETRY'` (from the Parquet logical type), but this is only used for schema display — SQL generation always uses the actual DuckDB type.
 
-| File type | hyparquet type | DuckDB type | SQL path |
-|-----------|---------------|-------------|----------|
-| GeoParquet + native GEOMETRY (WGS84) | GEOMETRY | GEOMETRY | `ST_AsWKB("geometry") AS __wkb` |
-| GeoParquet + native GEOMETRY (non-WGS84) | GEOMETRY | GEOMETRY | `ST_AsWKB(ST_Transform("geometry", ...))` |
-| Legacy GeoParquet v0.x + native GEOMETRY | GEOMETRY | GEOMETRY | Same (no version validation error) |
-| GeoParquet, plain WKB (WGS84) | BLOB | BLOB | `"geometry" AS __wkb` (zero-copy pass-through) |
-| GeoParquet, plain WKB (non-WGS84) | BLOB | BLOB | `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` |
-| GeoJSON column | VARCHAR | VARCHAR | `ST_AsWKB(ST_GeomFromGeoJSON("geometry"))` |
-| Non-geo Parquet / CSV | — | — | `SELECT * FROM source` (no geometry handling) |
+| File type | DuckDB type | SQL path |
+|-----------|-------------|----------|
+| GeoParquet (WGS84) | BLOB | `"geometry" AS __wkb` (zero-copy pass-through) |
+| GeoParquet (non-WGS84) | BLOB | `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` |
+| Legacy GeoParquet v0.x | BLOB | Same as above (no version validation error) |
+| GeoJSON column | VARCHAR | `ST_AsWKB(ST_GeomFromGeoJSON("geometry"))` |
+| Non-geo Parquet / CSV | — | `SELECT * FROM source` (no geometry handling) |
 
 ### Stage 4: CRS Detection & Reprojection
 
@@ -240,12 +238,30 @@ Non-WGS84 sources are reprojected with `ST_Transform(..., always_xy := true)` to
 ### Stage 5: WKB Extraction & Map Rendering
 
 1. **Table query** — `SELECT * EXCLUDE("geometry"), wkb_expr AS __wkb FROM source LIMIT N OFFSET M`
-   - GEOMETRY type: `ST_AsWKB("geometry")` — converts native type to WKB
-   - BLOB type (WGS84): `"geometry"` — zero-copy pass-through (already WKB)
-   - BLOB type (non-WGS84): `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` — parse, reproject, serialize
+   - BLOB (WGS84): `"geometry" AS __wkb` — zero-copy pass-through (already WKB)
+   - BLOB (non-WGS84): `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...)) AS __wkb` — parse, reproject, serialize
+   - GEOMETRY type (ST_Read, future DuckDB): `ST_AsWKB("geometry") AS __wkb` — converts native type to WKB
 2. **Map query** — wraps user SQL: `SELECT *, wkb_expr AS __wkb, ST_GeometryType(geom_expr) AS __geom_type FROM (user_sql) __src`
 3. **GeoArrow conversion** — `buildGeoArrowTables()` parses WKB arrays, splits by geometry type (Point, LineString, Polygon, Multi*)
 4. **deck.gl rendering** — one `GeoArrowScatterplotLayer` / `GeoArrowPathLayer` / `GeoArrowSolidPolygonLayer` per geometry type
+
+### Supported File Combinations
+
+Every combination of Parquet metadata, geometry encoding, and CRS is handled:
+
+| Scenario | "geo" KV | Parquet logical type | DuckDB type | CRS source | Example |
+|----------|----------|---------------------|-------------|------------|---------|
+| Modern GeoParquet + native geo | v1.x | GEOMETRY | BLOB | "geo" PROJJSON | Overture Maps |
+| Modern GeoParquet, plain WKB | v1.x | BYTE_ARRAY | BLOB | "geo" PROJJSON | geopandas ≥0.12 |
+| Legacy GeoParquet (no version) | v0.x (`schema_version`) | GEOMETRY | BLOB | "geo" PROJJSON | geopandas <0.12 / pyarrow ≤9 |
+| Native Parquet GEOMETRY only | — | GEOMETRY | BLOB | `parquet_schema()` logical_type | Future writers |
+| Plain Parquet with geo column | — | BYTE_ARRAY | BLOB | DuckDB `detectCrs` | Older tools |
+| Non-geo Parquet | — | — | — | — | Any tabular data |
+| CSV / GeoJSON / other | — | — | varies | — | Non-Parquet formats |
+
+**Why all GeoParquet geometry columns are BLOB**: `enable_geoparquet_conversion = false` disables DuckDB's "geo" KV metadata validation (which rejects legacy files). DuckDB WASM v1.33 does not yet support native Parquet GEOMETRY (a DuckDB v1.5 feature), so all geometry columns remain as BLOB. When DuckDB WASM upgrades to v1.5+, the `isSpatialType` path in `buildDefaultSql()` and `queryForMap()` will automatically handle GEOMETRY columns — no code changes needed.
+
+**hyparquet vs DuckDB type mismatch**: hyparquet's `mapParquetType()` reads the Parquet logical type and may report `GEOMETRY` for columns with the native GEOMETRY annotation. This is used for schema display (more informative than showing "BLOB"), but `geoColType` is always set to `'BLOB'` for SQL generation since that's what DuckDB actually reports.
 
 ### Query Cancellation
 

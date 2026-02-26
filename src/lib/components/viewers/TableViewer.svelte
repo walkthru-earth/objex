@@ -348,12 +348,11 @@ async function loadTable() {
 
 				if (meta.geo) {
 					geoCol = meta.geo.primaryColumn;
-					// Use hyparquet-detected type — matches what DuckDB reports:
-					// - Native Parquet GEOMETRY logical type → 'GEOMETRY'
-					// - Plain BYTE_ARRAY (WKB) → 'BLOB'
-					// enable_geoparquet_conversion=false only disables "geo" KV metadata
-					// validation; native Parquet GEOMETRY is handled by DuckDB core.
-					geoColType = meta.schema.find((s) => s.name === geoCol)?.type ?? 'BLOB';
+					// With enable_geoparquet_conversion=false, DuckDB reads ALL
+					// GeoParquet geometry columns as BLOB regardless of Parquet
+					// logical type. Native Parquet GEOMETRY (Format 2.11+) is a
+					// DuckDB v1.5 feature not yet in WASM (v1.33).
+					geoColType = 'BLOB';
 					sourceCrs = extractEpsgFromGeoMeta(meta.geo);
 					const geomTypes = extractGeometryTypes(meta.geo);
 					if (geomTypes.length === 1) knownGeomType = geomTypes[0];
@@ -393,9 +392,9 @@ async function loadTable() {
 					const detectedGeoCol = findGeoColumn(schema);
 					if (detectedGeoCol) {
 						geoCol = detectedGeoCol;
-						// Use hyparquet-detected type: GEOMETRY for native logical type, BLOB for BYTE_ARRAY.
-						const schemaType = schema.find((s) => s.name === detectedGeoCol)?.type ?? 'BLOB';
-						geoColType = schemaType;
+						// DuckDB WASM v1.33 doesn't support native Parquet GEOMETRY —
+						// columns are always BLOB with enable_geoparquet_conversion=false.
+						geoColType = 'BLOB';
 						needsDuckDbCrs = true;
 						loadProgress = [
 							...loadProgress,
