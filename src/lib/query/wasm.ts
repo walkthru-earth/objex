@@ -1,11 +1,19 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
-import { tableToIPC } from 'apache-arrow';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
-import type { MapQueryResult, QueryEngine, QueryResult, SchemaField } from './engine';
+import {
+	type MapQueryHandle,
+	type MapQueryResult,
+	QueryCancelledError,
+	type QueryEngine,
+	type QueryHandle,
+	type QueryResult,
+	type SchemaField
+} from './engine';
 
-// CDN URLs for DuckDB WASM bundles
-const DUCKDB_VERSION = '1.33.1-dev19.0';
+// CDN URLs for DuckDB WASM bundles — version injected at build time from package.json
+declare const __DUCKDB_WASM_VERSION__: string;
+const DUCKDB_VERSION = __DUCKDB_WASM_VERSION__;
 const CDN_BASE = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
 
 const duckdb_wasm = `${CDN_BASE}/duckdb-mvp.wasm`;
@@ -211,10 +219,75 @@ async function extractCrsFromLogicalType(
 	return null;
 }
 
+// ─── Type-aware column extraction ────────────────────────────────────
+// DuckDB Arrow type strings that represent binary/blob data — not useful
+// for map tooltips and expensive to extract row-by-row.
+const BINARY_TYPES = new Set(['BLOB', 'BYTEA', 'BINARY', 'LARGEBINARY', 'WKB_BLOB']);
+
+/** True if the Arrow type string represents a numeric primitive (zero-copy .toArray()). */
+function isNumericArrowType(typeStr: string): boolean {
+	const t = typeStr.toUpperCase();
+	return (
+		t.includes('INT') ||
+		t.includes('FLOAT') ||
+		t.includes('DOUBLE') ||
+		t.includes('DECIMAL') ||
+		t === 'TINYINT' ||
+		t === 'SMALLINT' ||
+		t === 'BIGINT' ||
+		t === 'HUGEINT' ||
+		t === 'UBIGINT' ||
+		t === 'UINTEGER' ||
+		t === 'USMALLINT' ||
+		t === 'UTINYINT'
+	);
+}
+
+/**
+ * Extract column values using the fastest available method:
+ * - Numeric primitives → .toArray() returns a typed array view (zero-copy),
+ *   then Array.from() to convert to a plain JS array for downstream compat.
+ * - Other types → per-element .get(i) for correctness (strings, structs, etc.)
+ */
+function extractColumnBulk(col: any, numRows: number, typeStr: string): any[] {
+	if (isNumericArrowType(typeStr)) {
+		// .toArray() returns a TypedArray (Float64Array, Int32Array, etc.)
+		// which is a zero-copy view over the Arrow buffer.
+		return Array.from(col.toArray());
+	}
+	const values: any[] = new Array(numRows);
+	for (let i = 0; i < numRows; i++) {
+		values[i] = col.get(i);
+	}
+	return values;
+}
+
+/**
+ * Append column values from a streaming batch to an existing values array.
+ * Same optimisation as extractColumnBulk but appends instead of creating new.
+ */
+function appendColumnBulk(target: any[], col: any, numRows: number, typeStr: string): void {
+	if (isNumericArrowType(typeStr)) {
+		const arr = col.toArray();
+		for (let i = 0; i < arr.length; i++) {
+			target.push(arr[i]);
+		}
+		return;
+	}
+	for (let i = 0; i < numRows; i++) {
+		target.push(col.get(i));
+	}
+}
+
+/** Should this column type be skipped for map attribute extraction? */
+function isBinaryType(typeStr: string): boolean {
+	return BINARY_TYPES.has(typeStr.toUpperCase());
+}
+
 export class WasmQueryEngine implements QueryEngine {
 	async query(connId: string, sql: string): Promise<QueryResult> {
 		const t0 = performance.now();
-		const sqlPreview = sql.length > 120 ? sql.slice(0, 120) + '…' : sql;
+		const sqlPreview = sql.length > 120 ? `${sql.slice(0, 120)}…` : sql;
 		log(`query → ${sqlPreview}`);
 
 		const db = await getDB();
@@ -245,7 +318,6 @@ export class WasmQueryEngine implements QueryEngine {
 					columns: cols,
 					types,
 					rowCount: 0,
-					arrowBytes: new Uint8Array(0),
 					rows: []
 				};
 			}
@@ -259,16 +331,8 @@ export class WasmQueryEngine implements QueryEngine {
 				return obj;
 			});
 
-			// Best-effort IPC serialization for consumers that need raw Arrow bytes
-			let arrowBytes: Uint8Array;
-			try {
-				arrowBytes = new Uint8Array(tableToIPC(result));
-			} catch {
-				arrowBytes = new Uint8Array(0);
-			}
-
 			log(`query → done in ${elapsed(t0)}, ${numRows} rows, ${cols.length} cols`);
-			return { columns: cols, types, rowCount: numRows, arrowBytes, rows };
+			return { columns: cols, types, rowCount: numRows, rows };
 		} catch (err) {
 			logWarn(`query → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
 			throw err;
@@ -366,20 +430,17 @@ export class WasmQueryEngine implements QueryEngine {
 				}
 			}
 
-			// Extract attribute columns (skip geometry + helper columns)
+			// Extract attribute columns (skip geometry, helper, and binary columns)
 			const skipCols = new Set([geomCol, '__wkb', '__geom_type']);
 			const attributes = new Map<string, { values: any[]; type: string }>();
 			for (const field of result.schema.fields) {
 				if (skipCols.has(field.name)) continue;
+				const typeStr = String(field.type);
+				// Skip binary/blob columns — not useful for map tooltips, expensive to extract
+				if (isBinaryType(typeStr)) continue;
 				const col = result.getChild(field.name);
-				const values: any[] = [];
-				for (let i = 0; i < col.length; i++) {
-					values.push(col.get(i));
-				}
-				attributes.set(field.name, {
-					values,
-					type: String(field.type)
-				});
+				const values = extractColumnBulk(col, col.length, typeStr);
+				attributes.set(field.name, { values, type: typeStr });
 			}
 
 			log(
@@ -566,7 +627,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			if (sets.length > 0) {
 				const t0 = performance.now();
-				await conn.query(sets.join('; ') + ';');
+				await conn.query(`${sets.join('; ')};`);
 				log(
 					`configureStorage → ${sets.length} SETs batched in ${elapsed(t0)} (provider: ${connection.provider ?? 's3'})`
 				);
@@ -658,6 +719,240 @@ export class WasmQueryEngine implements QueryEngine {
 
 		log('detectCrs → no CRS found, assuming WGS84');
 		return null;
+	}
+
+	queryCancellable(connId: string, sql: string): QueryHandle {
+		let cancelled = false;
+		let conn: any = null;
+
+		const result = (async (): Promise<QueryResult> => {
+			const t0 = performance.now();
+			const sqlPreview = sql.length > 120 ? `${sql.slice(0, 120)}…` : sql;
+			log(`queryCancellable → ${sqlPreview}`);
+
+			const db = await getDB();
+			conn = await db.connect();
+			log(`queryCancellable → connected in ${elapsed(t0)}`);
+
+			try {
+				if (connId) {
+					await this.configureStorage(conn, connId);
+				}
+
+				const tQuery = performance.now();
+				const reader = await conn.send(sql);
+				log(`queryCancellable → send() in ${elapsed(tQuery)}`);
+
+				const rows: Record<string, any>[] = [];
+				let cols: string[] = [];
+				let types: string[] = [];
+
+				const batches = reader[Symbol.asyncIterator]();
+				let first = true;
+				while (true) {
+					if (cancelled) throw new QueryCancelledError();
+					const { value: batch, done } = await batches.next();
+					if (done) break;
+
+					if (first && batch.schema) {
+						cols = batch.schema.fields.map((f: any) => f.name);
+						types = batch.schema.fields.map((f: any) => String(f.type));
+						first = false;
+					}
+
+					for (const row of batch.toArray()) {
+						rows.push(typeof row.toJSON === 'function' ? row.toJSON() : row);
+					}
+				}
+
+				log(`queryCancellable → done in ${elapsed(t0)}, ${rows.length} rows`);
+				return { columns: cols, types, rowCount: rows.length, rows };
+			} catch (err) {
+				if (cancelled || err instanceof QueryCancelledError) {
+					log(`queryCancellable → cancelled after ${elapsed(t0)}`);
+					throw new QueryCancelledError();
+				}
+				logWarn(`queryCancellable → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
+				throw err;
+			} finally {
+				await conn?.close();
+				conn = null;
+			}
+		})();
+
+		const cancel = async (): Promise<boolean> => {
+			cancelled = true;
+			try {
+				if (conn) await conn.cancelSent();
+				return true;
+			} catch {
+				return false;
+			}
+		};
+
+		return { result, cancel };
+	}
+
+	queryForMapCancellable(
+		connId: string,
+		sql: string,
+		geomCol: string,
+		geomColType: string,
+		sourceCrs?: string | null
+	): MapQueryHandle {
+		let cancelled = false;
+		let conn: any = null;
+
+		const result = (async (): Promise<MapQueryResult> => {
+			const t0 = performance.now();
+			log(
+				`queryForMapCancellable → geomCol: ${geomCol}, type: ${geomColType}, crs: ${sourceCrs ?? 'WGS84'}`
+			);
+
+			const db = await getDB();
+			conn = await db.connect();
+
+			try {
+				if (connId) {
+					await this.configureStorage(conn, connId);
+				}
+
+				// Build geometry expression (same logic as queryForMap)
+				const quoted = `"${geomCol}"`;
+				const upper = geomColType.toUpperCase();
+				const isSpatialType =
+					upper === 'GEOMETRY' ||
+					upper === 'GEOGRAPHY' ||
+					upper === 'WKB_BLOB' ||
+					upper.includes('POINT') ||
+					upper.includes('LINESTRING') ||
+					upper.includes('POLYGON') ||
+					upper.includes('BINARY');
+				const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
+
+				let wkbExpr: string;
+				let geomExpr: string;
+
+				if (isWkbBlob && !sourceCrs) {
+					wkbExpr = quoted;
+					geomExpr = `ST_GeomFromWKB(${quoted})`;
+				} else {
+					geomExpr = isSpatialType
+						? quoted
+						: isWkbBlob
+							? `ST_GeomFromWKB(${quoted})`
+							: `ST_GeomFromGeoJSON(${quoted})`;
+					if (sourceCrs) {
+						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+					}
+					wkbExpr = `ST_AsWKB(${geomExpr})`;
+				}
+
+				const mapSql = `SELECT *, ${wkbExpr} AS __wkb,
+					ST_GeometryType(${geomExpr}) AS __geom_type
+					FROM (${sql}) __src`;
+
+				const reader = await conn.send(mapSql);
+
+				const wkbArrays: Uint8Array[] = [];
+				let geometryType = 'POINT';
+				let geometryTypeDetected = false;
+				const skipCols = new Set([geomCol, '__wkb', '__geom_type']);
+				const attributes = new Map<string, { values: any[]; type: string }>();
+				let fieldsInitialized = false;
+				const fieldNames: string[] = [];
+				const fieldTypes: Map<string, string> = new Map();
+
+				const batches = reader[Symbol.asyncIterator]();
+				while (true) {
+					if (cancelled) throw new QueryCancelledError();
+					const { value: batch, done } = await batches.next();
+					if (done) break;
+
+					if (!fieldsInitialized && batch.schema) {
+						for (const field of batch.schema.fields) {
+							const typeStr = String(field.type);
+							if (skipCols.has(field.name)) continue;
+							// Skip binary/blob columns — not useful for map tooltips
+							if (isBinaryType(typeStr)) continue;
+							fieldNames.push(field.name);
+							fieldTypes.set(field.name, typeStr);
+							attributes.set(field.name, { values: [], type: typeStr });
+						}
+						fieldsInitialized = true;
+					}
+
+					// Extract WKB and geometry type from batch
+					const wkbCol = batch.getChild('__wkb');
+					const typeCol = batch.getChild('__geom_type');
+					for (let i = 0; i < batch.numRows; i++) {
+						const v = wkbCol?.get(i);
+						if (v) wkbArrays.push(v instanceof Uint8Array ? v : new Uint8Array(v));
+
+						if (!geometryTypeDetected && typeCol) {
+							const t = typeCol.get(i);
+							if (t) {
+								geometryType = String(t);
+								geometryTypeDetected = true;
+							}
+						}
+					}
+
+					// Extract attribute columns — type-aware bulk extraction
+					for (const name of fieldNames) {
+						const col = batch.getChild(name);
+						if (!col) continue;
+						const attr = attributes.get(name)!;
+						appendColumnBulk(attr.values, col, batch.numRows, fieldTypes.get(name)!);
+					}
+				}
+
+				log(
+					`queryForMapCancellable → done in ${elapsed(t0)}, ${wkbArrays.length} geometries (${geometryType})`
+				);
+				return { wkbArrays, geometryType, attributes, rowCount: wkbArrays.length };
+			} catch (err) {
+				if (cancelled || err instanceof QueryCancelledError) {
+					log(`queryForMapCancellable → cancelled after ${elapsed(t0)}`);
+					throw new QueryCancelledError();
+				}
+				logWarn(
+					`queryForMapCancellable → failed after ${elapsed(t0)}:`,
+					(err as Error)?.message ?? err
+				);
+				throw err;
+			} finally {
+				await conn?.close();
+				conn = null;
+			}
+		})();
+
+		const cancel = async (): Promise<boolean> => {
+			cancelled = true;
+			try {
+				if (conn) await conn.cancelSent();
+				return true;
+			} catch {
+				return false;
+			}
+		};
+
+		return { result, cancel };
+	}
+
+	async forceCancel(): Promise<void> {
+		log('forceCancel → terminating worker');
+		try {
+			if (dbPromise) {
+				const db = await dbPromise;
+				await db.terminate();
+			}
+		} catch (err) {
+			logWarn('forceCancel → terminate error:', err);
+		} finally {
+			dbPromise = null;
+			log('forceCancel → done, next getDB() will reinitialize');
+		}
 	}
 
 	async releaseMemory(): Promise<void> {

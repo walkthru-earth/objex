@@ -1,10 +1,28 @@
+export class QueryCancelledError extends Error {
+	constructor() {
+		super('Query cancelled');
+		this.name = 'QueryCancelledError';
+	}
+}
+
+export interface QueryHandle {
+	result: Promise<QueryResult>;
+	cancel: () => Promise<boolean>;
+}
+
+export interface MapQueryHandle {
+	result: Promise<MapQueryResult>;
+	cancel: () => Promise<boolean>;
+}
+
 export interface QueryResult {
 	columns: string[];
 	types: string[];
 	rowCount: number;
-	arrowBytes: Uint8Array;
+	/** @deprecated Arrow IPC bytes — only populated when queryArrow() is used */
+	arrowBytes?: Uint8Array;
 	/** Pre-parsed rows — avoids Arrow version mismatch in WASM engine */
-	rows?: Record<string, any>[];
+	rows: Record<string, any>[];
 }
 
 /** Raw column data for map rendering (bypasses toJSON serialization). */
@@ -44,6 +62,15 @@ export interface QueryEngine {
 		path: string,
 		findGeoCol: (schema: SchemaField[]) => string | null
 	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }>;
+	queryCancellable?(connId: string, sql: string): QueryHandle;
+	queryForMapCancellable?(
+		connId: string,
+		sql: string,
+		geomCol: string,
+		geomColType: string,
+		sourceCrs?: string | null
+	): MapQueryHandle;
+	forceCancel?(): Promise<void>;
 	releaseMemory(): Promise<void>;
 	dispose(): Promise<void>;
 }

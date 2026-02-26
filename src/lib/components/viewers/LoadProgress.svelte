@@ -13,11 +13,15 @@ export type ProgressEntry = {
 let {
 	stage = '',
 	entries = [],
-	onCancel
+	onCancel,
+	onForceCancel,
+	forceCancelVisible = false
 }: {
 	stage?: string;
 	entries?: ProgressEntry[];
 	onCancel?: () => void;
+	onForceCancel?: () => void;
+	forceCancelVisible?: boolean;
 } = $props();
 </script>
 
@@ -62,12 +66,28 @@ let {
 
 	<!-- Cancel -->
 	{#if onCancel}
-		<button
-			class="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-			onclick={onCancel}
-		>
-			<XCircleIcon class="size-3" />
-			{t('table.cancel')}
-		</button>
+		<div class="flex flex-col items-center gap-2">
+			<button
+				class="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+				onclick={onCancel}
+			>
+				<XCircleIcon class="size-3" />
+				{t('table.cancel')}
+			</button>
+			{#if forceCancelVisible && onForceCancel}
+				<div class="flex flex-col items-center gap-1">
+					<button
+						class="flex items-center gap-1 rounded border border-red-400 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-700 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+						onclick={onForceCancel}
+					>
+						<XCircleIcon class="size-3" />
+						{t('table.forceStop')}
+					</button>
+					<p class="max-w-xs text-center text-[10px] text-zinc-400 dark:text-zinc-500">
+						{t('table.forceStopWarning')}
+					</p>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>

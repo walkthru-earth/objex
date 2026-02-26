@@ -152,6 +152,10 @@ export const ar: Record<string, string> = {
 	'table.copyCell': 'نسخ الخلية',
 	'table.copyRow': 'نسخ الصف (JSON)',
 	'table.copyColumn': 'نسخ العمود',
+	'table.forceStop': 'إيقاف إجباري',
+	'table.forceStopWarning': 'ينهي عامل قاعدة البيانات. استخدمه كملاذ أخير.',
+	'table.cancellingQuery': 'جارٍ إلغاء الاستعلام...',
+	'sql.cancel': 'إلغاء',
 
 	// Load Progress labels
 	'progress.format': 'الصيغة',

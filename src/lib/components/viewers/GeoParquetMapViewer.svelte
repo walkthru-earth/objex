@@ -5,7 +5,7 @@ import { onDestroy } from 'svelte';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
-import { getQueryEngine } from '$lib/query/index.js';
+import { getQueryEngine, type MapQueryHandle, QueryCancelledError } from '$lib/query/index.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
@@ -55,6 +55,8 @@ let bounds = $state<[number, number, number, number] | undefined>();
 
 let firstFeatureCoord = $state<[number, number] | null>(null);
 
+let mapQueryHandle: MapQueryHandle | null = null;
+
 let geoArrowState: {
 	modules: Record<string, any>;
 	geoArrowResults: GeoArrowResult[];
@@ -82,6 +84,10 @@ $effect(() => {
 });
 
 function cleanup() {
+	if (mapQueryHandle) {
+		mapQueryHandle.cancel();
+		mapQueryHandle = null;
+	}
 	if (overlayRef && mapRef) {
 		try {
 			mapRef.removeControl(overlayRef);
@@ -144,6 +150,11 @@ async function loadGeoData() {
 
 		loading = false;
 	} catch (err) {
+		if (err instanceof QueryCancelledError) {
+			// Silent cancellation — user switched tabs or cancelled
+			loading = false;
+			return;
+		}
 		error = err instanceof Error ? err.message : String(err);
 		loading = false;
 	}
@@ -167,6 +178,16 @@ async function fetchMapData(): Promise<MapQueryResult> {
 	let crs = sourceCrs;
 	if (crs === null) {
 		crs = await engine.detectCrs(connId, fileUrl, geoCol);
+	}
+
+	if (engine.queryForMapCancellable) {
+		const handle = engine.queryForMapCancellable(connId, baseSql, geoCol, geomColType, crs);
+		mapQueryHandle = handle;
+		try {
+			return await handle.result;
+		} finally {
+			mapQueryHandle = null;
+		}
 	}
 
 	return engine.queryForMap(connId, baseSql, geoCol, geomColType, crs);

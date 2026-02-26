@@ -152,6 +152,10 @@ export const en: Record<string, string> = {
 	'table.copyCell': 'Copy Cell',
 	'table.copyRow': 'Copy Row (JSON)',
 	'table.copyColumn': 'Copy Column',
+	'table.forceStop': 'Force Stop',
+	'table.forceStopWarning': 'Terminates the database worker. Use as a last resort.',
+	'table.cancellingQuery': 'Cancelling query...',
+	'sql.cancel': 'Cancel',
 
 	// Load Progress labels
 	'progress.format': 'Format',

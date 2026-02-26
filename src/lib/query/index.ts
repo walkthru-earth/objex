@@ -12,4 +12,12 @@ export async function getQueryEngine(): Promise<QueryEngine> {
 	return engine;
 }
 
-export type { MapQueryResult, QueryEngine, QueryResult, SchemaField } from './engine';
+export type {
+	MapQueryHandle,
+	MapQueryResult,
+	QueryEngine,
+	QueryHandle,
+	QueryResult,
+	SchemaField
+} from './engine';
+export { QueryCancelledError } from './engine';

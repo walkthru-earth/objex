@@ -1,10 +1,10 @@
 <script lang="ts">
-import { tableFromIPC } from 'apache-arrow';
 import { format as formatSql } from 'sql-formatter';
+import { onDestroy } from 'svelte';
 import { Button } from '$lib/components/ui/button/index.js';
 import TableGrid from '$lib/components/viewers/TableGrid.svelte';
 import TableStatusBar from '$lib/components/viewers/TableStatusBar.svelte';
-import { getQueryEngine } from '$lib/query/index.js';
+import { getQueryEngine, QueryCancelledError, type QueryHandle } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import CodeMirrorEditor from './CodeMirrorEditor.svelte';
 
@@ -24,6 +24,18 @@ let error = $state<string | null>(null);
 let running = $state(false);
 let rowCount = $state(0);
 let executionTime = $state(0);
+let activeHandle: QueryHandle | null = null;
+
+onDestroy(() => {
+	activeHandle?.cancel();
+	activeHandle = null;
+});
+
+async function cancelQuery() {
+	if (activeHandle) {
+		await activeHandle.cancel();
+	}
+}
 
 async function runQuery() {
 	error = null;
@@ -35,27 +47,26 @@ async function runQuery() {
 
 	try {
 		const engine = await getQueryEngine();
-		const result = await engine.query(connId, queryText);
-		executionTime = Math.round(performance.now() - start);
 
-		if (result.arrowBytes.length === 0) {
-			rowCount = 0;
-
-			queryHistory.add({
-				sql: queryText,
-				timestamp: Date.now(),
-				durationMs: executionTime,
-				rowCount: 0,
-				connectionId: connId || undefined
-			});
-			return;
+		if (engine.queryCancellable) {
+			const handle = engine.queryCancellable(connId, queryText);
+			activeHandle = handle;
+			try {
+				const result = await handle.result;
+				executionTime = Math.round(performance.now() - start);
+				columns = result.columns;
+				rowCount = result.rowCount;
+				rows = result.rows ?? [];
+			} finally {
+				activeHandle = null;
+			}
+		} else {
+			const result = await engine.query(connId, queryText);
+			executionTime = Math.round(performance.now() - start);
+			columns = result.columns;
+			rowCount = result.rowCount;
+			rows = result.rows ?? [];
 		}
-
-		// Single Arrow deserialization — use toArray() for efficient row access
-		const table = tableFromIPC(result.arrowBytes);
-		columns = table.schema.fields.map((f) => f.name);
-		rowCount = table.numRows;
-		rows = table.toArray().map((row: any) => row.toJSON());
 
 		queryHistory.add({
 			sql: queryText,
@@ -65,18 +76,23 @@ async function runQuery() {
 			connectionId: connId || undefined
 		});
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
 		executionTime = Math.round(performance.now() - start);
 
-		queryHistory.add({
-			sql: queryText,
-			timestamp: Date.now(),
-			durationMs: executionTime,
-			rowCount: 0,
-			error: error ?? undefined,
-			connectionId: connId || undefined
-		});
+		if (err instanceof QueryCancelledError) {
+			error = null;
+		} else {
+			error = err instanceof Error ? err.message : String(err);
+			queryHistory.add({
+				sql: queryText,
+				timestamp: Date.now(),
+				durationMs: executionTime,
+				rowCount: 0,
+				error: error ?? undefined,
+				connectionId: connId || undefined
+			});
+		}
 	} finally {
+		activeHandle = null;
 		running = false;
 	}
 }
@@ -106,9 +122,15 @@ function handleFormatSql() {
 			<Button size="sm" variant="outline" onclick={handleFormatSql} disabled={running}>
 				Format
 			</Button>
-			<Button size="sm" onclick={runQuery} disabled={running}>
-				{running ? 'Running...' : 'Run'}
-			</Button>
+			{#if running}
+				<Button size="sm" variant="destructive" onclick={cancelQuery}>
+					Cancel
+				</Button>
+			{:else}
+				<Button size="sm" onclick={runQuery}>
+					Run
+				</Button>
+			{/if}
 		</div>
 	</div>
 

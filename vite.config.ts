@@ -1,9 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const duckdbPkg = JSON.parse(
+	readFileSync(join(__dirname, 'node_modules/@duckdb/duckdb-wasm/package.json'), 'utf-8')
+);
+
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	define: {
+		__DUCKDB_WASM_VERSION__: JSON.stringify(duckdbPkg.version)
+	},
 	clearScreen: false,
 	esbuild: {
 		drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : []

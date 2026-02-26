@@ -1,12 +1,11 @@
 <script lang="ts">
-import { tableFromIPC } from 'apache-arrow';
 import { format as formatSql } from 'sql-formatter';
 import { untrack } from 'svelte';
 import CodeMirrorEditor from '$lib/components/editor/CodeMirrorEditor.svelte';
 import { buildDuckDbSource, isCloudNativeFormat } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
-import { getQueryEngine } from '$lib/query/index.js';
+import { getQueryEngine, QueryCancelledError, type QueryHandle } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
@@ -63,6 +62,9 @@ let loadProgress = $state<ProgressEntry[]>([]);
 
 // Load cancellation: incrementing ID so stale loads are ignored
 let loadGeneration = 0;
+let activeHandle: QueryHandle | null = null;
+let forceCancelVisible = $state(false);
+let forceCancelTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Sort state
 let sortColumn = $state<string | null>(null);
@@ -176,6 +178,16 @@ $effect(() => {
 	const id = tab.id;
 	const unregister = tabResources.register(id, () => {
 		loadGeneration++;
+		// Cancel in-flight query if any
+		if (activeHandle) {
+			activeHandle.cancel();
+			activeHandle = null;
+		}
+		if (forceCancelTimer) {
+			clearTimeout(forceCancelTimer);
+			forceCancelTimer = null;
+		}
+		forceCancelVisible = false;
 		rows = [];
 		schema = [];
 		columns = [];
@@ -207,9 +219,39 @@ $effect(() => {
 
 function cancelLoad() {
 	loadGeneration++;
+	loadStage = t('table.cancellingQuery');
+
+	// Attempt graceful cancel via conn.cancelSent()
+	if (activeHandle) {
+		activeHandle.cancel();
+		// If the query hasn't settled after 5s, show force-cancel button
+		forceCancelTimer = setTimeout(() => {
+			forceCancelVisible = true;
+		}, 5000);
+	} else {
+		loading = false;
+		queryRunning = false;
+		loadStage = '';
+		error = t('table.queryCancelled');
+	}
+}
+
+async function forceCancel() {
+	if (forceCancelTimer) {
+		clearTimeout(forceCancelTimer);
+		forceCancelTimer = null;
+	}
+	forceCancelVisible = false;
+	loadStage = '';
+
+	const engine = await getQueryEngine();
+	if (engine.forceCancel) {
+		await engine.forceCancel();
+	}
+
+	activeHandle = null;
 	loading = false;
 	queryRunning = false;
-	loadStage = '';
 	error = t('table.queryCancelled');
 }
 
@@ -568,27 +610,37 @@ async function loadTable() {
 async function executeQuery(sql: string) {
 	try {
 		const engine = await getQueryEngine();
+
+		if (engine.queryCancellable) {
+			const handle = engine.queryCancellable(connId, sql);
+			activeHandle = handle;
+			try {
+				const result = await handle.result;
+				columns = result.columns;
+				rows = result.rows;
+				return result;
+			} finally {
+				activeHandle = null;
+				if (forceCancelTimer) {
+					clearTimeout(forceCancelTimer);
+					forceCancelTimer = null;
+				}
+				forceCancelVisible = false;
+			}
+		}
+
 		const result = await engine.query(connId, sql);
-
-		// Prefer pre-parsed rows (WASM engine) — avoids Arrow version mismatch
-		if (result.rows) {
-			columns = result.columns ?? [];
-			rows = result.rows;
-			return result;
-		}
-
-		if (result.arrowBytes.length === 0) {
-			rows = [];
-			columns = result.columns ?? [];
-			return result;
-		}
-
-		// Fallback: deserialize from Arrow IPC (native engine path)
-		const table = tableFromIPC(result.arrowBytes);
-		columns = table.schema.fields.map((f) => f.name);
-		rows = table.toArray().map((row: any) => row.toJSON());
+		columns = result.columns;
+		rows = result.rows;
 		return result;
 	} catch (err) {
+		if (err instanceof QueryCancelledError) {
+			loading = false;
+			queryRunning = false;
+			loadStage = '';
+			error = t('table.queryCancelled');
+			return null;
+		}
 		error = err instanceof Error ? err.message : String(err);
 		return null;
 	}
@@ -802,6 +854,8 @@ function setStacView() {
 					stage={loadStage}
 					entries={loadProgress}
 					onCancel={cancelLoad}
+					{forceCancelVisible}
+					onForceCancel={forceCancel}
 				/>
 			{:else if error && rows.length === 0}
 				<div class="flex flex-1 items-center justify-center">
