@@ -34,20 +34,22 @@ import {
 const initialFilePath = getUrlPrefix();
 
 function openUrlTab(rawUrl: string) {
-	const fileName = rawUrl.split('/').pop()?.split('?')[0] || '';
+	// Strip trailing slashes so folder-based formats (Zarr) resolve correctly
+	const url = rawUrl.replace(/\/+$/, '');
+	const fileName = url.split('/').pop()?.split('?')[0] || '';
 	const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
 	if (!ext) return;
 	const info = getFileTypeInfo(ext);
 	if (info.viewer === 'raw') return;
-	const tabId = `url:${rawUrl}`;
+	const tabId = `url:${url}`;
 	tabs.open({
 		id: tabId,
 		name: fileName,
-		path: rawUrl,
+		path: url,
 		source: 'url',
 		extension: ext
 	});
-	fetch(rawUrl, { method: 'HEAD' })
+	fetch(url, { method: 'HEAD' })
 		.then((res) => {
 			const cl = res.headers.get('content-length');
 			if (cl) tabs.update(tabId, { size: Number(cl) });
