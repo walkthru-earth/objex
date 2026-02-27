@@ -10,7 +10,9 @@ Two npm packages: `@walkthru-earth/objex` (Svelte lib) and `@walkthru-earth/obje
 
 ## Key Directories
 
-Each has its own `CLAUDE.md` with file listing, exports, and mermaid diagram.
+Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diagram.
+
+**Maintenance rule**: When you add, remove, or rename a file/export in any directory, update that directory's `CLAUDE.md` in the same compact style — keep the mermaid diagram, file table, and "used by" columns accurate. If the change affects cross-directory dependencies, update the other directory's CLAUDE.md too.
 
 | Directory | CLAUDE.md | What |
 |-----------|-----------|------|

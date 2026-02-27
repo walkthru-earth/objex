@@ -12,12 +12,12 @@ graph LR
     B & C --> G[stores/credentials]
 ```
 
-| File | Exports |
-|------|---------|
-| `adapter.ts` | `StorageAdapter` (interface), `ListPage` |
-| `browser-cloud.ts` | `BrowserCloudAdapter` — S3-compatible (aws4fetch SigV4) |
-| `browser-azure.ts` | `BrowserAzureAdapter` — Azure Blob (SAS token auth) |
-| `url-adapter.ts` | `UrlAdapter` — direct HTTPS fetch, no auth |
-| `index.ts` | `getAdapter()`, `clearAdapterCache()` — factory + LRU cache |
+| File | Exports | Used by |
+|------|---------|---------|
+| `adapter.ts` | `StorageAdapter` (interface), `ListPage` | lib/index.ts (npm export) |
+| `browser-cloud.ts` | `BrowserCloudAdapter` | index.ts (factory) |
+| `browser-azure.ts` | `BrowserAzureAdapter` | index.ts (factory) |
+| `url-adapter.ts` | `UrlAdapter` | lib/index.ts (npm export) |
+| `index.ts` | `getAdapter()`, `clearAdapterCache()` | stores/browser, FileTreeSidebar, ArchiveViewer, ModelViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer |
 
 `adapter.ts` and `url-adapter.ts` use relative imports (not `$lib`) — they're published to npm.

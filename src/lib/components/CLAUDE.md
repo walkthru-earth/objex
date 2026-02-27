@@ -32,13 +32,13 @@ graph TD
     TB --> VR
 ```
 
-| Directory | Files | Role |
-|-----------|-------|------|
-| `viewers/` | 34 | Per-format viewers (Table, Map, Code, PDF, 3D, Archive...) |
-| `browser/` | 10 | File tree, breadcrumbs, search, upload, dialogs |
-| `layout/` | 7 | Sidebar, tabs, status bar, connection dialog, toggles |
-| `editor/` | 4 | CodeMirror SQL editor, Milkdown markdown, SQL result blocks |
-| `map/` | 2 | Shared MapContainer, AttributeTable |
-| `ui/` | 61 | shadcn-svelte primitives (bits-ui based) |
+| Directory | Files | Role | Used by |
+|-----------|-------|------|---------|
+| `viewers/` | 34 | Per-format viewers | ViewerRouter → +page.svelte |
+| `browser/` | 10 | File tree, search, upload, dialogs | FileTreeSidebar → Sidebar → +page.svelte |
+| `layout/` | 7 | Sidebar, tabs, status bar, toggles | +page.svelte, +layout.svelte |
+| `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |
+| `map/` | 2 | MapContainer, AttributeTable | GeoParquetMapViewer, PmtilesMapView, MapViewer |
+| `ui/` | 61 | shadcn-svelte primitives (bits-ui) | Used across all components |
 
 See `viewers/CLAUDE.md` for viewer-specific details.

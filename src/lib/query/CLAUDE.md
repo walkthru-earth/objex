@@ -11,11 +11,11 @@ graph TD
     D[engine.ts] -->|types| A
 ```
 
-| File | Exports |
-|------|---------|
-| `engine.ts` | `QueryEngine` (interface), `QueryResult`, `MapQueryResult`, `SchemaField`, `QueryHandle`, `MapQueryHandle`, `QueryCancelledError` |
-| `wasm.ts` | `WasmQueryEngine` — implements QueryEngine, manages DuckDB-WASM lifecycle |
-| `index.ts` | `getQueryEngine()` — singleton factory, re-exports all types |
+| File | Exports | Used by |
+|------|---------|---------|
+| `engine.ts` | `QueryEngine`, `QueryResult`, `MapQueryResult`, `SchemaField`, `QueryHandle`, `MapQueryHandle`, `QueryCancelledError` | TableViewer, GeoParquetMapViewer, FileInfo, evidence-context, lib/index.ts |
+| `wasm.ts` | `WasmQueryEngine` | index.ts (lazy import) |
+| `index.ts` | `getQueryEngine()`, re-exports all types | TableViewer, DatabaseViewer, SqlEditor, evidence-context |
 
 - `conn.send()` for data queries (non-blocking, cancellable)
 - `conn.query()` only for fast metadata queries

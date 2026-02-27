@@ -27,27 +27,28 @@ graph TD
     GA --> DECK
 ```
 
-| File | Key Exports | Notes |
-|------|-------------|-------|
-| `wkb.ts` | `parseWKB()`, `toBinary()`, `findGeoColumn()`, `findGeoColumnFromRows()` | 5-byte WKB peek, zero-copy |
-| `geoarrow.ts` | `buildGeoArrowTables()`, `normalizeGeomType()` | WKB → Arrow, splits by geom type |
-| `storage-url.ts` | `parseStorageUrl()`, `looksLikeUrl()`, `Defaults` | 20+ URL patterns |
-| `parquet-metadata.ts` | `readParquetMetadata()`, `extractEpsgFromGeoMeta()`, `extractBounds()` | hyparquet, single range request |
-| `format.ts` | `formatFileSize()`, `formatDate()`, `getFileExtension()` | NaN-safe |
-| `hex.ts` | `generateHexDump()` | For RawViewer |
-| `column-types.ts` | `classifyType()`, `typeColor()`, `typeLabel()` | DuckDB type → category |
-| `deck.ts` | `createDeckOverlay()`, `createGeoArrowOverlay()`, `createGeoArrowLayers()` | deck.gl + MapLibre bridge |
-| `url.ts` | `buildHttpsUrl()`, `buildDuckDbUrl()`, `canStreamDirectly()` | Provider-aware URL builder |
-| `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | zip.js streaming |
-| `pmtiles.ts` | `loadPmtiles()`, `buildPmtilesLayers()` | PMTiles → MapLibre layers |
-| `shiki.ts` | `highlightCode()`, `extensionToShikiLang()` | Syntax highlighting |
-| `zarr.ts` | `fetchConsolidated()`, `probeWithZarrita()` | Zarr v2/v3 metadata |
-| `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | URL hash state (uses `$app`) |
-| `analytics.ts` | `initAnalytics()`, `capturePageview()` | PostHog (uses `$app`) |
-| `export.ts` | `exportToCsv()`, `exportToJson()` | Table data export |
-| `pdf.ts` | `loadPdfDocument()` | pdf.js wrapper |
-| `model3d.ts` | `createModelScene()`, `loadModel()` | Babylon.js wrapper |
-| `markdown.ts` | `renderMarkdown()`, `detectRTL()` | Marked + direction detection |
-| `map-selection.ts` | `setupSelectionLayer()`, `updateSelection()` | deck.gl selection |
-| `host-detection.ts` | `detectHostBucket()` | Auto-detect bucket from hostname |
-| `markdown-sql.ts` | `parseMarkdownDocument()`, `interpolateTemplates()` | Evidence-style SQL blocks |
+| File | Key Exports | Used by |
+|------|-------------|---------|
+| `wkb.ts` | `parseWKB()`, `toBinary()`, `findGeoColumn()`, `findGeoColumnFromRows()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
+| `geoarrow.ts` | `buildGeoArrowTables()`, `normalizeGeomType()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
+| `storage-url.ts` | `parseStorageUrl()`, `looksLikeUrl()`, `Defaults` | ConnectionDialog, Sidebar, lib/index.ts |
+| `parquet-metadata.ts` | `readParquetMetadata()`, `extractEpsgFromGeoMeta()`, `extractBounds()` | TableViewer, lib/index.ts |
+| `format.ts` | `formatFileSize()`, `formatDate()`, `getFileExtension()` | StatusBar, FileRow, ArchiveViewer, RawViewer, lib/index.ts |
+| `hex.ts` | `generateHexDump()` | RawViewer, lib/index.ts |
+| `column-types.ts` | `classifyType()`, `typeColor()`, `typeLabel()` | TableGrid, lib/index.ts |
+| `deck.ts` | `createDeckOverlay()`, `createGeoArrowOverlay()`, `createGeoArrowLayers()` | FlatGeobufViewer, GeoParquetMapViewer |
+| `url.ts` | `buildHttpsUrl()`, `buildDuckDbUrl()`, `canStreamDirectly()` | TabBar, FileTreeSidebar, CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, TableToolbar |
+| `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | ArchiveViewer |
+| `pmtiles.ts` | `loadPmtiles()`, `buildPmtilesLayers()` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |
+| `shiki.ts` | `highlightCode()`, `extensionToShikiLang()` | PmtilesArchiveView, NotebookViewer, CodeViewer |
+| `zarr.ts` | `fetchConsolidated()`, `probeWithZarrita()` | ZarrViewer |
+| `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
+| `analytics.ts` | `initAnalytics()`, `capturePageview()` | +layout.svelte |
+| `export.ts` | `exportToCsv()`, `exportToJson()` | TableStatusBar |
+| `pdf.ts` | `loadPdfDocument()` | PdfViewer |
+| `model3d.ts` | `createModelScene()`, `loadModel()` | ModelViewer |
+| `markdown.ts` | `renderMarkdown()`, `detectRTL()` | MarkdownViewer |
+| `map-selection.ts` | `setupSelectionLayer()`, `updateSelection()` | PmtilesMapView, MapViewer |
+| `host-detection.ts` | `detectHostBucket()` | stores/connections, Sidebar |
+| `markdown-sql.ts` | `parseMarkdownDocument()`, `interpolateTemplates()` | MarkdownViewer |
+| `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |

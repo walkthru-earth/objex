@@ -34,19 +34,27 @@ graph TD
     PMT --> PMI[pmtiles/PmtilesTileInspector]
 ```
 
-| Viewer | Powered by | Heavy deps |
-|--------|-----------|------------|
-| TableViewer | DuckDB-WASM, Arrow | duckdb-wasm, apache-arrow |
-| GeoParquetMapViewer | deck.gl, @geoarrow/deck.gl-layers | deck.gl, maplibre-gl |
-| CogViewer | @developmentseed/deck.gl-geotiff, geotiff v3 | geotiff, proj4 |
-| PmtilesViewer | pmtiles, MapLibre | pmtiles, maplibre-gl |
-| FlatGeobufViewer | flatgeobuf, deck.gl | flatgeobuf, deck.gl |
-| ZarrViewer | zarrita, @carbonplan/zarr-layer | zarrita, maplibre-gl |
-| CodeViewer | Shiki | shiki |
-| NotebookViewer | notebookjs, Marked, Shiki | notebookjs |
-| PdfViewer | pdf.js | pdfjs-dist |
-| ModelViewer | Babylon.js | @babylonjs/core |
-| ArchiveViewer | zip.js | @zip.js/zip.js |
-| DatabaseViewer | DuckDB-WASM | duckdb-wasm |
+| Viewer | Powered by | Key deps used |
+|--------|-----------|---------------|
+| TableViewer | DuckDB-WASM, Arrow | query/index, utils/wkb, utils/geoarrow, utils/parquet-metadata, utils/url, utils/url-state, file-icons |
+| GeoParquetMapViewer | deck.gl, @geoarrow/deck.gl-layers | query/engine, utils/wkb, utils/geoarrow, utils/deck, map/MapContainer |
+| CogViewer | @developmentseed/deck.gl-geotiff, geotiff v3 | utils/url |
+| PmtilesViewer | pmtiles, MapLibre | utils/pmtiles, utils/url-state, pmtiles/* sub-components |
+| FlatGeobufViewer | flatgeobuf, deck.gl | utils/deck, utils/url |
+| ZarrViewer | zarrita, @carbonplan/zarr-layer | utils/zarr, utils/url-state |
+| CodeViewer | Shiki | utils/shiki, utils/url-state |
+| NotebookViewer | notebookjs, Marked, Shiki | utils/shiki |
+| PdfViewer | pdf.js | utils/pdf |
+| ModelViewer | Babylon.js | utils/model3d |
+| ArchiveViewer | zip.js | utils/archive, utils/url, utils/format |
+| DatabaseViewer | DuckDB-WASM | query/index |
+| MarkdownViewer | Marked, Milkdown | utils/markdown, utils/markdown-sql, editor/MilkdownEditor |
+| RawViewer | custom hex dump | utils/hex, utils/format |
+| ImageViewer | native `<img>` | utils/url |
+| MediaViewer | native `<video>`/`<audio>` | utils/url |
+| StacMapViewer | stac-map iframe | utils/url |
+| CopcViewer | viewer.copc.io iframe | utils/url |
+
+All viewers use: `stores/tab-resources` (LRU cleanup), `i18n/t()`, `stores/settings` (theme).
 
 Every viewer must follow the pattern in root `CLAUDE.md` (cleanup, tabResources, AbortController, $state.raw).

@@ -10,10 +10,10 @@ graph LR
     IDX --> DIR["getDir() → 'ltr' | 'rtl'"]
 ```
 
-| File | Exports |
-|------|---------|
-| `index.svelte.ts` | `t()`, `getLocale()`, `setLocale()`, `getDir()`, `Locale` type |
-| `en.ts` | English translations dict |
-| `ar.ts` | Arabic translations dict |
+| File | Exports | Used by |
+|------|---------|---------|
+| `index.svelte.ts` | `t()`, `getLocale()`, `setLocale()`, `getDir()`, `Locale` | Nearly all components (45+ files): all viewers, all browser components, all layout components, MilkdownEditor, +page.svelte, +layout.svelte, stores/settings |
+| `en.ts` | English translations dict | index.svelte.ts |
+| `ar.ts` | Arabic translations dict | index.svelte.ts |
 
 Use `t('key')` for all user-facing strings. Add new keys to both `en.ts` and `ar.ts`.
