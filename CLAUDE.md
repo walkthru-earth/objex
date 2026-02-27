@@ -27,6 +27,12 @@ Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diag
 | `packages/objex-utils/` | `CLAUDE.md` | Pure TS sub-package |
 | `docs/` | — | Architecture & research docs |
 
+## Build Defines (`vite.config.ts`)
+
+- `__APP_VERSION__` — package version string
+- `__DUCKDB_WASM_VERSION__` — DuckDB-WASM version
+- `__THIRD_PARTY_LICENSES__` — `{ license, packages: { name, url }[] }[]` auto-scanned from production `node_modules` by `collectThirdPartyLicenses()` (consumed by AboutSheet)
+
 ## Code Quality
 
 ```bash
@@ -66,6 +72,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Don't add `console.log` in library code -- Vite strips them in production via config
 - Don't use `$lib` alias in `src/lib/storage/adapter.ts` or `url-adapter.ts` (breaks outside SvelteKit)
 - Don't materialize all Arrow rows via `.toArray().map(r => r.toJSON())` -- use columnar access
+- Don't use the shadcn CLI -- manually create/edit UI components in `src/lib/components/ui/` using bits-ui primitives (reference: https://bits-ui.com/llms.txt)
 
 ## Zero-Copy / Performance Rules
 
