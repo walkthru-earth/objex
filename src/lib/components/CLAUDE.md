@@ -6,6 +6,7 @@ All Svelte 5 components. Organized by function.
 graph TD
     subgraph layout
         SB[Sidebar] --> FTS[FileTreeSidebar]
+        SB --> AS[AboutSheet]
         TB[TabBar]
         CD[ConnectionDialog]
         STB[StatusBar]
@@ -26,7 +27,7 @@ graph TD
     subgraph editor
         SQL[SqlEditor] --> CM[CodeMirrorEditor]
     end
-    subgraph ui["ui/ (shadcn-svelte)"]
+    subgraph ui["ui/ (bits-ui)"]
         BTN[button] & INP[input] & TT[tooltip] & CTX[context-menu] & DD[dropdown-menu]
     end
     TB --> VR
@@ -36,9 +37,9 @@ graph TD
 |-----------|-------|------|---------|
 | `viewers/` | 34 | Per-format viewers | ViewerRouter → +page.svelte |
 | `browser/` | 10 | File tree, search, upload, dialogs | FileTreeSidebar → Sidebar → +page.svelte |
-| `layout/` | 7 | Sidebar, tabs, status bar, toggles | +page.svelte, +layout.svelte |
+| `layout/` | 8 | Sidebar, tabs, status bar, toggles, about sheet | +page.svelte, +layout.svelte |
 | `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |
 | `map/` | 2 | MapContainer, AttributeTable | GeoParquetMapViewer, PmtilesMapView, MapViewer |
-| `ui/` | 61 | shadcn-svelte primitives (bits-ui) | Used across all components |
+| `ui/` | 61 | bits-ui primitives (https://bits-ui.com/llms.txt) | Used across all components |
 
 See `viewers/CLAUDE.md` for viewer-specific details.

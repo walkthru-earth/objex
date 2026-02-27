@@ -2,7 +2,7 @@
 
 ## Current State Summary
 
-The app has a solid foundation: Svelte 5 runes, shadcn-svelte UI primitives, a single 640px breakpoint (mobile sheet vs desktop resizable panes), and per-viewer local state. But there are systemic issues:
+The app has a solid foundation: Svelte 5 runes, bits-ui primitives, a single 640px breakpoint (mobile sheet vs desktop resizable panes), and per-viewer local state. But there are systemic issues:
 
 - **No shared loading/error UI** — each viewer reinvents its own
 - **No tab lifecycle management** — tabs mount/unmount but don't clean up resources deterministically

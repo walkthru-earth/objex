@@ -28,10 +28,12 @@ import type { Connection } from '$lib/types.js';
 import { type DetectedHost, detectHostBucket } from '$lib/utils/host-detection.js';
 import { parseStorageUrl } from '$lib/utils/storage-url.js';
 import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
+import AboutSheet from './AboutSheet.svelte';
 import ConnectionDialog from './ConnectionDialog.svelte';
 import LocaleToggle from './LocaleToggle.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
 
+let aboutOpen = $state(false);
 let dialogOpen = $state(false);
 let editingConnection = $state<Connection | null>(null);
 let detectedHost = $state<DetectedHost | null>(null);
@@ -209,9 +211,17 @@ async function handleBrowseConnection(connection: Connection) {
 <TooltipProvider>
 	<div class="flex h-full w-12 flex-col items-center bg-sidebar py-2">
 		<!-- App icon -->
-		<div class="mb-2 flex size-8 items-center justify-center">
-			<DatabaseIcon class="size-5 text-sidebar-primary" />
-		</div>
+		<Tooltip>
+			<TooltipTrigger>
+				<button
+					class="mb-2 flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/50"
+					onclick={() => { aboutOpen = true; }}
+				>
+					<DatabaseIcon class="size-5 text-sidebar-primary" />
+				</button>
+			</TooltipTrigger>
+			<TooltipContent side="right">{t('about.title')}</TooltipContent>
+		</Tooltip>
 
 		<Separator class="mx-2 mb-2" />
 
@@ -295,6 +305,8 @@ async function handleBrowseConnection(connection: Connection) {
 		</div>
 	</div>
 </TooltipProvider>
+
+<AboutSheet bind:open={aboutOpen} />
 
 <ConnectionDialog
 	bind:open={dialogOpen}

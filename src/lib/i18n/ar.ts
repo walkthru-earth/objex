@@ -445,6 +445,13 @@ export const ar: Record<string, string> = {
 	'notebook.hideCode': 'إخفاء الكود',
 	'notebook.showCode': 'إظهار الكود',
 
+	// About
+	'about.title': 'حول objex',
+	'about.version': 'الإصدار {version}',
+	'about.license': 'الرخصة: CC BY 4.0',
+	'about.sourceCode': 'الكود المصدري',
+	'about.openSourceLicenses': 'تراخيص المصادر المفتوحة',
+
 	// Locale
 	'locale.toggle': 'اللغة'
 };

@@ -445,6 +445,13 @@ export const en: Record<string, string> = {
 	'notebook.hideCode': 'Hide Code',
 	'notebook.showCode': 'Show Code',
 
+	// About
+	'about.title': 'About objex',
+	'about.version': 'Version {version}',
+	'about.license': 'License: CC BY 4.0',
+	'about.sourceCode': 'Source Code',
+	'about.openSourceLicenses': 'Open Source Licenses',
+
 	// Locale
 	'locale.toggle': 'Language'
 };
