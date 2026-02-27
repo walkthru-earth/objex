@@ -209,7 +209,7 @@ Non-WGS84 sources reprojected with `ST_Transform(..., always_xy := true)`.
 | **Geo vector** | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf | DuckDB + MapLibre / deck.gl |
 | **Geo raster** | COG, PMTiles (vector + raster), Zarr v2/v3 | geotiff.js / MapLibre / deck.gl |
 | **Point cloud** | COPC, LAZ, LAS | viewer.copc.io iframe |
-| **Notebooks** | Jupyter (.ipynb), marimo (.py) | notebookjs / marimo WASM |
+| **Notebooks** | Jupyter (.ipynb), marimo (.py) | Custom renderer (utils/notebook.ts) / marimo WASM |
 | **Code** | 30+ languages | Shiki |
 | **Documents** | Markdown, PDF, text, logs | Milkdown / pdf.js |
 | **Media** | Images, video, audio | Native elements |
