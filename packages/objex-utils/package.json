@@ -1,0 +1,34 @@
+{
+	"name": "@walkthru-earth/objex-utils",
+	"version": "0.1.0",
+	"description": "Pure TypeScript utilities from objex — WKB parser, GeoArrow builder, storage URL parser, file type registry",
+	"author": "Youssef Harby <yharby@walkthru.earth>",
+	"license": "CC-BY-4.0",
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"files": ["dist"],
+	"scripts": {
+		"build": "tsup"
+	},
+	"peerDependencies": {
+		"apache-arrow": ">=14"
+	},
+	"peerDependenciesMeta": {
+		"apache-arrow": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"tsup": "^8.5.0",
+		"typescript": "^5.9.3"
+	}
+}

@@ -206,7 +206,7 @@ function buildLineStringData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 	for (let i = 0; i < n; i++) {
 		geomOffsets[i] = totalCoords;
 		const h = readWkbHeader(wkbs[i]);
-		if (!h || (h.type !== 2 && h.type !== 4)) continue;
+		if (!h || h.type !== 2) continue;
 		const dv = new DataView(wkbs[i].buffer, wkbs[i].byteOffset, wkbs[i].byteLength);
 		const numPts = dv.getUint32(h.dataOffset, h.le);
 		totalCoords += numPts;
@@ -219,7 +219,7 @@ function buildLineStringData(wkbs: Uint8Array[], b: BoundsTracker): Data {
 
 	for (const wkb of wkbs) {
 		const h = readWkbHeader(wkb);
-		if (!h || (h.type !== 2 && h.type !== 4)) continue;
+		if (!h || h.type !== 2) continue;
 		const dv = new DataView(wkb.buffer, wkb.byteOffset, wkb.byteLength);
 		const numPts = dv.getUint32(h.dataOffset, h.le);
 		let off = h.dataOffset + 4;
@@ -785,21 +785,4 @@ export function buildGeoArrowTables(
 	for (const r of results) r.bounds = mergedBounds;
 
 	return results;
-}
-
-/**
- * Build a single GeoArrow table (legacy convenience wrapper).
- * Delegates to buildGeoArrowTables and returns the first result.
- */
-export function buildGeoArrowTable(
-	wkbArrays: Uint8Array[],
-	geometryType: string,
-	attributes: Map<string, { values: any[]; type: string }>
-): GeoArrowResult {
-	const results = buildGeoArrowTables(wkbArrays, attributes, normalizeGeomType(geometryType));
-	if (results.length > 0) return results[0];
-
-	const geomType = normalizeGeomType(geometryType);
-	const b = newBounds();
-	return buildSingleTable(geomType, [], [], attributes, b);
 }

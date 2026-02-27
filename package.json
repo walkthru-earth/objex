@@ -1,10 +1,67 @@
 {
-	"name": "objex",
-	"private": true,
-	"version": "0.0.1",
+	"name": "@walkthru-earth/objex",
+	"version": "0.1.0",
+	"description": "Svelte 5 components and utilities for exploring geospatial object storage — S3, GCS, Azure, R2",
 	"author": "Youssef Harby <yharby@walkthru.earth>",
 	"license": "CC-BY-4.0",
 	"type": "module",
+	"svelte": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"svelte": "./dist/index.js"
+		},
+		"./storage": {
+			"types": "./dist/storage/index.d.ts",
+			"svelte": "./dist/storage/index.js"
+		},
+		"./query": {
+			"types": "./dist/query/engine.d.ts",
+			"svelte": "./dist/query/engine.js"
+		},
+		"./utils/wkb": {
+			"types": "./dist/utils/wkb.d.ts",
+			"svelte": "./dist/utils/wkb.js"
+		},
+		"./utils/geoarrow": {
+			"types": "./dist/utils/geoarrow.d.ts",
+			"svelte": "./dist/utils/geoarrow.js"
+		},
+		"./utils/storage-url": {
+			"types": "./dist/utils/storage-url.d.ts",
+			"svelte": "./dist/utils/storage-url.js"
+		},
+		"./utils/parquet-metadata": {
+			"types": "./dist/utils/parquet-metadata.d.ts",
+			"svelte": "./dist/utils/parquet-metadata.js"
+		},
+		"./utils/format": {
+			"types": "./dist/utils/format.d.ts",
+			"svelte": "./dist/utils/format.js"
+		},
+		"./utils/hex": {
+			"types": "./dist/utils/hex.d.ts",
+			"svelte": "./dist/utils/hex.js"
+		},
+		"./utils/column-types": {
+			"types": "./dist/utils/column-types.d.ts",
+			"svelte": "./dist/utils/column-types.js"
+		},
+		"./file-icons": {
+			"types": "./dist/file-icons/index.d.ts",
+			"svelte": "./dist/file-icons/index.js"
+		},
+		"./types": {
+			"types": "./dist/types.d.ts",
+			"svelte": "./dist/types.js"
+		}
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.test.*"
+	],
+	"sideEffects": ["**/*.css"],
 	"packageManager": "pnpm@10.30.1",
 	"engines": {
 		"node": ">=20",
@@ -14,13 +71,31 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
+		"package": "svelte-kit sync && svelte-package -o dist && publint",
+		"prepublishOnly": "pnpm run package",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"lint": "biome lint src/",
-		"lint:fix": "biome lint --fix src/",
-		"format": "biome format --write src/",
-		"format:check": "biome format src/"
+		"lint": "biome lint src/ packages/",
+		"lint:fix": "biome lint --fix src/ packages/",
+		"format": "biome format --write src/ packages/",
+		"format:check": "biome format src/ packages/"
+	},
+	"peerDependencies": {
+		"svelte": "^5",
+		"@sveltejs/kit": "^2"
+	},
+	"peerDependenciesMeta": {
+		"maplibre-gl": { "optional": true },
+		"deck.gl": { "optional": true },
+		"@deck.gl/core": { "optional": true },
+		"@deck.gl/layers": { "optional": true },
+		"@deck.gl/geo-layers": { "optional": true },
+		"@deck.gl/mapbox": { "optional": true },
+		"@duckdb/duckdb-wasm": { "optional": true },
+		"apache-arrow": { "optional": true },
+		"hyparquet": { "optional": true },
+		"hyparquet-compressors": { "optional": true }
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.4",
@@ -28,6 +103,7 @@
 		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.53.0",
+		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/forms": "^0.5.11",
 		"@tailwindcss/typography": "^0.5.19",
@@ -36,6 +112,7 @@
 		"clsx": "^2.1.1",
 		"lefthook": "^2.1.1",
 		"paneforge": "^1.0.2",
+		"publint": "^0.3.17",
 		"svelte": "^5.53.2",
 		"svelte-check": "^4.4.3",
 		"tailwind-merge": "^3.5.0",

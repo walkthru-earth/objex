@@ -4,6 +4,7 @@ build
 .env
 .env.*
 !.env.example
-dist
+dist/
+packages/objex-utils/dist/
 *.local
 .DS_Store

@@ -67,7 +67,7 @@ const SCHEME_MAP: Record<string, { provider: StorageProvider; strip: number }> =
 	'swift://': { provider: 'unknown', strip: 8 }
 };
 
-interface Defaults {
+export interface Defaults {
 	region?: string;
 	endpoint?: string;
 	provider?: StorageProvider;

@@ -104,8 +104,7 @@ function mapParquetType(col: any): string {
  * Uses HTTP range requests — typically a single ~512KB fetch.
  */
 export async function readParquetMetadata(url: string): Promise<ParquetFileMetadata> {
-	const { parquetMetadataAsync } = await import('hyparquet');
-	const { asyncBufferFromUrl } = await import('hyparquet');
+	const { parquetMetadataAsync, asyncBufferFromUrl } = await import('hyparquet');
 
 	const file = await asyncBufferFromUrl({ url });
 	const metadata = await parquetMetadataAsync(file);

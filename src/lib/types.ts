@@ -22,7 +22,7 @@ export interface Connection {
 // Used when creating/updating connections (includes optional credentials)
 export interface ConnectionConfig {
 	name: string;
-	provider: string;
+	provider: 's3' | 'gcs' | 'r2' | 'minio' | 'azure' | 'storj';
 	endpoint: string;
 	bucket: string;
 	region: string;

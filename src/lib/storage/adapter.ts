@@ -1,4 +1,4 @@
-import type { FileEntry, WriteResult } from '$lib/types.js';
+import type { FileEntry, WriteResult } from '../types.js';
 
 /** A single page of listing results with optional continuation. */
 export interface ListPage {

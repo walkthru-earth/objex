@@ -20,7 +20,7 @@ export function formatFileSize(bytes: number): string {
  * Shows relative time for recent dates, absolute for older ones.
  */
 export function formatDate(timestamp: number): string {
-	if (!timestamp || timestamp <= 0) return '--';
+	if (!timestamp || timestamp <= 0 || !Number.isFinite(timestamp)) return '--';
 
 	const date = new Date(timestamp);
 	const now = Date.now();

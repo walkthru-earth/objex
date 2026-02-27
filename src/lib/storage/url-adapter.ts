@@ -1,4 +1,4 @@
-import type { FileEntry, WriteResult } from '$lib/types.js';
+import type { FileEntry, WriteResult } from '../types.js';
 import type { StorageAdapter } from './adapter.js';
 
 /**

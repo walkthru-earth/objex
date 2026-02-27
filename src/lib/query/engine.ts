@@ -19,8 +19,6 @@ export interface QueryResult {
 	columns: string[];
 	types: string[];
 	rowCount: number;
-	/** @deprecated Arrow IPC bytes — only populated when queryArrow() is used */
-	arrowBytes?: Uint8Array;
 	/** Pre-parsed rows — avoids Arrow version mismatch in WASM engine */
 	rows: Record<string, any>[];
 }
