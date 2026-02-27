@@ -118,8 +118,13 @@ Every viewer must follow this pattern:
 </script>
 ```
 
+## Releasing
+
+See `RELEASE.md` for the full release checklist: version bump, dry-run, GitHub Release trigger, post-publish verification, and rollback procedures.
+
 ## Reference Docs
 
+- `RELEASE.md` -- Release checklist, version bumping, dry-run, rollback procedures
 - `docs/cog-viewer-architecture.md` -- COG dual-pipeline, monkey-patch, projection edge cases
 - `docs/duckdb-v1.5-geometry-upgrade.md` -- Parameterized GEOMETRY type, migration path
 - `docs/arrow-table-grid-research.md` -- TableGrid rewrite, quak analysis, append-on-scroll
