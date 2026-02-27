@@ -125,7 +125,13 @@ Every viewer must follow this pattern:
 
 ## Releasing
 
-See `RELEASE.md` for the full release checklist: version bump, dry-run, GitHub Release trigger, post-publish verification, and rollback procedures.
+Uses **Changesets** for automated versioning, changelogs, and npm publishing with trusted publishing (OIDC).
+
+- `pnpm changeset` — add a changeset to your PR (both packages bump together via `fixed` config)
+- Merging to `main` auto-creates a "Version Packages" PR with version bumps + CHANGELOG
+- Merging the version PR auto-publishes to npm with provenance + creates GitHub Release
+
+See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollback procedures.
 
 ## Reference Docs
 

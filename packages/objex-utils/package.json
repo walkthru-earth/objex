@@ -4,6 +4,11 @@
 	"description": "Pure TypeScript utilities from objex — WKB parser, GeoArrow builder, storage URL parser, file type registry",
 	"author": "Youssef Harby <yharby@walkthru.earth>",
 	"license": "CC-BY-4.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/walkthru-earth/objex.git",
+		"directory": "packages/objex-utils"
+	},
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.js",

@@ -4,6 +4,10 @@
 	"description": "Svelte 5 components and utilities for exploring geospatial object storage — S3, GCS, Azure, R2",
 	"author": "Youssef Harby <yharby@walkthru.earth>",
 	"license": "CC-BY-4.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/walkthru-earth/objex.git"
+	},
 	"type": "module",
 	"svelte": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -61,7 +65,9 @@
 		"dist",
 		"!dist/**/*.test.*"
 	],
-	"sideEffects": ["**/*.css"],
+	"sideEffects": [
+		"**/*.css"
+	],
 	"packageManager": "pnpm@10.30.1",
 	"engines": {
 		"node": ">=20",
@@ -79,26 +85,49 @@
 		"lint": "biome lint src/ packages/",
 		"lint:fix": "biome lint --fix src/ packages/",
 		"format": "biome format --write src/ packages/",
-		"format:check": "biome format src/ packages/"
+		"format:check": "biome format src/ packages/",
+		"ci:publish": "pnpm run package && pnpm --filter @walkthru-earth/objex-utils run build && pnpm publish -r --access public --no-git-checks --provenance"
 	},
 	"peerDependencies": {
-		"svelte": "^5",
-		"@sveltejs/kit": "^2"
+		"@sveltejs/kit": "^2",
+		"svelte": "^5"
 	},
 	"peerDependenciesMeta": {
-		"maplibre-gl": { "optional": true },
-		"deck.gl": { "optional": true },
-		"@deck.gl/core": { "optional": true },
-		"@deck.gl/layers": { "optional": true },
-		"@deck.gl/geo-layers": { "optional": true },
-		"@deck.gl/mapbox": { "optional": true },
-		"@duckdb/duckdb-wasm": { "optional": true },
-		"apache-arrow": { "optional": true },
-		"hyparquet": { "optional": true },
-		"hyparquet-compressors": { "optional": true }
+		"maplibre-gl": {
+			"optional": true
+		},
+		"deck.gl": {
+			"optional": true
+		},
+		"@deck.gl/core": {
+			"optional": true
+		},
+		"@deck.gl/layers": {
+			"optional": true
+		},
+		"@deck.gl/geo-layers": {
+			"optional": true
+		},
+		"@deck.gl/mapbox": {
+			"optional": true
+		},
+		"@duckdb/duckdb-wasm": {
+			"optional": true
+		},
+		"apache-arrow": {
+			"optional": true
+		},
+		"hyparquet": {
+			"optional": true
+		},
+		"hyparquet-compressors": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.4",
+		"@changesets/changelog-github": "^0.5.2",
+		"@changesets/cli": "^2.29.8",
 		"@internationalized/date": "^3.11.0",
 		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-static": "^3.0.10",
