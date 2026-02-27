@@ -10,17 +10,20 @@ Two npm packages: `@walkthru-earth/objex` (Svelte lib) and `@walkthru-earth/obje
 
 ## Key Directories
 
-```
-src/lib/components/viewers/   # Per-format viewers (18+)
-src/lib/stores/               # Svelte 5 rune stores ($state, $derived)
-src/lib/storage/              # S3/Azure/URL adapters
-src/lib/query/                # DuckDB-WASM engine (cancellable)
-src/lib/utils/                # WKB, GeoArrow, format, hex, storage-url
-src/lib/file-icons/           # Extension → viewer/icon registry
-src/lib/i18n/                 # en/ar translations, t() function
-packages/objex-utils/         # Pure TS sub-package (tsup)
-docs/                         # Architecture & research docs
-```
+Each has its own `CLAUDE.md` with file listing, exports, and mermaid diagram.
+
+| Directory | CLAUDE.md | What |
+|-----------|-----------|------|
+| `src/lib/components/` | `components/CLAUDE.md` | Component tree overview |
+| `src/lib/components/viewers/` | `viewers/CLAUDE.md` | 18+ per-format viewers, deps |
+| `src/lib/stores/` | `stores/CLAUDE.md` | Svelte 5 rune stores |
+| `src/lib/storage/` | `storage/CLAUDE.md` | S3/Azure/URL adapters |
+| `src/lib/query/` | `query/CLAUDE.md` | DuckDB-WASM engine |
+| `src/lib/utils/` | `utils/CLAUDE.md` | WKB, GeoArrow, format, hex, deck |
+| `src/lib/file-icons/` | `file-icons/CLAUDE.md` | Extension → viewer registry |
+| `src/lib/i18n/` | `i18n/CLAUDE.md` | en/ar translations |
+| `packages/objex-utils/` | `CLAUDE.md` | Pure TS sub-package |
+| `docs/` | — | Architecture & research docs |
 
 ## Code Quality
 
