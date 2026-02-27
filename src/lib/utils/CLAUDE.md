@@ -20,6 +20,7 @@ graph TD
         ARC[archive.ts<br/>streamZip/Tar]
         PMT[pmtiles.ts<br/>loadPmtiles]
         SHIKI[shiki.ts<br/>highlightCode]
+        NB[notebook.ts<br/>renderNotebook]
         ZARR[zarr.ts<br/>fetchConsolidated]
     end
     WKB --> GA
@@ -41,6 +42,7 @@ graph TD
 | `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | ArchiveViewer |
 | `pmtiles.ts` | `loadPmtiles()`, `buildPmtilesLayers()` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |
 | `shiki.ts` | `highlightCode()`, `extensionToShikiLang()` | PmtilesArchiveView, NotebookViewer, CodeViewer |
+| `notebook.ts` | `renderNotebook()` | NotebookViewer |
 | `zarr.ts` | `fetchConsolidated()`, `probeWithZarrita()` | ZarrViewer |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `analytics.ts` | `initAnalytics()`, `capturePageview()` | +layout.svelte |

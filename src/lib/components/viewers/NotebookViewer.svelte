@@ -1,6 +1,7 @@
 <script lang="ts">
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
-import { onDestroy } from 'svelte';
+import type { BundledLanguage } from 'shiki';
+import { onDestroy, tick } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -8,7 +9,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { highlightCode } from '$lib/utils/shiki';
+import { renderNotebook } from '$lib/utils/notebook';
+import { highlightCodeReversed } from '$lib/utils/shiki';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -58,15 +60,15 @@ async function loadNotebook() {
 		rawContent = new TextDecoder().decode(data);
 		const notebook = JSON.parse(rawContent);
 
-		if (typeof notebook.nbformat !== 'number' || !Array.isArray(notebook.cells)) {
+		// Accept nbformat 2–5: v4+ has top-level `cells`, v2/v3 uses `worksheets`
+		if (
+			typeof notebook.nbformat !== 'number' ||
+			(!Array.isArray(notebook.cells) && !Array.isArray(notebook.worksheets))
+		) {
 			throw new Error('Not a valid Jupyter notebook');
 		}
 
-		cellCount = notebook.cells.length;
-		kernelName =
-			notebook.metadata?.kernelspec?.display_name ?? notebook.metadata?.language_info?.name ?? '';
-
-		await renderNotebook(notebook);
+		await renderNotebookContent(notebook);
 	} catch (err) {
 		if (err instanceof DOMException && err.name === 'AbortError') return;
 		error = err instanceof Error ? err.message : String(err);
@@ -75,42 +77,50 @@ async function loadNotebook() {
 	}
 }
 
-async function renderNotebook(notebook: any) {
+async function renderNotebookContent(notebook: any) {
+	await tick();
 	if (!container) return;
 
-	const [nb, { marked }, { AnsiUp }] = await Promise.all([
-		import('notebookjs').then((m) => m.default || m),
-		import('marked'),
-		import('ansi_up')
-	]);
+	const [{ marked }, { AnsiUp }] = await Promise.all([import('marked'), import('ansi_up')]);
 
-	// Configure notebookjs
-	nb.markdown = (md: string) => marked.parse(md, { async: false }) as string;
 	const ansiUp = new AnsiUp();
-	nb.ansi = (text: string) => ansiUp.ansi_to_html(text);
-	nb.highlighter = (code: string, lang: string) => {
-		// Return escaped code — Shiki highlighting is async so we apply it after render
-		return code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-	};
+	const { element, meta } = renderNotebook(notebook, {
+		markdown: (md: string) => marked.parse(md, { async: false }) as string,
+		ansi: (text: string) => ansiUp.ansi_to_html(text),
+		highlighter: (code: string) => code
+	});
 
-	const parsed = nb.parse(notebook);
-	const rendered: HTMLElement = parsed.render();
+	cellCount = meta.cellCount;
+	kernelName = meta.kernelName;
 
 	container.innerHTML = '';
-	container.appendChild(rendered);
+	container.appendChild(element);
 
-	// Apply Shiki syntax highlighting to code cells asynchronously
+	// Apply Shiki syntax highlighting + copy buttons to code cells
 	const codeBlocks = container.querySelectorAll('.nb-input pre');
 	for (const block of codeBlocks) {
 		const code = block.textContent ?? '';
-		const lang =
-			notebook.metadata?.kernelspec?.language ?? notebook.metadata?.language_info?.name ?? 'python';
 		try {
-			const html = await highlightCode(code, lang);
-			block.outerHTML = html;
+			const highlighted = await highlightCodeReversed(code, meta.language as BundledLanguage);
+			const copyBtn = `<button class="nb-copy-btn" data-code="${encodeURIComponent(code)}" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
+			block.outerHTML = copyBtn + highlighted;
 		} catch {
 			// Shiki doesn't support this language — keep the escaped HTML
 		}
+	}
+
+	// Wire copy button click handlers
+	for (const btn of container.querySelectorAll('.nb-copy-btn')) {
+		btn.addEventListener('click', async () => {
+			const code = decodeURIComponent((btn as HTMLElement).dataset.code ?? '');
+			try {
+				await navigator.clipboard.writeText(code);
+				btn.classList.add('copied');
+				setTimeout(() => btn.classList.remove('copied'), 2000);
+			} catch {
+				// clipboard not available
+			}
+		});
 	}
 }
 
@@ -191,9 +201,8 @@ async function copyRaw() {
 			<div class="flex h-full items-center justify-center">
 				<p class="text-sm text-red-400">{error}</p>
 			</div>
-		{:else}
-			<div bind:this={container} class="notebook-content"></div>
 		{/if}
+		<div bind:this={container} class="notebook-content" class:hidden={loading || !!error}></div>
 	</div>
 </div>
 
@@ -215,6 +224,7 @@ async function copyRaw() {
 
 	/* Code input cells */
 	.notebook-content :global(.nb-input) {
+		position: relative;
 		border: 1px solid var(--border);
 		border-radius: 0.375rem;
 		overflow: hidden;
@@ -385,5 +395,59 @@ async function copyRaw() {
 		border-radius: 0.375rem;
 		font-family: monospace;
 		font-size: 0.8125rem;
+	}
+
+	/* Copy button on code cells */
+	.notebook-content :global(.nb-copy-btn) {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 6px;
+		border: none;
+		border-radius: 4px;
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.6);
+		cursor: pointer;
+		font-size: 0.6875rem;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+
+	.notebook-content :global(.nb-input:hover .nb-copy-btn) {
+		opacity: 1;
+	}
+
+	.notebook-content :global(.nb-copy-btn:hover) {
+		background: rgba(255, 255, 255, 0.2);
+		color: rgba(255, 255, 255, 0.9);
+	}
+
+	.notebook-content :global(.nb-copy-btn.copied) {
+		opacity: 1;
+		color: #4ade80;
+	}
+
+	.notebook-content :global(.nb-copy-btn.copied)::after {
+		content: '\2713';
+		margin-left: 2px;
+	}
+
+	/* Dark mode: reversed theme means light code bg */
+	:global(.dark) .notebook-content :global(.nb-copy-btn) {
+		background: rgba(0, 0, 0, 0.1);
+		color: rgba(0, 0, 0, 0.5);
+	}
+
+	:global(.dark) .notebook-content :global(.nb-copy-btn:hover) {
+		background: rgba(0, 0, 0, 0.2);
+		color: rgba(0, 0, 0, 0.8);
+	}
+
+	:global(.dark) .notebook-content :global(.nb-copy-btn.copied) {
+		color: #16a34a;
 	}
 </style>

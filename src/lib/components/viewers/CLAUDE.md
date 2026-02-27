@@ -43,7 +43,7 @@ graph TD
 | FlatGeobufViewer | flatgeobuf, deck.gl | utils/deck, utils/url |
 | ZarrViewer | zarrita, @carbonplan/zarr-layer | utils/zarr, utils/url-state |
 | CodeViewer | Shiki | utils/shiki, utils/url-state |
-| NotebookViewer | notebookjs, Marked, Shiki | utils/shiki |
+| NotebookViewer | Marked, Shiki, ansi_up | utils/notebook, utils/shiki |
 | PdfViewer | pdf.js | utils/pdf |
 | ModelViewer | Babylon.js | utils/model3d |
 | ArchiveViewer | zip.js | utils/archive, utils/url, utils/format |

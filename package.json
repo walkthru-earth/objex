@@ -191,7 +191,6 @@
 		"maplibre-gl": "^5.18.0",
 		"marked": "^17.0.3",
 		"mermaid": "^11.12.3",
-		"notebookjs": "^0.8.3",
 		"pbf": "^4.0.1",
 		"pdfjs-dist": "^5.4.624",
 		"pmtiles": "^4.4.0",
