@@ -110,6 +110,8 @@ export const ar: Record<string, string> = {
 	'fileBrowser.modified': 'التعديل',
 	'fileBrowser.noMatch': 'لا توجد ملفات مطابقة لـ "{query}"',
 	'fileBrowser.empty': 'هذا المجلد فارغ',
+	'fileBrowser.zarrDetected': 'تم اكتشاف مخزن Zarr الإصدار {version}',
+	'fileBrowser.openAsZarr': 'فتح كـ Zarr',
 
 	// Search Bar
 	'searchBar.label': 'تصفية الملفات',

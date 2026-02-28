@@ -18,11 +18,18 @@ interface Props {
 
 let { entry, onDelete, onRename }: Props = $props();
 
-const info = $derived(getFileTypeInfo(entry.extension, entry.is_dir));
+/** Extensions that represent "virtual files" — directories that open as viewers. */
+const VIEWER_DIR_EXTENSIONS = new Set(['zarr', 'zr3']);
+
+function isViewerDir(e: FileEntry): boolean {
+	return e.is_dir && VIEWER_DIR_EXTENSIONS.has(e.extension);
+}
+
+const info = $derived(getFileTypeInfo(entry.extension, entry.is_dir && !isViewerDir(entry)));
 let showActions = $derived(browser.canWrite && !safeLock.locked);
 
 function handleClick() {
-	if (entry.is_dir) {
+	if (entry.is_dir && !isViewerDir(entry)) {
 		browser.navigateTo(entry.path);
 	} else {
 		if (browser.activeConnection) {
@@ -68,7 +75,7 @@ function handleRenameClick(e: MouseEvent) {
 >
 	<!-- Icon -->
 	<div class="flex shrink-0 items-center justify-center">
-		<FileTypeIcon extension={entry.extension} isDir={entry.is_dir} class="size-4" />
+		<FileTypeIcon extension={entry.extension} isDir={entry.is_dir && !isViewerDir(entry)} class="size-4" />
 	</div>
 
 	<!-- File name -->

@@ -2,11 +2,17 @@
 import { untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
+import {
+	ResizableHandle,
+	ResizablePane,
+	ResizablePaneGroup
+} from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import {
+	extractZarrStoreUrl,
 	fetchConsolidated,
 	formatShape,
 	probeWithZarrita,
@@ -60,9 +66,8 @@ async function loadZarrMetadata() {
 	error = null;
 
 	try {
-		const url = buildHttpsUrl(tab)
-			.replace(/\/zarr\.json$/, '')
-			.replace(/\/+$/, '');
+		const rawUrl = buildHttpsUrl(tab).replace(/\/+$/, '');
+		const url = extractZarrStoreUrl(rawUrl) ?? rawUrl;
 
 		let meta: ZarrMetadata | null = await fetchConsolidated(url);
 
@@ -86,171 +91,201 @@ async function loadZarrMetadata() {
 }
 </script>
 
+{#snippet variableDetails()}
+	{#if selectedNode}
+		<div
+			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+		>
+			{selectedNode.name}
+		</div>
+		<div class="flex-1 overflow-auto p-3">
+			<dl class="space-y-2 text-xs">
+				<div>
+					<dt class="text-muted-foreground">Shape</dt>
+					<dd class="font-mono text-[11px]">{formatShape(selectedNode.shape)}</dd>
+				</div>
+
+				{#if selectedNode.dims.length > 0}
+					<div>
+						<dt class="text-muted-foreground">Dimensions</dt>
+						<dd class="font-mono text-[11px]">({selectedNode.dims.join(', ')})</dd>
+					</div>
+				{/if}
+
+				<div>
+					<dt class="text-muted-foreground">Data Type</dt>
+					<dd class="font-mono text-[11px]">{selectedNode.dtype}</dd>
+				</div>
+
+				{#if selectedNode.chunks.length > 0}
+					<div>
+						<dt class="text-muted-foreground">Chunks</dt>
+						<dd class="font-mono text-[11px]">[{selectedNode.chunks.join(', ')}]</dd>
+					</div>
+				{/if}
+
+				{#if Object.keys(selectedNode.attributes).length > 0}
+					<div>
+						<dt class="text-muted-foreground">Attributes</dt>
+						<dd>
+							<div class="mt-1 rounded border border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-700 dark:bg-zinc-800">
+								{#each Object.entries(selectedNode.attributes) as [key, value]}
+									<div class="flex gap-2 py-0.5">
+										<span class="shrink-0 font-medium text-muted-foreground">{key}:</span>
+										<span class="break-all text-zinc-700 dark:text-zinc-300">
+											{typeof value === 'string' ? value : JSON.stringify(value)}
+										</span>
+									</div>
+								{/each}
+							</div>
+						</dd>
+					</div>
+				{/if}
+			</dl>
+		</div>
+	{:else if Object.keys(storeAttrs).length > 0}
+		<div
+			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+		>
+			Store Attributes
+		</div>
+		<div class="flex-1 overflow-auto p-3">
+			<div class="rounded border border-zinc-200 bg-zinc-100 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+				{#each Object.entries(storeAttrs) as [key, value]}
+					<div class="flex gap-2 py-0.5">
+						<span class="shrink-0 font-medium text-muted-foreground">{key}:</span>
+						<span class="break-all text-zinc-700 dark:text-zinc-300">
+							{typeof value === 'string' ? value : JSON.stringify(value)}
+						</span>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{:else}
+		<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+			Select a variable
+		</div>
+	{/if}
+{/snippet}
+
 <div class="flex h-full flex-col">
-	<!-- Toolbar -->
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		<Badge variant="secondary" class="bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300">{t('zarr.badge')}</Badge>
+	<!-- Header bar -->
+	<div class="shrink-0 border-b border-zinc-200 px-3 py-2 sm:px-4 dark:border-zinc-800">
+		<div class="flex items-center gap-1.5 sm:gap-2">
+			<span class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+			<Badge variant="secondary" class="bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300">{zarrVersion ? `Zarr v${zarrVersion}` : t('zarr.badge')}</Badge>
 
-		{#if variables.length > 0}
-			<span class="hidden text-xs text-zinc-400 sm:inline">{variables.length} {t('zarr.variables')}</span>
-		{/if}
+			{#if variables.length > 0}
+				<span class="hidden text-xs text-muted-foreground sm:inline">{variables.length} {t('zarr.variables')}</span>
+			{/if}
 
-		<div class="ms-auto flex items-center gap-1">
-			<Button
-				variant={viewMode === 'inspect' ? 'secondary' : 'ghost'}
-				size="sm"
-				class="h-7 px-2 text-xs"
-				onclick={() => setViewMode('inspect')}
-			>
-				{t('zarr.inspect')}
-			</Button>
-			{#if hasMapVars}
+			<div class="ms-auto flex items-center gap-1">
 				<Button
-					variant={viewMode === 'map' ? 'secondary' : 'ghost'}
+					variant={viewMode === 'inspect' ? 'secondary' : 'ghost'}
 					size="sm"
 					class="h-7 px-2 text-xs"
-					onclick={() => setViewMode('map')}
+					onclick={() => setViewMode('inspect')}
 				>
-					{t('zarr.map')}
+					{t('zarr.inspect')}
 				</Button>
-			{/if}
+				{#if hasMapVars}
+					<Button
+						variant={viewMode === 'map' ? 'secondary' : 'ghost'}
+						size="sm"
+						class="h-7 px-2 text-xs"
+						onclick={() => setViewMode('map')}
+					>
+						{t('zarr.map')}
+					</Button>
+				{/if}
+			</div>
 		</div>
 	</div>
 
 	<!-- Content -->
-	<div class="flex min-h-0 flex-1 overflow-hidden">
-		{#if loading}
-			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-400">{t('zarr.loading')}</p>
-			</div>
-		{:else if error}
-			<div class="flex flex-1 items-center justify-center">
-				<p class="max-w-md text-center text-sm text-red-400">{error}</p>
-			</div>
-		{:else if viewMode === 'map' && hasMapVars}
-			{#key viewMode}
-				{#await import('./ZarrMapViewer.svelte') then ZarrMapViewer}
-					<ZarrMapViewer.default {tab} variables={mapVars} {spatialRefAttrs} {zarrVersion} />
-				{/await}
-			{/key}
-		{:else}
-			<!-- Inspect mode -->
-			<div class="flex flex-1 overflow-hidden">
-				<!-- Variable list sidebar -->
-				<div
-					class="w-64 shrink-0 overflow-auto border-e border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
-				>
-					{#if Object.keys(storeAttrs).length > 0}
-						<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+	{#if loading}
+		<div class="flex flex-1 items-center justify-center">
+			<p class="text-sm text-zinc-400">{t('zarr.loading')}</p>
+		</div>
+	{:else if error}
+		<div class="flex flex-1 items-center justify-center">
+			<p class="max-w-md text-center text-sm text-red-400">{error}</p>
+		</div>
+	{:else if viewMode === 'map' && hasMapVars}
+		{#key viewMode}
+			{#await import('./ZarrMapViewer.svelte') then ZarrMapViewer}
+				<ZarrMapViewer.default {tab} variables={mapVars} coords={coordVars} {spatialRefAttrs} {zarrVersion} />
+			{/await}
+		{/key}
+	{:else}
+		<!-- Inspect mode (resizable) -->
+		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+			<!-- Column 1: Variable list -->
+			<ResizablePane defaultSize={35} minSize={20}>
+				<div class="flex h-full flex-col">
+					<div
+						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+					>
+						{t('zarr.variables')}
+						<span class="ms-1 normal-case tracking-normal">({(variables.length + coordVars.length).toLocaleString()})</span>
+					</div>
+					<div class="flex-1 overflow-auto">
+						{#if Object.keys(storeAttrs).length > 0}
 							<button
-								class="w-full text-start text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+								class="flex w-full items-center gap-2 border-b border-zinc-200 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+								class:bg-zinc-100={selectedNode === null}
+								class:dark:bg-zinc-800={selectedNode === null}
 								onclick={() => (selectedNode = null)}
 							>
-								Store Attributes
+								<span class="truncate font-medium text-muted-foreground">Store Attributes</span>
 							</button>
-						</div>
-					{/if}
+						{/if}
 
-					{#if variables.length > 0}
-						<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-							<h3 class="text-xs font-medium text-zinc-400">Data Variables ({variables.length})</h3>
-						</div>
-						{#each variables as v}
-							<button
-								class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-								class:bg-blue-50={selectedNode?.name === v.name}
-								class:dark:bg-blue-950={selectedNode?.name === v.name}
-								onclick={() => (selectedNode = v)}
-							>
-								<span class="font-medium text-zinc-700 dark:text-zinc-300">{v.name}</span>
-								<span class="ms-auto text-zinc-400">{v.dtype}</span>
-							</button>
-						{/each}
-					{/if}
-
-					{#if coordVars.length > 0}
-						<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-							<h3 class="text-xs font-medium text-zinc-400">Coordinates ({coordVars.length})</h3>
-						</div>
-						{#each coordVars as v}
-							<button
-								class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-								class:bg-blue-50={selectedNode?.name === v.name}
-								class:dark:bg-blue-950={selectedNode?.name === v.name}
-								onclick={() => (selectedNode = v)}
-							>
-								<span class="text-zinc-500 dark:text-zinc-400">{v.name}</span>
-								<span class="ms-auto text-zinc-400">{v.dtype}</span>
-							</button>
-						{/each}
-					{/if}
-				</div>
-
-				<!-- Detail panel -->
-				<div class="flex-1 overflow-auto p-4">
-					{#if selectedNode}
-						<h2 class="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-							{selectedNode.name}
-						</h2>
-						<dl class="space-y-2 text-xs">
-							<dt class="font-medium text-zinc-500 dark:text-zinc-400">Shape</dt>
-							<dd class="font-mono text-zinc-700 dark:text-zinc-300">{formatShape(selectedNode.shape)}</dd>
-
-							{#if selectedNode.dims.length > 0}
-								<dt class="font-medium text-zinc-500 dark:text-zinc-400">Dimensions</dt>
-								<dd class="font-mono text-zinc-700 dark:text-zinc-300">
-									({selectedNode.dims.join(', ')})
-								</dd>
-							{/if}
-
-							<dt class="font-medium text-zinc-500 dark:text-zinc-400">Data Type</dt>
-							<dd class="font-mono text-zinc-700 dark:text-zinc-300">{selectedNode.dtype}</dd>
-
-							{#if selectedNode.chunks.length > 0}
-								<dt class="font-medium text-zinc-500 dark:text-zinc-400">Chunks</dt>
-								<dd class="font-mono text-zinc-700 dark:text-zinc-300">[{selectedNode.chunks.join(', ')}]</dd>
-							{/if}
-
-							{#if Object.keys(selectedNode.attributes).length > 0}
-								<dt class="mt-3 font-medium text-zinc-500 dark:text-zinc-400">Attributes</dt>
-								<dd>
-									<div class="mt-1 rounded border border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-700 dark:bg-zinc-800">
-										{#each Object.entries(selectedNode.attributes) as [key, value]}
-											<div class="flex gap-2 py-0.5">
-												<span class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">{key}:</span>
-												<span class="break-all text-zinc-700 dark:text-zinc-300">
-													{typeof value === 'string' ? value : JSON.stringify(value)}
-												</span>
-											</div>
-										{/each}
-									</div>
-								</dd>
-							{/if}
-						</dl>
-					{:else if Object.keys(storeAttrs).length > 0}
-						<h2 class="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-							Store Attributes
-						</h2>
-						<div class="rounded border border-zinc-200 bg-zinc-100 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-							{#each Object.entries(storeAttrs) as [key, value]}
-								<div class="flex gap-2 py-0.5">
-									<span class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">{key}:</span>
-									<span class="break-all text-zinc-700 dark:text-zinc-300">
-										{typeof value === 'string' ? value : JSON.stringify(value)}
-									</span>
-								</div>
+						{#if variables.length > 0}
+							<div class="border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+								<h3 class="text-[11px] font-medium text-muted-foreground">Data Variables ({variables.length})</h3>
+							</div>
+							{#each variables as v}
+								<button
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+									class:bg-zinc-100={selectedNode?.name === v.name}
+									class:dark:bg-zinc-800={selectedNode?.name === v.name}
+									onclick={() => (selectedNode = v)}
+								>
+									<span class="truncate font-medium text-zinc-700 dark:text-zinc-300">{v.name}</span>
+									<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">{v.dtype}</span>
+								</button>
 							{/each}
-						</div>
-					{:else}
-						<div class="flex h-full items-center justify-center">
-							<p class="text-sm text-zinc-400">Select a variable from the list</p>
-						</div>
-					{/if}
+						{/if}
+
+						{#if coordVars.length > 0}
+							<div class="border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+								<h3 class="text-[11px] font-medium text-muted-foreground">Coordinates ({coordVars.length})</h3>
+							</div>
+							{#each coordVars as v}
+								<button
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+									class:bg-zinc-100={selectedNode?.name === v.name}
+									class:dark:bg-zinc-800={selectedNode?.name === v.name}
+									onclick={() => (selectedNode = v)}
+								>
+									<span class="truncate text-zinc-500 dark:text-zinc-400">{v.name}</span>
+									<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">{v.dtype}</span>
+								</button>
+							{/each}
+						{/if}
+					</div>
 				</div>
-			</div>
-		{/if}
-	</div>
+			</ResizablePane>
+
+			<ResizableHandle />
+
+			<!-- Column 2: Variable details -->
+			<ResizablePane defaultSize={65} minSize={30}>
+				<div class="flex h-full flex-col">
+					{@render variableDetails()}
+				</div>
+			</ResizablePane>
+		</ResizablePaneGroup>
+	{/if}
 </div>

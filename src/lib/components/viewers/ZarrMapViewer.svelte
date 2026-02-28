@@ -5,6 +5,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
+import { extractZarrStoreUrl, inferDims } from '$lib/utils/zarr.js';
 import MapContainer from './map/MapContainer.svelte';
 
 interface ZarrVarMeta {
@@ -15,14 +16,27 @@ interface ZarrVarMeta {
 	attributes: Record<string, any>;
 }
 
+/** Enriched selector dimension with coordinate metadata. */
+interface SelectorDim {
+	name: string;
+	size: number;
+	dtype: string | null;
+	units: string | null;
+	longName: string | null;
+	min: string | null;
+	max: string | null;
+}
+
 let {
 	tab,
 	variables,
+	coords = [],
 	spatialRefAttrs,
 	zarrVersion = null
 }: {
 	tab: Tab;
 	variables: ZarrVarMeta[];
+	coords?: ZarrVarMeta[];
 	spatialRefAttrs: Record<string, any> | null;
 	zarrVersion?: number | null;
 } = $props();
@@ -43,9 +57,12 @@ $effect(() => {
 	}
 });
 
+// Build coord lookup: dimension name → coordinate variable metadata
+const coordByName = $derived(new Map(coords.map((c) => [c.name, c])));
+
 // Identify non-spatial selector dimensions for the selected variable
 const selectedMeta = $derived(variables.find((v) => v.name === selectedVar));
-const selectorDims = $derived(getSelectorDims(selectedMeta));
+const selectorDims = $derived(getSelectorDims(selectedMeta, coordByName));
 
 // Dimension slider state
 let selectorValues = $state<Record<string, number>>({});
@@ -104,17 +121,48 @@ function buildProj4FromCrsWkt(crsWkt: string | undefined): string | null {
 	}
 }
 
-function getSelectorDims(meta: ZarrVarMeta | undefined): { name: string; size: number }[] {
+function getSelectorDims(
+	meta: ZarrVarMeta | undefined,
+	coordMap: Map<string, ZarrVarMeta>
+): SelectorDim[] {
 	if (!meta) return [];
 	const spatialNames = ['x', 'y', 'lat', 'lon', 'latitude', 'longitude'];
-	const dims: { name: string; size: number }[] = [];
-	for (let i = 0; i < meta.dims.length; i++) {
-		const d = meta.dims[i];
-		if (!spatialNames.includes(d.toLowerCase())) {
-			dims.push({ name: d, size: meta.shape[i] });
+	// Use real dim names when available, fall back to inferDims
+	const dimNames = meta.dims.length > 0 ? meta.dims : inferDims(meta.name, meta.shape);
+	const dims: SelectorDim[] = [];
+	for (let i = 0; i < dimNames.length; i++) {
+		const d = dimNames[i];
+		if (spatialNames.includes(d.toLowerCase())) continue;
+
+		const coord = coordMap.get(d);
+		const attrs = coord?.attributes ?? {};
+
+		// Extract min/max from statistics_approximate if available
+		let min: string | null = null;
+		let max: string | null = null;
+		const stats = attrs.statistics_approximate ?? attrs.statistics;
+		if (stats && typeof stats === 'object') {
+			if (stats.min != null) min = String(stats.min);
+			if (stats.max != null) max = String(stats.max);
 		}
+
+		dims.push({
+			name: d,
+			size: meta.shape[i],
+			dtype: coord?.dtype ?? null,
+			units: attrs.units ?? null,
+			longName: attrs.long_name ?? null,
+			min,
+			max
+		});
 	}
 	return dims;
+}
+
+/** Format a dimension label: show long_name or name, with dtype. */
+function dimLabel(dim: SelectorDim): string {
+	const label = dim.longName ?? dim.name;
+	return dim.dtype ? `${label} (${dim.dtype})` : label;
 }
 
 // Initialize selector values when variable changes
@@ -183,9 +231,8 @@ async function addZarrLayer(map: maplibregl.Map) {
 }
 
 function buildStoreUrl(): string {
-	const url = buildHttpsUrl(tab);
-	// Strip zarr.json suffix and trailing slashes
-	return url.replace(/\/zarr\.json$/, '').replace(/\/+$/, '');
+	const rawUrl = buildHttpsUrl(tab).replace(/\/+$/, '');
+	return extractZarrStoreUrl(rawUrl) ?? rawUrl;
 }
 
 // Re-render when selector changes
@@ -231,7 +278,7 @@ onDestroy(cleanup);
 <div class="flex h-full w-full flex-col overflow-hidden">
 	<!-- Controls bar -->
 	<div
-		class="flex items-center gap-2 border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800"
+		class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800"
 	>
 		<label class="flex items-center gap-1 text-xs text-zinc-400">
 			{t('map.variable')}
@@ -247,17 +294,26 @@ onDestroy(cleanup);
 		</label>
 
 		{#each selectorDims as dim}
-			<label class="flex items-center gap-1 text-xs text-zinc-400">
-				{dim.name}:
+			<label class="flex items-center gap-1 text-xs text-zinc-400" title={dimLabel(dim)}>
+				{dim.name}{#if dim.units}&nbsp;<span class="text-zinc-500">({dim.units})</span>{/if}:
+				{#if dim.min != null}
+					<span class="text-[10px] tabular-nums text-zinc-500">{dim.min}</span>
+				{/if}
 				<input
 					type="range"
 					min="0"
 					max={dim.size - 1}
 					bind:value={selectorValues[dim.name]}
 					onchange={updateSelector}
-					class="h-1 w-16"
+					class="h-1 w-20"
 				/>
-				<span class="w-6 text-end text-zinc-500">{selectorValues[dim.name] ?? 0}</span>
+				{#if dim.max != null}
+					<span class="text-[10px] tabular-nums text-zinc-500">{dim.max}</span>
+				{/if}
+				<span class="w-8 text-end tabular-nums text-zinc-500">{selectorValues[dim.name] ?? 0}<span class="text-zinc-600">/{dim.size - 1}</span></span>
+				{#if dim.dtype}
+					<span class="text-[10px] text-zinc-500/70">{dim.dtype}</span>
+				{/if}
 			</label>
 		{/each}
 

@@ -1094,6 +1094,11 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
  * Extension may be with or without leading dot: ".parquet" or "parquet".
  */
 export function getFileTypeInfo(extension: string, isDir = false): FileTypeInfo {
+	if (isDir && extension) {
+		const ext = extension.startsWith('.') ? extension.toLowerCase() : `.${extension.toLowerCase()}`;
+		const found = EXTENSIONS[ext];
+		if (found) return found;
+	}
 	if (isDir) return FOLDER_INFO;
 	const ext = extension.startsWith('.') ? extension.toLowerCase() : `.${extension.toLowerCase()}`;
 	return EXTENSIONS[ext] ?? DEFAULT_INFO;

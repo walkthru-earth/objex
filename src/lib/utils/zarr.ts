@@ -5,6 +5,50 @@
  * plus a zarrita fallback for non-consolidated stores.
  */
 
+/** Zarr store marker files — presence of any indicates a Zarr store. */
+export const ZARR_MARKER_FILES = new Set([
+	'zarr.json',
+	'.zmetadata',
+	'.zgroup',
+	'.zarray',
+	'.zattrs'
+]);
+
+/** Zarr marker file suffixes used in URLs (with leading slash). */
+const ZARR_MARKER_SUFFIXES = ['/zarr.json', '/.zmetadata', '/.zgroup', '/.zarray', '/.zattrs'];
+
+/**
+ * Detect whether a set of file names contains Zarr marker files.
+ * Returns the detected version (2 or 3) or null if not detected.
+ */
+export function detectZarrMarkers(fileNames: Iterable<string>): {
+	detected: boolean;
+	version: 2 | 3 | null;
+} {
+	let hasV3 = false;
+	let hasV2 = false;
+	for (const name of fileNames) {
+		if (name === 'zarr.json') hasV3 = true;
+		else if (ZARR_MARKER_FILES.has(name)) hasV2 = true;
+	}
+	if (hasV3) return { detected: true, version: 3 };
+	if (hasV2) return { detected: true, version: 2 };
+	return { detected: false, version: null };
+}
+
+/**
+ * If a URL points to a Zarr marker file, strip the marker suffix and return the store URL.
+ * Returns null if the URL doesn't end with a known marker suffix.
+ */
+export function extractZarrStoreUrl(url: string): string | null {
+	for (const suffix of ZARR_MARKER_SUFFIXES) {
+		if (url.endsWith(suffix)) {
+			return url.slice(0, -suffix.length);
+		}
+	}
+	return null;
+}
+
 export interface VarMeta {
 	name: string;
 	shape: number[];
@@ -127,11 +171,12 @@ export function parseV2Consolidated(data: any): Omit<ZarrMetadata, 'zarrVersion'
 		const zarray = meta[key];
 		const varAttrs = meta[`${name}/.zattrs`] ?? {};
 
+		const shape = zarray.shape ?? [];
 		const v: VarMeta = {
 			name,
-			shape: zarray.shape ?? [],
+			shape,
 			dtype: zarray.dtype ?? 'unknown',
-			dims: varAttrs._ARRAY_DIMENSIONS ?? [],
+			dims: varAttrs._ARRAY_DIMENSIONS ?? inferDims(name, shape),
 			chunks: zarray.chunks ?? [],
 			attributes: varAttrs
 		};
@@ -153,10 +198,13 @@ export function parseV2Consolidated(data: any): Omit<ZarrMetadata, 'zarrVersion'
  * Fetch consolidated metadata from a Zarr store URL.
  * Tries v3 (zarr.json) first, then v2 (.zmetadata).
  */
-export async function fetchConsolidated(storeUrl: string): Promise<ZarrMetadata | null> {
+export async function fetchConsolidated(
+	storeUrl: string,
+	signal?: AbortSignal
+): Promise<ZarrMetadata | null> {
 	// Try Zarr v3 zarr.json
 	try {
-		const res = await fetch(`${storeUrl}/zarr.json`);
+		const res = await fetch(`${storeUrl}/zarr.json`, { signal });
 		if (res.ok) {
 			const data = await res.json();
 			if (data.zarr_format === 3) {
@@ -173,7 +221,7 @@ export async function fetchConsolidated(storeUrl: string): Promise<ZarrMetadata 
 
 	// Try Zarr v2 .zmetadata
 	try {
-		const res = await fetch(`${storeUrl}/.zmetadata`);
+		const res = await fetch(`${storeUrl}/.zmetadata`, { signal });
 		if (res.ok) {
 			const data = await res.json();
 			if (data.metadata) {

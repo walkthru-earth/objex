@@ -1,12 +1,14 @@
 <script lang="ts">
-import { ArrowDown, ArrowUp, ArrowUpDown, FolderOpen, Loader2 } from '@lucide/svelte';
+import { ArrowDown, ArrowUp, ArrowUpDown, FolderOpen, Layers, Loader2 } from '@lucide/svelte';
 import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
 import { Button } from '$lib/components/ui/button/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { safeLock } from '$lib/stores/safelock.svelte.js';
+import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { FileEntry } from '$lib/types.js';
+import { detectZarrMarkers } from '$lib/utils/zarr.js';
 import Breadcrumb from './Breadcrumb.svelte';
 import CreateFolderDialog from './CreateFolderDialog.svelte';
 import DeleteConfirmDialog from './DeleteConfirmDialog.svelte';
@@ -30,6 +32,22 @@ let renameDialogOpen = $state(false);
 let renameTarget = $state<FileEntry | null>(null);
 
 let showWriteActions = $derived(browser.canWrite && !safeLock.locked);
+
+const zarrDetection = $derived(detectZarrMarkers(browser.entries.map((e: FileEntry) => e.name)));
+
+function openAsZarr() {
+	if (!browser.activeConnection) return;
+	const prefix = browser.currentPrefix.replace(/\/+$/, '');
+	const name = prefix.split('/').pop() || browser.activeConnection.bucket;
+	tabs.open({
+		id: `${browser.activeConnection.id}:${prefix}/`,
+		name,
+		path: `${prefix}/`,
+		source: 'remote',
+		connectionId: browser.activeConnection.id,
+		extension: 'zarr'
+	});
+}
 
 const sortedAndFilteredEntries = $derived.by(() => {
 	let result = [...browser.entries];
@@ -171,6 +189,24 @@ function handleRename(entry: FileEntry) {
 			{t('fileBrowser.modified')}
 		</button>
 	</div>
+
+	<!-- Zarr detection banner -->
+	{#if zarrDetection.detected}
+		<div class="border-border flex items-center gap-2 border-b bg-purple-50 px-3 py-1.5 dark:bg-purple-950/30">
+			<Layers class="size-3.5 shrink-0 text-purple-500" />
+			<span class="flex-1 text-xs text-purple-700 dark:text-purple-300">
+				{t('fileBrowser.zarrDetected', { version: String(zarrDetection.version ?? '?') })}
+			</span>
+			<Button
+				variant="outline"
+				size="sm"
+				class="h-6 gap-1 px-2 text-[11px]"
+				onclick={openAsZarr}
+			>
+				{t('fileBrowser.openAsZarr')}
+			</Button>
+		</div>
+	{/if}
 
 	<!-- File list -->
 	<div class="relative min-h-0 flex-1">

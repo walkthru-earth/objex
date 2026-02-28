@@ -30,12 +30,29 @@ import {
 	syncUrlParam,
 	updateUrlView
 } from '$lib/utils/url-state.js';
+import { extractZarrStoreUrl } from '$lib/utils/zarr.js';
 
 const initialFilePath = getUrlPrefix();
 
 function openUrlTab(rawUrl: string) {
 	// Strip trailing slashes so folder-based formats (Zarr) resolve correctly
 	const url = rawUrl.replace(/\/+$/, '');
+
+	// Check if URL points to a Zarr marker file — open parent as Zarr store
+	const zarrStore = extractZarrStoreUrl(url);
+	if (zarrStore) {
+		const storeName = zarrStore.split('/').pop()?.split('?')[0] || 'zarr';
+		const tabId = `url:${zarrStore}`;
+		tabs.open({
+			id: tabId,
+			name: storeName,
+			path: zarrStore,
+			source: 'url',
+			extension: 'zarr'
+		});
+		return;
+	}
+
 	const fileName = url.split('/').pop()?.split('?')[0] || '';
 	const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
 	if (!ext) return;

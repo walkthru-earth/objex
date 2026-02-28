@@ -110,6 +110,8 @@ export const en: Record<string, string> = {
 	'fileBrowser.modified': 'Modified',
 	'fileBrowser.noMatch': 'No files matching "{query}"',
 	'fileBrowser.empty': 'This folder is empty',
+	'fileBrowser.zarrDetected': 'Zarr v{version} store detected',
+	'fileBrowser.openAsZarr': 'Open as Zarr',
 
 	// Search Bar
 	'searchBar.label': 'Filter files',
