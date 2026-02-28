@@ -25,6 +25,9 @@ interface SelectorDim {
 	longName: string | null;
 	min: string | null;
 	max: string | null;
+	isDatetime: boolean;
+	minDate: Date | null;
+	maxDate: Date | null;
 }
 
 let {
@@ -121,18 +124,85 @@ function buildProj4FromCrsWkt(crsWkt: string | undefined): string | null {
 	}
 }
 
+const DATETIME_DIM_NAMES = new Set([
+	'time',
+	'init_time',
+	'lead_time',
+	'valid_time',
+	'date',
+	'datetime'
+]);
+
+/** Detect temporal dimension via CF-convention signals. */
+function isDatetimeDim(name: string, attrs: Record<string, any>): boolean {
+	if (attrs.axis === 'T') return true;
+	if (attrs.standard_name === 'time') return true;
+	if (typeof attrs.units === 'string' && /\bsince\b/i.test(attrs.units)) return true;
+	if (DATETIME_DIM_NAMES.has(name.toLowerCase())) return true;
+	return false;
+}
+
+/** Parse a date string, treating "present"/"now" as today's date. */
+function parseDateOrSentinel(value: string): Date | null {
+	const lower = value.trim().toLowerCase();
+	if (lower === 'present' || lower === 'now') return new Date();
+	const d = new Date(value);
+	return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Linear interpolation: index → estimated "YYYY-MM-DD" string. */
+function indexToDateStr(index: number, dim: SelectorDim): string | null {
+	if (!dim.minDate || !dim.maxDate || dim.size < 2) return null;
+	const t = index / (dim.size - 1);
+	const ms = dim.minDate.getTime() + t * (dim.maxDate.getTime() - dim.minDate.getTime());
+	return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Inverse: date string → nearest integer index, clamped to [0, size-1]. */
+function dateToIndex(dateStr: string, dim: SelectorDim): number {
+	if (!dim.minDate || !dim.maxDate || dim.size < 2) return 0;
+	const range = dim.maxDate.getTime() - dim.minDate.getTime();
+	if (range === 0) return 0;
+	const target = new Date(dateStr).getTime();
+	const t = (target - dim.minDate.getTime()) / range;
+	return Math.round(Math.max(0, Math.min(dim.size - 1, t * (dim.size - 1))));
+}
+
+/** Spatial dimension name aliases → canonical ZarrLayer keys. */
+const SPATIAL_ALIASES: Record<string, 'lat' | 'lon'> = {
+	x: 'lon',
+	y: 'lat',
+	lat: 'lat',
+	lon: 'lon',
+	latitude: 'lat',
+	longitude: 'lon'
+};
+
+/** Detect spatial dimension mapping for @carbonplan/zarr-layer. */
+function detectSpatialDims(meta: ZarrVarMeta | undefined): { lat: string; lon: string } | null {
+	if (!meta) return null;
+	const dimNames = meta.dims.length > 0 ? meta.dims : inferDims(meta.name, meta.shape);
+	let lat: string | null = null;
+	let lon: string | null = null;
+	for (const d of dimNames) {
+		const role = SPATIAL_ALIASES[d.toLowerCase()];
+		if (role === 'lat' && !lat) lat = d;
+		else if (role === 'lon' && !lon) lon = d;
+	}
+	return lat && lon ? { lat, lon } : null;
+}
+
 function getSelectorDims(
 	meta: ZarrVarMeta | undefined,
 	coordMap: Map<string, ZarrVarMeta>
 ): SelectorDim[] {
 	if (!meta) return [];
-	const spatialNames = ['x', 'y', 'lat', 'lon', 'latitude', 'longitude'];
 	// Use real dim names when available, fall back to inferDims
 	const dimNames = meta.dims.length > 0 ? meta.dims : inferDims(meta.name, meta.shape);
 	const dims: SelectorDim[] = [];
 	for (let i = 0; i < dimNames.length; i++) {
 		const d = dimNames[i];
-		if (spatialNames.includes(d.toLowerCase())) continue;
+		if (SPATIAL_ALIASES[d.toLowerCase()]) continue;
 
 		const coord = coordMap.get(d);
 		const attrs = coord?.attributes ?? {};
@@ -146,6 +216,19 @@ function getSelectorDims(
 			if (stats.max != null) max = String(stats.max);
 		}
 
+		// Detect datetime dimension and parse date range
+		const datetime = isDatetimeDim(d, attrs);
+		let minDate: Date | null = null;
+		let maxDate: Date | null = null;
+		if (datetime && min != null && max != null) {
+			const dMin = parseDateOrSentinel(min);
+			const dMax = parseDateOrSentinel(max);
+			if (dMin && dMax) {
+				minDate = dMin;
+				maxDate = dMax;
+			}
+		}
+
 		dims.push({
 			name: d,
 			size: meta.shape[i],
@@ -153,7 +236,10 @@ function getSelectorDims(
 			units: attrs.units ?? null,
 			longName: attrs.long_name ?? null,
 			min,
-			max
+			max,
+			isDatetime: datetime,
+			minDate,
+			maxDate
 		});
 	}
 	return dims;
@@ -171,7 +257,7 @@ $effect(() => {
 	const prev = untrack(() => selectorValues);
 	const newVals: Record<string, number> = {};
 	for (const d of dims) {
-		newVals[d.name] = prev[d.name] ?? 0;
+		newVals[d.name] = prev[d.name] ?? (d.isDatetime ? d.size - 1 : 0);
 	}
 	selectorValues = newVals;
 });
@@ -194,9 +280,11 @@ async function addZarrLayer(map: maplibregl.Map) {
 		const { ZarrLayer } = await import('@carbonplan/zarr-layer');
 
 		const storeUrl = buildStoreUrl();
+		// Build selector from selectorDims (datetime dims default to latest)
 		const selector: Record<string, any> = {};
-		for (const [dim, val] of Object.entries(selectorValues)) {
-			selector[dim] = { selected: val, type: 'index' };
+		for (const d of selectorDims) {
+			const fallback = d.isDatetime ? d.size - 1 : 0;
+			selector[d.name] = { selected: selectorValues[d.name] ?? fallback, type: 'index' };
 		}
 
 		const opts: any = {
@@ -216,10 +304,13 @@ async function addZarrLayer(map: maplibregl.Map) {
 			}
 		};
 
-		// Add projection info if available
+		// Map spatial dimension names for @carbonplan/zarr-layer
+		const spatial = detectSpatialDims(selectedMeta);
 		if (proj4String) {
 			opts.proj4 = proj4String;
-			opts.spatialDimensions = { lat: 'y', lon: 'x' };
+			opts.spatialDimensions = spatial ? spatial : { lat: 'y', lon: 'x' };
+		} else if (spatial) {
+			opts.spatialDimensions = spatial;
 		}
 
 		zarrLayer = new ZarrLayer(opts);
@@ -294,25 +385,45 @@ onDestroy(cleanup);
 		</label>
 
 		{#each selectorDims as dim}
-			<label class="flex items-center gap-1 text-xs text-zinc-400" title={dimLabel(dim)}>
-				{dim.name}{#if dim.units}&nbsp;<span class="text-zinc-500">({dim.units})</span>{/if}:
-				{#if dim.min != null}
-					<span class="text-[10px] tabular-nums text-zinc-500">{dim.min}</span>
-				{/if}
+			<label
+				class="flex shrink-0 items-center gap-1.5 rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-400 dark:border-zinc-700"
+				title={dimLabel(dim)}
+			>
+				<span class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">{dim.name}</span>
 				<input
 					type="range"
 					min="0"
 					max={dim.size - 1}
-					bind:value={selectorValues[dim.name]}
+					value={selectorValues[dim.name] ?? 0}
+					oninput={(e) => {
+						selectorValues[dim.name] = +e.currentTarget.value;
+					}}
 					onchange={updateSelector}
-					class="h-1 w-20"
+					class="h-1 w-16"
 				/>
-				{#if dim.max != null}
-					<span class="text-[10px] tabular-nums text-zinc-500">{dim.max}</span>
-				{/if}
-				<span class="w-8 text-end tabular-nums text-zinc-500">{selectorValues[dim.name] ?? 0}<span class="text-zinc-600">/{dim.size - 1}</span></span>
-				{#if dim.dtype}
-					<span class="text-[10px] text-zinc-500/70">{dim.dtype}</span>
+				{#if dim.isDatetime && dim.minDate && dim.maxDate}
+					<span class="shrink-0 tabular-nums text-zinc-500">
+						{indexToDateStr(selectorValues[dim.name] ?? 0, dim) ?? (selectorValues[dim.name] ?? 0)}
+					</span>
+					<input
+						type="date"
+						min={dim.minDate.toISOString().slice(0, 10)}
+						max={dim.maxDate.toISOString().slice(0, 10)}
+						value={indexToDateStr(selectorValues[dim.name] ?? 0, dim) ?? ''}
+						onchange={(e) => {
+							const val = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+							if (val) {
+								selectorValues[dim.name] = dateToIndex(val, dim);
+								updateSelector();
+							}
+						}}
+						class="h-5 rounded border border-zinc-300 bg-white px-1 text-[10px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+					/>
+				{:else}
+					<span class="shrink-0 tabular-nums text-zinc-500">{selectorValues[dim.name] ?? 0}<span class="text-zinc-500/60">/{dim.size - 1}</span></span>
+					{#if dim.dtype}
+						<span class="shrink-0 text-[10px] text-zinc-400/70">{dim.dtype}</span>
+					{/if}
 				{/if}
 			</label>
 		{/each}

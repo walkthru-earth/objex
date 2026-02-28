@@ -127,7 +127,8 @@ export function parseV3Consolidated(data: any): Omit<ZarrMetadata, 'zarrVersion'
 			name,
 			shape: info.shape,
 			dtype: info.data_type ?? 'unknown',
-			dims: info.attributes?._ARRAY_DIMENSIONS ?? inferDims(name, info.shape),
+			dims:
+				info.dimension_names ?? info.attributes?._ARRAY_DIMENSIONS ?? inferDims(name, info.shape),
 			chunks: info.chunk_grid?.configuration?.chunk_shape ?? [],
 			attributes: info.attributes ?? {}
 		};
