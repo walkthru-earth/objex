@@ -1,5 +1,6 @@
 <script lang="ts">
 import type maplibregl from 'maplibre-gl';
+import maplibreModule from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
@@ -28,6 +29,8 @@ interface SelectorDim {
 	isDatetime: boolean;
 	minDate: Date | null;
 	maxDate: Date | null;
+	/** True when estimated step size < 1 day (e.g. 6-hourly forecasts). */
+	subDaily: boolean;
 }
 
 let {
@@ -49,6 +52,7 @@ let error = $state<string | null>(null);
 let selectedVar = $state('');
 let zarrLayer: any = null;
 let mapRef: maplibregl.Map | null = null;
+let inspectPopup: maplibregl.Popup | null = null;
 
 // Extract proj4 from spatial_ref if available
 const proj4String = $derived(extractProj4(spatialRefAttrs));
@@ -124,19 +128,21 @@ function buildProj4FromCrsWkt(crsWkt: string | undefined): string | null {
 	}
 }
 
-const DATETIME_DIM_NAMES = new Set([
-	'time',
-	'init_time',
-	'lead_time',
-	'valid_time',
-	'date',
-	'datetime'
-]);
+const DATETIME_DIM_NAMES = new Set(['time', 'init_time', 'valid_time', 'date', 'datetime']);
+
+/** Detect timedelta/duration dimension (forecast lead time, etc.). */
+function isTimedeltaDim(attrs: Record<string, any>): boolean {
+	if (attrs.standard_name === 'forecast_period') return true;
+	if (typeof attrs.dtype === 'string' && attrs.dtype.includes('timedelta')) return true;
+	return false;
+}
 
 /** Detect temporal dimension via CF-convention signals. */
 function isDatetimeDim(name: string, attrs: Record<string, any>): boolean {
+	if (isTimedeltaDim(attrs)) return false;
 	if (attrs.axis === 'T') return true;
-	if (attrs.standard_name === 'time') return true;
+	if (attrs.standard_name === 'time' || attrs.standard_name === 'forecast_reference_time')
+		return true;
 	if (typeof attrs.units === 'string' && /\bsince\b/i.test(attrs.units)) return true;
 	if (DATETIME_DIM_NAMES.has(name.toLowerCase())) return true;
 	return false;
@@ -150,12 +156,14 @@ function parseDateOrSentinel(value: string): Date | null {
 	return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Linear interpolation: index → estimated "YYYY-MM-DD" string. */
+/** Linear interpolation: index → estimated date/datetime string.
+ *  Sub-daily dims return "YYYY-MM-DDTHH:mm", daily+ return "YYYY-MM-DD". */
 function indexToDateStr(index: number, dim: SelectorDim): string | null {
 	if (!dim.minDate || !dim.maxDate || dim.size < 2) return null;
 	const t = index / (dim.size - 1);
 	const ms = dim.minDate.getTime() + t * (dim.maxDate.getTime() - dim.minDate.getTime());
-	return new Date(ms).toISOString().slice(0, 10);
+	const iso = new Date(ms).toISOString();
+	return dim.subDaily ? iso.slice(0, 16) : iso.slice(0, 10);
 }
 
 /** Inverse: date string → nearest integer index, clamped to [0, size-1]. */
@@ -229,6 +237,13 @@ function getSelectorDims(
 			}
 		}
 
+		// Sub-daily: estimated step < 1 day (e.g. 6-hourly forecasts)
+		let subDaily = false;
+		if (minDate && maxDate && meta.shape[i] >= 2) {
+			const stepMs = (maxDate.getTime() - minDate.getTime()) / (meta.shape[i] - 1);
+			subDaily = stepMs < 86_400_000;
+		}
+
 		dims.push({
 			name: d,
 			size: meta.shape[i],
@@ -239,7 +254,8 @@ function getSelectorDims(
 			max,
 			isDatetime: datetime,
 			minDate,
-			maxDate
+			maxDate,
+			subDaily
 		});
 	}
 	return dims;
@@ -262,9 +278,77 @@ $effect(() => {
 	selectorValues = newVals;
 });
 
+function getOrCreatePopup(): maplibregl.Popup {
+	if (!inspectPopup) {
+		inspectPopup = new maplibreModule.Popup({
+			closeButton: true,
+			closeOnClick: false,
+			maxWidth: '240px',
+			className: 'zarr-inspect-popup'
+		});
+	}
+	return inspectPopup;
+}
+
+function formatPopupHtml(value: number | null | undefined, lngLat: maplibregl.LngLat): string {
+	const varName = selectedVar;
+	const units = selectedMeta?.attributes?.units;
+	const noData = value == null || Number.isNaN(value);
+
+	let valueStr: string;
+	if (noData) {
+		valueStr = t('map.noValue');
+	} else {
+		valueStr = Number.isInteger(value) ? String(value) : value.toPrecision(4);
+	}
+
+	// Hide units when no data, or when units is "1" (CF dimensionless)
+	const showUnits = !noData && units && units !== '1';
+
+	const lat = lngLat.lat.toFixed(4);
+	const lon = lngLat.lng.toFixed(4);
+
+	return `<div class="text-xs space-y-0.5">
+		<div class="font-medium text-zinc-300">${varName}</div>
+		<div>${valueStr}${showUnits ? ` <span class="text-zinc-500">${units}</span>` : ''}</div>
+		<div class="text-zinc-500">${lat}, ${lon}</div>
+	</div>`;
+}
+
+async function handleMapClick(e: maplibregl.MapMouseEvent) {
+	if (!zarrLayer) return;
+
+	const popup = getOrCreatePopup();
+	popup
+		.setLngLat(e.lngLat)
+		.setHTML(`<span class="text-xs">${t('map.loadingZarr')}</span>`)
+		.addTo(mapRef!);
+
+	try {
+		const result = await zarrLayer.queryData({
+			type: 'Point',
+			coordinates: [e.lngLat.lng, e.lngLat.lat]
+		});
+
+		// DEBUG: inspect queryData result shape
+		console.log('[zarr-inspect] result:', result);
+		console.log('[zarr-inspect] keys:', result ? Object.keys(result) : 'null');
+		console.log('[zarr-inspect] selectedVar:', selectedVar);
+		const raw = result?.[selectedVar];
+		console.log('[zarr-inspect] raw:', raw, 'type:', typeof raw, 'isArray:', Array.isArray(raw));
+		// queryData may return Array, TypedArray (Float32Array), or scalar
+		const value = raw != null && typeof raw === 'object' && 'length' in raw ? raw[0] : raw;
+		console.log('[zarr-inspect] value:', value);
+		popup.setHTML(formatPopupHtml(value, e.lngLat));
+	} catch {
+		popup.setHTML(`<span class="text-xs">${t('map.noValue')}</span>`);
+	}
+}
+
 async function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
 	await addZarrLayer(map);
+	map.on('click', handleMapClick);
 }
 
 async function addZarrLayer(map: maplibregl.Map) {
@@ -329,6 +413,7 @@ function buildStoreUrl(): string {
 // Re-render when selector changes
 async function updateSelector() {
 	if (!zarrLayer) return;
+	inspectPopup?.remove();
 	const selector: Record<string, any> = {};
 	for (const [dim, val] of Object.entries(selectorValues)) {
 		selector[dim] = { selected: val, type: 'index' };
@@ -343,11 +428,15 @@ async function updateSelector() {
 // Re-render when variable changes
 async function changeVariable() {
 	if (!mapRef) return;
+	inspectPopup?.remove();
 	await addZarrLayer(mapRef);
 }
 
 function cleanup() {
+	inspectPopup?.remove();
+	inspectPopup = null;
 	try {
+		mapRef?.off('click', handleMapClick);
 		if (zarrLayer && mapRef?.getLayer('zarr-data')) {
 			mapRef.removeLayer('zarr-data');
 		}
@@ -402,14 +491,15 @@ onDestroy(cleanup);
 					class="h-1 w-16"
 				/>
 				{#if dim.isDatetime && dim.minDate && dim.maxDate}
+					{@const dateVal = indexToDateStr(selectorValues[dim.name] ?? 0, dim)}
 					<span class="shrink-0 tabular-nums text-zinc-500">
-						{indexToDateStr(selectorValues[dim.name] ?? 0, dim) ?? (selectorValues[dim.name] ?? 0)}
+						{dateVal ? (dim.subDaily ? dateVal.replace('T', ' ') : dateVal) : (selectorValues[dim.name] ?? 0)}
 					</span>
 					<input
-						type="date"
-						min={dim.minDate.toISOString().slice(0, 10)}
-						max={dim.maxDate.toISOString().slice(0, 10)}
-						value={indexToDateStr(selectorValues[dim.name] ?? 0, dim) ?? ''}
+						type={dim.subDaily ? 'datetime-local' : 'date'}
+						min={dim.minDate.toISOString().slice(0, dim.subDaily ? 16 : 10)}
+						max={dim.maxDate.toISOString().slice(0, dim.subDaily ? 16 : 10)}
+						value={dateVal ?? ''}
 						onchange={(e) => {
 							const val = /** @type {HTMLInputElement} */ (e.currentTarget).value;
 							if (val) {
@@ -453,3 +543,26 @@ onDestroy(cleanup);
 		{/if}
 	</div>
 </div>
+
+<style>
+	:global(.zarr-inspect-popup .maplibregl-popup-content) {
+		background: rgba(24, 24, 27, 0.92);
+		color: #e4e4e7;
+		border-radius: 6px;
+		padding: 6px 8px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(63, 63, 70, 0.5);
+	}
+	:global(.zarr-inspect-popup .maplibregl-popup-tip) {
+		border-top-color: rgba(24, 24, 27, 0.92);
+	}
+	:global(.zarr-inspect-popup .maplibregl-popup-close-button) {
+		color: #a1a1aa;
+		font-size: 14px;
+		padding: 2px 4px;
+	}
+	:global(.zarr-inspect-popup .maplibregl-popup-close-button:hover) {
+		color: #e4e4e7;
+		background: transparent;
+	}
+</style>

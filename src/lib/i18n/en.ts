@@ -353,6 +353,7 @@ export const en: Record<string, string> = {
 	'map.layersPlural': 'layers',
 	'map.tiles': 'tiles',
 	'map.variable': 'Variable:',
+	'map.noValue': 'No data',
 
 	// Map info panel labels
 	'mapInfo.name': 'Name',

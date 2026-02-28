@@ -353,6 +353,7 @@ export const ar: Record<string, string> = {
 	'map.layersPlural': 'طبقات',
 	'map.tiles': 'بلاطات',
 	'map.variable': 'المتغير:',
+	'map.noValue': 'لا توجد قيمة',
 
 	// Map info panel labels
 	'mapInfo.name': 'الاسم',
