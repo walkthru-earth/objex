@@ -146,9 +146,6 @@ importers:
       sql-formatter:
         specifier: ^15.7.2
         version: 15.7.2
-      svelte-chartjs:
-        specifier: ^3.1.5
-        version: 3.1.5(chart.js@4.5.1)(svelte@5.53.6)
       yaml:
         specifier: ^2.8.2
         version: 2.8.2
@@ -3957,12 +3954,6 @@ packages:
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
-
-  svelte-chartjs@3.1.5:
-    resolution: {integrity: sha512-ka2zh7v5FiwfAX1oMflZ0HkNkgjHjFqANgRyC+vNYXfxtx2ku68Zo+2KgbKeBH2nS1ThDqkIACPzGxy4T0UaoA==}
-    peerDependencies:
-      chart.js: ^3.5.0 || ^4.0.0
-      svelte: ^4.0.0
 
   svelte-check@4.4.4:
     resolution: {integrity: sha512-F1pGqXc710Oi/wTI4d/x7d6lgPwwfx1U6w3Q35n4xsC2e8C/yN2sM1+mWxjlMcpAfWucjlq4vPi+P4FZ8a14sQ==}
@@ -8822,11 +8813,6 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
-
-  svelte-chartjs@3.1.5(chart.js@4.5.1)(svelte@5.53.6):
-    dependencies:
-      chart.js: 4.5.1
-      svelte: 5.53.6
 
   svelte-check@4.4.4(picomatch@4.0.3)(svelte@5.53.6)(typescript@5.9.3):
     dependencies:
