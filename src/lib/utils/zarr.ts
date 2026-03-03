@@ -407,7 +407,8 @@ export async function fetchHierarchy(
 				if (data.consolidated_metadata) {
 					return buildV3Tree(data);
 				}
-				return null;
+				// V3 without consolidated metadata — discover children
+				return discoverV3Children(storeUrl, data, signal);
 			}
 		}
 	} catch {
@@ -429,6 +430,80 @@ export async function fetchHierarchy(
 
 	// Fallback: zarrita probe
 	return probeHierarchy(storeUrl, storeName);
+}
+
+/**
+ * Discover children of a v3 store without consolidated metadata.
+ * Probes child paths from zarr.json attributes (e.g. multiscales convention)
+ * and by fetching individual zarr.json files for discovered paths.
+ */
+async function discoverV3Children(
+	storeUrl: string,
+	rootData: any,
+	signal?: AbortSignal
+): Promise<ZarrHierarchy> {
+	const rootAttrs = rootData.attributes ?? {};
+	const root = makeNode('/', 'group', rootAttrs);
+	let totalNodes = 1;
+
+	// Collect candidate child names from conventions and common patterns
+	const candidates = new Set<string>();
+
+	// Multiscales convention: layout[].asset lists child array names
+	const multiscales = rootAttrs.multiscales;
+	if (multiscales?.layout && Array.isArray(multiscales.layout)) {
+		for (const entry of multiscales.layout) {
+			if (entry.asset) candidates.add(String(entry.asset));
+		}
+	}
+
+	// Probe each candidate path for zarr.json
+	const probes = [...candidates].map(async (name) => {
+		try {
+			const res = await fetch(`${storeUrl}/${name}/zarr.json`, { signal });
+			if (!res.ok) return null;
+			const data = await res.json();
+			if (data.node_type === 'array' && data.shape) {
+				const node = makeNode(`/${name}`, 'array', data.attributes ?? {});
+				node.shape = data.shape;
+				node.dtype = data.data_type ?? 'unknown';
+				node.dims = data.dimension_names ?? inferDims(name, data.shape);
+				node.chunks = data.chunk_grid?.configuration?.chunk_shape ?? [];
+				node.fillValue = data.fill_value;
+				node.codecs = data.codecs ?? [];
+				const cke = data.chunk_key_encoding;
+				if (cke) {
+					const sep = cke.configuration?.separator ?? '/';
+					node.chunkKeyEncoding = `${cke.name ?? 'default'} (sep: "${sep}")`;
+				}
+				return node;
+			}
+			if (data.node_type === 'group') {
+				return makeNode(`/${name}`, 'group', data.attributes ?? {});
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	});
+
+	const results = await Promise.all(probes);
+	for (const node of results) {
+		if (node) {
+			root.children.push(node);
+			totalNodes++;
+		}
+	}
+
+	sortTree(root);
+
+	return {
+		root,
+		zarrVersion: 3,
+		totalNodes,
+		storeAttrs: rootAttrs,
+		spatialRefAttrs: null
+	};
 }
 
 /**
@@ -459,12 +534,13 @@ export async function probeHierarchy(
 		};
 	} catch {
 		try {
-			await zarrita.open(store, { kind: 'group' });
+			const grp = await zarrita.open(store, { kind: 'group' });
+			const attrs = (grp as any).attrs ?? {};
 			return {
-				root: makeNode('/', 'group', {}),
+				root: makeNode('/', 'group', attrs),
 				zarrVersion: null,
 				totalNodes: 1,
-				storeAttrs: {},
+				storeAttrs: attrs,
 				spatialRefAttrs: null
 			};
 		} catch {

@@ -22,6 +22,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
+import { resolveCloudUrl } from '$lib/utils/url.js';
 import {
 	clearUrlState,
 	getUrlPrefix,
@@ -35,8 +36,9 @@ import { extractZarrStoreUrl } from '$lib/utils/zarr.js';
 const initialFilePath = getUrlPrefix();
 
 function openUrlTab(rawUrl: string) {
+	// Convert cloud protocol URLs (s3://, gs://) to HTTPS for browser access
 	// Strip trailing slashes so folder-based formats (Zarr) resolve correctly
-	const url = rawUrl.replace(/\/+$/, '');
+	const url = resolveCloudUrl(rawUrl).replace(/\/+$/, '');
 
 	// Check if URL points to a Zarr marker file — open parent as Zarr store
 	const zarrStore = extractZarrStoreUrl(url);

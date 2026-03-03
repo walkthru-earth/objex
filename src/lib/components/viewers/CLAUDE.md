@@ -41,7 +41,7 @@ graph TD
 | CogViewer | @developmentseed/deck.gl-geotiff, geotiff v3 | utils/url |
 | PmtilesViewer | pmtiles, MapLibre | utils/pmtiles, utils/url-state, pmtiles/* sub-components |
 | FlatGeobufViewer | flatgeobuf, deck.gl | utils/deck, utils/url |
-| ZarrViewer | zarrita, @carbonplan/zarr-layer | utils/zarr (ZarrNode, ZarrHierarchy, fetchHierarchy, findNodeByPath, formatCodecs, computeChunkCount/Size/Uncompressed), utils/url-state. 3-column Finder view with breadcrumb nav for hierarchical Zarr stores |
+| ZarrViewer | zarrita, @carbonplan/zarr-layer | utils/zarr (ZarrNode, ZarrHierarchy, fetchHierarchy, findNodeByPath, formatCodecs, formatChunkKeys, computeChunkCount/Size/Uncompressed, inferDims, DIM_LIKE_NAMES), utils/url-state. Tree view with detail panel for hierarchical Zarr stores. Map mode only for flat stores with root-level coordinate arrays |
 | CodeViewer | Shiki | utils/shiki, utils/url-state |
 | NotebookViewer | Marked, Shiki, ansi_up | utils/notebook, utils/shiki |
 | PdfViewer | pdf.js | utils/pdf |

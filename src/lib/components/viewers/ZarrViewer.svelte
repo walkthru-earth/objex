@@ -21,6 +21,7 @@ import {
 	formatChunkKeys,
 	formatCodecs,
 	formatShape,
+	inferDims,
 	type ZarrHierarchy,
 	type ZarrNode
 } from '$lib/utils/zarr.js';
@@ -41,11 +42,38 @@ const hasStoreAttrs = $derived(hierarchy ? Object.keys(hierarchy.storeAttrs).len
 /** When true, detail panel shows store attrs instead of node details. */
 let showingStoreAttrs = $state(false);
 
+/**
+ * Build mapArrays: only include variables that zarr-layer can actually render.
+ * All dimensions must have resolvable coordinate arrays at the store root,
+ * because @carbonplan/zarr-layer resolves coordinates from root.
+ */
 const mapArrays = $derived.by(() => {
 	if (!hierarchy) return [];
+	// Collect root-level array names (coordinate arrays that zarr-layer can find)
+	const rootArrayNames = new Set(
+		hierarchy.root.children.filter((c) => c.kind === 'array').map((c) => c.name)
+	);
+	const spatialNames = new Set(['x', 'y', 'lat', 'lon', 'latitude', 'longitude']);
 	const result: ZarrNode[] = [];
 	function walk(n: ZarrNode) {
-		if (n.kind === 'array' && (n.shape?.length ?? 0) >= 2) result.push(n);
+		if (n.kind === 'array' && n.shape && n.shape.length >= 2) {
+			const dims = n.dims?.length ? n.dims : inferDims(n.name, n.shape);
+			// Must have at least one spatial dim pair
+			let hasLat = false;
+			let hasLon = false;
+			for (const d of dims) {
+				const lower = d.toLowerCase();
+				if (lower === 'y' || lower === 'lat' || lower === 'latitude') hasLat = true;
+				if (lower === 'x' || lower === 'lon' || lower === 'longitude') hasLon = true;
+			}
+			if (hasLat && hasLon) {
+				// Non-spatial dims must have root-level coordinate arrays
+				const nonSpatialResolvable = dims.every(
+					(d) => spatialNames.has(d.toLowerCase()) || rootArrayNames.has(d)
+				);
+				if (nonSpatialResolvable) result.push(n);
+			}
+		}
 		for (const c of n.children) walk(c);
 	}
 	walk(hierarchy.root);

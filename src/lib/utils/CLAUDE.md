@@ -15,7 +15,7 @@ graph TD
     end
     subgraph "Internal only"
         DECK[deck.ts<br/>createDeckOverlay, createGeoArrowOverlay]
-        URL[url.ts<br/>buildHttpsUrl, buildDuckDbUrl]
+        URL[url.ts<br/>buildHttpsUrl, buildDuckDbUrl, resolveCloudUrl]
         US[url-state.ts<br/>syncUrlParam — uses $app]
         ARC[archive.ts<br/>streamZip/Tar]
         PMT[pmtiles.ts<br/>loadPmtiles]
@@ -38,12 +38,12 @@ graph TD
 | `hex.ts` | `generateHexDump()` | RawViewer, lib/index.ts |
 | `column-types.ts` | `classifyType()`, `typeColor()`, `typeLabel()` | TableGrid, lib/index.ts |
 | `deck.ts` | `createDeckOverlay()`, `createGeoArrowOverlay()`, `createGeoArrowLayers()` | FlatGeobufViewer, GeoParquetMapViewer |
-| `url.ts` | `buildHttpsUrl()`, `buildDuckDbUrl()`, `canStreamDirectly()` | TabBar, FileTreeSidebar, CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, TableToolbar |
+| `url.ts` | `buildHttpsUrl()`, `buildDuckDbUrl()`, `canStreamDirectly()`, `resolveCloudUrl()` | TabBar, FileTreeSidebar, CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, TableToolbar, +page.svelte |
 | `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | ArchiveViewer |
 | `pmtiles.ts` | `loadPmtiles()`, `buildPmtilesLayers()` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |
 | `shiki.ts` | `highlightCode()`, `extensionToShikiLang()` | PmtilesArchiveView, NotebookViewer, CodeViewer |
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
-| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `analytics.ts` | `initAnalytics()`, `capturePageview()` | +layout.svelte |
 | `export.ts` | `exportToCsv()`, `exportToJson()` | TableStatusBar |
