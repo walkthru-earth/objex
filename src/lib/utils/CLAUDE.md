@@ -21,7 +21,7 @@ graph TD
         PMT[pmtiles.ts<br/>loadPmtiles]
         SHIKI[shiki.ts<br/>highlightCode]
         NB[notebook.ts<br/>renderNotebook]
-        ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl, fetchConsolidated]
+        ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl, fetchHierarchy, ZarrNode, ZarrHierarchy]
     end
     WKB --> GA
     PM --> GA
@@ -43,7 +43,7 @@ graph TD
 | `pmtiles.ts` | `loadPmtiles()`, `buildPmtilesLayers()` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |
 | `shiki.ts` | `highlightCode()`, `extensionToShikiLang()` | PmtilesArchiveView, NotebookViewer, CodeViewer |
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
-| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchConsolidated()`, `probeWithZarrita()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `analytics.ts` | `initAnalytics()`, `capturePageview()` | +layout.svelte |
 | `export.ts` | `exportToCsv()`, `exportToJson()` | TableStatusBar |

@@ -6,16 +6,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
-import { extractZarrStoreUrl, inferDims } from '$lib/utils/zarr.js';
+import { extractZarrStoreUrl, inferDims, type ZarrNode } from '$lib/utils/zarr.js';
 import MapContainer from './map/MapContainer.svelte';
-
-interface ZarrVarMeta {
-	name: string;
-	shape: number[];
-	dtype: string;
-	dims: string[];
-	attributes: Record<string, any>;
-}
 
 /** Enriched selector dimension with coordinate metadata. */
 interface SelectorDim {
@@ -33,6 +25,11 @@ interface SelectorDim {
 	subDaily: boolean;
 }
 
+/** Get the relative path for a ZarrNode (strip leading slash). */
+function varPath(node: ZarrNode): string {
+	return node.path.replace(/^\//, '');
+}
+
 let {
 	tab,
 	variables,
@@ -41,8 +38,8 @@ let {
 	zarrVersion = null
 }: {
 	tab: Tab;
-	variables: ZarrVarMeta[];
-	coords?: ZarrVarMeta[];
+	variables: ZarrNode[];
+	coords?: ZarrNode[];
 	spatialRefAttrs: Record<string, any> | null;
 	zarrVersion?: number | null;
 } = $props();
@@ -57,10 +54,10 @@ let inspectPopup: maplibregl.Popup | null = null;
 // Extract proj4 from spatial_ref if available
 const proj4String = $derived(extractProj4(spatialRefAttrs));
 
-// Initialize selectedVar from variables prop
+// Initialize selectedVar from variables prop (store as relative path)
 $effect(() => {
 	if (!selectedVar && variables.length > 0) {
-		selectedVar = variables[0].name;
+		selectedVar = varPath(variables[0]);
 	}
 });
 
@@ -68,7 +65,7 @@ $effect(() => {
 const coordByName = $derived(new Map(coords.map((c) => [c.name, c])));
 
 // Identify non-spatial selector dimensions for the selected variable
-const selectedMeta = $derived(variables.find((v) => v.name === selectedVar));
+const selectedMeta = $derived(variables.find((v) => varPath(v) === selectedVar));
 const selectorDims = $derived(getSelectorDims(selectedMeta, coordByName));
 
 // Dimension slider state
@@ -187,9 +184,9 @@ const SPATIAL_ALIASES: Record<string, 'lat' | 'lon'> = {
 };
 
 /** Detect spatial dimension mapping for @carbonplan/zarr-layer. */
-function detectSpatialDims(meta: ZarrVarMeta | undefined): { lat: string; lon: string } | null {
-	if (!meta) return null;
-	const dimNames = meta.dims.length > 0 ? meta.dims : inferDims(meta.name, meta.shape);
+function detectSpatialDims(meta: ZarrNode | undefined): { lat: string; lon: string } | null {
+	if (!meta?.shape) return null;
+	const dimNames = meta.dims?.length ? meta.dims : inferDims(meta.name, meta.shape);
 	let lat: string | null = null;
 	let lon: string | null = null;
 	for (const d of dimNames) {
@@ -201,12 +198,13 @@ function detectSpatialDims(meta: ZarrVarMeta | undefined): { lat: string; lon: s
 }
 
 function getSelectorDims(
-	meta: ZarrVarMeta | undefined,
-	coordMap: Map<string, ZarrVarMeta>
+	meta: ZarrNode | undefined,
+	coordMap: Map<string, ZarrNode>
 ): SelectorDim[] {
-	if (!meta) return [];
+	if (!meta?.shape) return [];
+	const shape = meta.shape;
 	// Use real dim names when available, fall back to inferDims
-	const dimNames = meta.dims.length > 0 ? meta.dims : inferDims(meta.name, meta.shape);
+	const dimNames = meta.dims?.length ? meta.dims : inferDims(meta.name, shape);
 	const dims: SelectorDim[] = [];
 	for (let i = 0; i < dimNames.length; i++) {
 		const d = dimNames[i];
@@ -239,14 +237,14 @@ function getSelectorDims(
 
 		// Sub-daily: estimated step < 1 day (e.g. 6-hourly forecasts)
 		let subDaily = false;
-		if (minDate && maxDate && meta.shape[i] >= 2) {
-			const stepMs = (maxDate.getTime() - minDate.getTime()) / (meta.shape[i] - 1);
+		if (minDate && maxDate && shape[i] >= 2) {
+			const stepMs = (maxDate.getTime() - minDate.getTime()) / (shape[i] - 1);
 			subDaily = stepMs < 86_400_000;
 		}
 
 		dims.push({
 			name: d,
-			size: meta.shape[i],
+			size: shape[i],
 			dtype: coord?.dtype ?? null,
 			units: attrs.units ?? null,
 			longName: attrs.long_name ?? null,
@@ -330,15 +328,9 @@ async function handleMapClick(e: maplibregl.MapMouseEvent) {
 			coordinates: [e.lngLat.lng, e.lngLat.lat]
 		});
 
-		// DEBUG: inspect queryData result shape
-		console.log('[zarr-inspect] result:', result);
-		console.log('[zarr-inspect] keys:', result ? Object.keys(result) : 'null');
-		console.log('[zarr-inspect] selectedVar:', selectedVar);
 		const raw = result?.[selectedVar];
-		console.log('[zarr-inspect] raw:', raw, 'type:', typeof raw, 'isArray:', Array.isArray(raw));
 		// queryData may return Array, TypedArray (Float32Array), or scalar
 		const value = raw != null && typeof raw === 'object' && 'length' in raw ? raw[0] : raw;
-		console.log('[zarr-inspect] value:', value);
 		popup.setHTML(formatPopupHtml(value, e.lngLat));
 	} catch {
 		popup.setHTML(`<span class="text-xs">${t('map.noValue')}</span>`);
@@ -383,6 +375,16 @@ async function addZarrLayer(map: maplibregl.Map) {
 			onLoadingStateChange: (state: any) => {
 				if (state.error) {
 					error = state.error.message;
+					loading = false;
+					// Immediately remove failed layer to prevent WebGL context corruption
+					// (per zarr-layer docs: "call map.removeLayer('zarr-data') to clean up")
+					try {
+						if (map.getLayer('zarr-data')) map.removeLayer('zarr-data');
+					} catch {
+						/* map may already be destroyed */
+					}
+					zarrLayer = null;
+					return;
 				}
 				loading = state.loading;
 			}
@@ -390,6 +392,11 @@ async function addZarrLayer(map: maplibregl.Map) {
 
 		// Map spatial dimension names for @carbonplan/zarr-layer
 		const spatial = detectSpatialDims(selectedMeta);
+		if (!spatial && !proj4String) {
+			error = 'Cannot map this variable: no spatial dimensions (lat/lon, y/x) detected';
+			loading = false;
+			return;
+		}
 		if (proj4String) {
 			opts.proj4 = proj4String;
 			opts.spatialDimensions = spatial ? spatial : { lat: 'y', lon: 'x' };
@@ -468,7 +475,7 @@ onDestroy(cleanup);
 				onchange={changeVariable}
 			>
 				{#each variables as v}
-					<option value={v.name}>{v.name}</option>
+					<option value={varPath(v)}>{v.name}</option>
 				{/each}
 			</select>
 		</label>
@@ -518,7 +525,7 @@ onDestroy(cleanup);
 			</label>
 		{/each}
 
-		{#if selectedMeta}
+		{#if selectedMeta?.shape}
 			<span class="ms-auto text-xs text-zinc-400">
 				{selectedMeta.dtype} [{selectedMeta.shape.join(', ')}]
 			</span>
