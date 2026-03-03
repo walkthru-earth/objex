@@ -6,7 +6,12 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl } from '$lib/utils/url.js';
-import { extractZarrStoreUrl, inferDims, type ZarrNode } from '$lib/utils/zarr.js';
+import {
+	ensureCodecsRegistered,
+	extractZarrStoreUrl,
+	inferDims,
+	type ZarrNode
+} from '$lib/utils/zarr.js';
 import MapContainer from './map/MapContainer.svelte';
 
 /** Enriched selector dimension with coordinate metadata. */
@@ -353,6 +358,8 @@ async function addZarrLayer(map: maplibregl.Map) {
 			map.removeLayer(zarrLayer.id);
 		}
 
+		// Ensure numcodecs codecs (shuffle, zlib, etc.) are registered before zarr-layer uses zarrita
+		await ensureCodecsRegistered();
 		const { ZarrLayer } = await import('@carbonplan/zarr-layer');
 
 		const storeUrl = buildStoreUrl();

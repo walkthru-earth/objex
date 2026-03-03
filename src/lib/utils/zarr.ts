@@ -66,8 +66,16 @@ async function registerNumcodecs() {
 	}
 }
 
-// Fire-and-forget at module load; registration is idempotent
-registerNumcodecs();
+let _codecsPromise: Promise<void> | null = null;
+
+/** Ensure numcodecs codecs are registered. Await before creating ZarrLayer. */
+export function ensureCodecsRegistered(): Promise<void> {
+	if (!_codecsPromise) _codecsPromise = registerNumcodecs();
+	return _codecsPromise;
+}
+
+// Start registration immediately at module load
+ensureCodecsRegistered();
 
 /** Zarr store marker files — presence of any indicates a Zarr store. */
 export const ZARR_MARKER_FILES = new Set([
@@ -238,9 +246,11 @@ export function formatCodecs(node: ZarrNode): string | null {
 				const cfg = c.configuration ?? c.codec_config ?? {};
 				const parts: string[] = [];
 				if (cfg.cname) parts.push(cfg.cname);
-				if (cfg.clevel != null) parts.push(`level ${cfg.clevel}`);
+				const level = cfg.clevel ?? cfg.level;
+				if (level != null) parts.push(`level ${level}`);
 				if (cfg.shuffle != null) parts.push(cfg.shuffle ? 'shuffle' : 'no shuffle');
 				if (cfg.typesize) parts.push(`typesize ${cfg.typesize}`);
+				if (cfg.elementsize) parts.push(`elementsize ${cfg.elementsize}`);
 				return parts.length ? `${name} (${parts.join(', ')})` : name;
 			})
 			.join(' → ');

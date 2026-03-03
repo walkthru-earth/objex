@@ -100,6 +100,9 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - **Large COG (360802x176500, ZSTD)**: known to hang browser -- ZSTD decompression is synchronous on main thread
 - **`$derived` memory leak**: module-level runes referenced in component `$derived` may not clean up on unmount (Svelte #11817)
 - **Tree rendering**: guard expanded children with `{#if node.expanded}` -- unguarded renders all nodes on mount
+- **Zarr numcodecs-wrapped codecs**: Zarr v3 stores from Python zarr-python use `numcodecs.` prefix (e.g. `numcodecs.shuffle`, `numcodecs.zlib`). zarrita only registers bare names. `ensureCodecsRegistered()` in `zarr.ts` adds aliases + byte shuffle implementation. Must be awaited before creating `ZarrLayer`
+- **Zarr non-consolidated v3**: stores without `consolidated_metadata` in zarr.json (e.g. TCI.zarr) use `discoverV3Children()` which parses multiscales convention to discover child arrays. Stores with no root metadata at all (e.g. landcovernet.zr3) require S3 XML listing (not yet implemented)
+- **Cloud protocol URLs**: `resolveCloudUrl()` in `url.ts` converts `s3://` → HTTPS with AWS region auto-detection from bucket name. Called once in `openUrlTab()` (+page.svelte) as single entry point -- never duplicate in individual viewers
 
 ## Viewer Pattern
 

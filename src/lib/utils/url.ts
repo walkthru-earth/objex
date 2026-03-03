@@ -151,7 +151,7 @@ export function resolveCloudUrl(url: string): string {
 	}
 
 	// Google Cloud Storage: gs://, gcs://
-	const gcsMatch = url.match(/^g[cs]s?:\/\/([^/]+)\/?(.*)$/);
+	const gcsMatch = url.match(/^gcs?:\/\/([^/]+)\/?(.*)$/);
 	if (gcsMatch) {
 		const [, bucket, key] = gcsMatch;
 		const base = `https://storage.googleapis.com/${bucket}`;
