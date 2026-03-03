@@ -342,6 +342,16 @@ async function handleMapClick(e: maplibregl.MapMouseEvent) {
 	}
 }
 
+/** Build the current selector object from selectorDims state. */
+function buildSelector(): Record<string, any> {
+	const selector: Record<string, any> = {};
+	for (const d of selectorDims) {
+		const fallback = d.isDatetime ? d.size - 1 : 0;
+		selector[d.name] = { selected: selectorValues[d.name] ?? fallback, type: 'index' };
+	}
+	return selector;
+}
+
 async function onMapReady(map: maplibregl.Map) {
 	mapRef = map;
 	await addZarrLayer(map);
@@ -363,12 +373,7 @@ async function addZarrLayer(map: maplibregl.Map) {
 		const { ZarrLayer } = await import('@carbonplan/zarr-layer');
 
 		const storeUrl = buildStoreUrl();
-		// Build selector from selectorDims (datetime dims default to latest)
-		const selector: Record<string, any> = {};
-		for (const d of selectorDims) {
-			const fallback = d.isDatetime ? d.size - 1 : 0;
-			selector[d.name] = { selected: selectorValues[d.name] ?? fallback, type: 'index' };
-		}
+		const selector = buildSelector();
 
 		const opts: any = {
 			id: 'zarr-data',
@@ -384,7 +389,6 @@ async function addZarrLayer(map: maplibregl.Map) {
 					error = state.error.message;
 					loading = false;
 					// Immediately remove failed layer to prevent WebGL context corruption
-					// (per zarr-layer docs: "call map.removeLayer('zarr-data') to clean up")
 					try {
 						if (map.getLayer('zarr-data')) map.removeLayer('zarr-data');
 					} catch {
@@ -428,12 +432,8 @@ function buildStoreUrl(): string {
 async function updateSelector() {
 	if (!zarrLayer) return;
 	inspectPopup?.remove();
-	const selector: Record<string, any> = {};
-	for (const [dim, val] of Object.entries(selectorValues)) {
-		selector[dim] = { selected: val, type: 'index' };
-	}
 	try {
-		await zarrLayer.setSelector(selector);
+		await zarrLayer.setSelector(buildSelector());
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 	}
