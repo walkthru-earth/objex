@@ -7,6 +7,68 @@
 
 import { formatFileSize } from './format.js';
 
+// ---------------------------------------------------------------------------
+// Register numcodecs-wrapped codecs with zarrita's codec registry.
+// Zarr v3 stores produced by Python's zarr-python may wrap codecs with the
+// "numcodecs." prefix (e.g. "numcodecs.zlib", "numcodecs.shuffle").
+// zarrita only registers the bare names, so we add aliases + a byte shuffle.
+// ---------------------------------------------------------------------------
+
+/**
+ * Byte shuffle codec (HDF5 / numcodecs byte shuffle).
+ * Rearranges bytes within elements to improve downstream compression ratios.
+ * Operates as a bytes_to_bytes filter in the codec pipeline.
+ */
+const ShuffleCodec = {
+	kind: 'bytes_to_bytes' as const,
+	fromConfig(config: { elementsize?: number }) {
+		const elementsize = config?.elementsize ?? 4;
+		return {
+			kind: 'bytes_to_bytes' as const,
+			encode(data: Uint8Array): Uint8Array {
+				const count = data.length / elementsize;
+				const out = new Uint8Array(data.length);
+				for (let i = 0; i < count; i++) {
+					for (let j = 0; j < elementsize; j++) {
+						out[j * count + i] = data[i * elementsize + j];
+					}
+				}
+				return out;
+			},
+			decode(data: Uint8Array): Uint8Array {
+				const count = data.length / elementsize;
+				const out = new Uint8Array(data.length);
+				for (let i = 0; i < count; i++) {
+					for (let j = 0; j < elementsize; j++) {
+						out[i * elementsize + j] = data[j * count + i];
+					}
+				}
+				return out;
+			}
+		};
+	}
+};
+
+/** Register numcodecs-prefixed aliases with zarrita's codec registry. */
+async function registerNumcodecs() {
+	try {
+		const { registry } = await import('zarrita');
+		// Alias existing codecs with numcodecs. prefix
+		for (const name of ['zlib', 'gzip', 'blosc', 'lz4', 'zstd']) {
+			const existing = registry.get(name);
+			if (existing) registry.set(`numcodecs.${name}`, existing);
+		}
+		// Register shuffle codec
+		registry.set('numcodecs.shuffle', () => Promise.resolve(ShuffleCodec as any));
+		registry.set('shuffle', () => Promise.resolve(ShuffleCodec as any));
+	} catch {
+		// zarrita not available — skip registration
+	}
+}
+
+// Fire-and-forget at module load; registration is idempotent
+registerNumcodecs();
+
 /** Zarr store marker files — presence of any indicates a Zarr store. */
 export const ZARR_MARKER_FILES = new Set([
 	'zarr.json',
