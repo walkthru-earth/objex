@@ -2,14 +2,14 @@
 import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 import XIcon from '@lucide/svelte/icons/x';
 import type { PMTiles } from 'pmtiles';
+import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import {
 	type DecodedTile,
 	decodeMvtTile,
 	layerHue,
-	tileMimeType,
-	tileToImageUrl
+	tileMimeType
 } from '$lib/utils/pmtiles-tile.js';
 import SvgTileRenderer from './SvgTileRenderer.svelte';
 
@@ -49,9 +49,11 @@ $effect(() => {
 
 let tile = $state<DecodedTile | null>(null);
 let rasterUrl = $state<string | null>(null);
+let rasterDims = $state<{ width: number; height: number } | null>(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
 let tileSize = $state(0);
+let rasterZoom = $state(1);
 
 let selectedLayerName = $state<string | null>(null);
 let selectedFeatureIdx = $state<number | null>(null);
@@ -82,7 +84,13 @@ async function fetchTile() {
 	loading = true;
 	error = null;
 	tile = null;
-	rasterUrl = null;
+	// Revoke previous blob URL to prevent memory leak
+	if (rasterUrl) {
+		URL.revokeObjectURL(rasterUrl);
+		rasterUrl = null;
+	}
+	rasterDims = null;
+	rasterZoom = 1;
 	selectedLayerName = null;
 	selectedFeatureIdx = null;
 
@@ -100,14 +108,15 @@ async function fetchTile() {
 				layerVisibility = vis;
 			}
 		} else {
-			const mime = tileMimeType(metadata.format);
-			const url = await tileToImageUrl(pmtiles, inputZ, inputX, inputY, mime);
-			if (!url) {
+			const resp = await pmtiles.getZxy(inputZ, inputX, inputY);
+			if (!resp) {
 				error = t('pmtiles.tileNotFound');
 			} else {
-				rasterUrl = url;
-				const resp = await pmtiles.getZxy(inputZ, inputX, inputY);
-				tileSize = resp ? new Uint8Array(resp.data).length : 0;
+				const bytes = new Uint8Array(resp.data);
+				tileSize = bytes.length;
+				const mime = tileMimeType(metadata.format);
+				const blob = new Blob([bytes], { type: mime });
+				rasterUrl = URL.createObjectURL(blob);
 			}
 		}
 	} catch (e) {
@@ -153,6 +162,10 @@ const selectedFeatureKey = $derived(
 		? `${selectedLayerName}:${selectedFeatureIdx}`
 		: null
 );
+
+onDestroy(() => {
+	if (rasterUrl) URL.revokeObjectURL(rasterUrl);
+});
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return '0 B';
@@ -354,13 +367,78 @@ function formatValue(v: unknown): string {
 			</div>
 		{:else if rasterUrl}
 			<!-- Raster tile preview -->
-			<div class="flex flex-1 items-center justify-center bg-zinc-950 p-4">
-				<img
-					src={rasterUrl}
-					alt="Tile {inputZ}/{inputX}/{inputY}"
-					class="max-h-full max-w-full rounded border border-zinc-800"
-					style="image-rendering: pixelated;"
-				/>
+			<div class="relative min-w-0 flex-1 overflow-hidden bg-zinc-950">
+				<!-- Checkerboard background for transparency -->
+				<div
+					class="absolute inset-0 flex items-center justify-center overflow-auto p-4"
+					style="background-image: repeating-conic-gradient(#1a1a2e 0% 25%, #16162a 0% 50%); background-size: 16px 16px;"
+				>
+					<img
+						src={rasterUrl}
+						alt="Tile {inputZ}/{inputX}/{inputY}"
+						class="rounded border border-zinc-800"
+						style="image-rendering: pixelated; width: {(rasterDims?.width ?? 256) * rasterZoom}px; height: {(rasterDims?.height ?? 256) * rasterZoom}px;"
+						onload={(e) => {
+							const img = e.currentTarget as HTMLImageElement;
+							rasterDims = { width: img.naturalWidth, height: img.naturalHeight };
+						}}
+					/>
+				</div>
+				<!-- Zoom controls -->
+				<div class="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded bg-card/90 px-1.5 py-1 text-xs shadow backdrop-blur-sm">
+					<button
+						class="rounded px-1.5 py-0.5 text-card-foreground hover:bg-zinc-700/50 disabled:opacity-30"
+						onclick={() => (rasterZoom = Math.max(0.25, rasterZoom / 2))}
+						disabled={rasterZoom <= 0.25}
+					>−</button>
+					<span class="w-10 text-center tabular-nums text-muted-foreground">{Math.round(rasterZoom * 100)}%</span>
+					<button
+						class="rounded px-1.5 py-0.5 text-card-foreground hover:bg-zinc-700/50 disabled:opacity-30"
+						onclick={() => (rasterZoom = Math.min(8, rasterZoom * 2))}
+						disabled={rasterZoom >= 8}
+					>+</button>
+					<button
+						class="ms-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-zinc-700/50 hover:text-card-foreground"
+						onclick={() => (rasterZoom = 1)}
+					>1:1</button>
+				</div>
+			</div>
+
+			<!-- Raster tile info panel -->
+			<div
+				class="flex w-56 shrink-0 flex-col border-s border-zinc-200 lg:w-64 dark:border-zinc-800"
+			>
+				<div
+					class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+				>
+					{t('pmtiles.tileInfo')}
+				</div>
+				<div class="flex-1 overflow-auto p-3">
+					<dl class="space-y-2 text-xs">
+						<div>
+							<dt class="text-muted-foreground">{t('pmtiles.tileCoordinates')}</dt>
+							<dd class="font-mono">{inputZ}/{inputX}/{inputY}</dd>
+						</div>
+						<div>
+							<dt class="text-muted-foreground">{t('mapInfo.tileFormat')}</dt>
+							<dd class="font-medium">{metadata.formatLabel}</dd>
+						</div>
+						{#if rasterDims}
+							<div>
+								<dt class="text-muted-foreground">{t('pmtiles.dimensions')}</dt>
+								<dd class="font-mono">{rasterDims.width} × {rasterDims.height}px</dd>
+							</div>
+						{/if}
+						<div>
+							<dt class="text-muted-foreground">{t('pmtiles.compressedSize')}</dt>
+							<dd>{formatBytes(tileSize)}</dd>
+						</div>
+						<div>
+							<dt class="text-muted-foreground">{t('mapInfo.tileCompression')}</dt>
+							<dd>{metadata.tileCompression}</dd>
+						</div>
+					</dl>
+				</div>
 			</div>
 		{:else}
 			<div
