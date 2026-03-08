@@ -1,0 +1,403 @@
+/**
+ * Provider registry — single source of truth for all cloud storage providers.
+ *
+ * Centralizes endpoint patterns, regions, auth methods, and UI metadata.
+ * Used by ConnectionDialog, browser-cloud adapter, host-detection, url-state, etc.
+ */
+
+// ---------------------------------------------------------------------------
+// Provider type — the canonical union used by Connection, ConnectionConfig, etc.
+// ---------------------------------------------------------------------------
+
+export type ProviderId =
+	| 's3'
+	| 'gcs'
+	| 'r2'
+	| 'minio'
+	| 'azure'
+	| 'storj'
+	| 'b2'
+	| 'digitalocean'
+	| 'wasabi'
+	| 'contabo'
+	| 'hetzner'
+	| 'linode'
+	| 'ovhcloud';
+
+// ---------------------------------------------------------------------------
+// Region definition
+// ---------------------------------------------------------------------------
+
+export interface ProviderRegion {
+	code: string;
+	label: string;
+}
+
+// ---------------------------------------------------------------------------
+// Provider definition
+// ---------------------------------------------------------------------------
+
+export interface ProviderDef {
+	/** Display label in the UI. */
+	label: string;
+	/** Short description shown as helper text. */
+	description: string;
+	/** Auth method used by this provider. */
+	authMethod: 'sigv4' | 'sas-token';
+	/** Whether the region field is relevant for this provider. */
+	needsRegion: boolean;
+	/** Whether the endpoint field is required. */
+	needsEndpoint: boolean;
+	/** Default region when creating a new connection. */
+	defaultRegion: string;
+	/**
+	 * Endpoint template with `{region}` placeholder.
+	 * If null, the user must provide a custom endpoint (e.g. MinIO).
+	 * If a fixed string (no `{region}`), it's always the same (e.g. GCS).
+	 */
+	endpointTemplate: string | null;
+	/** Known regions with labels. Empty = free-form region input. */
+	regions: ProviderRegion[];
+	/** Bucket label override (e.g. Azure uses "Container"). */
+	bucketLabel?: string;
+	/** Default endpoint placeholder shown in the input. */
+	endpointPlaceholder: string;
+	/** URI schemes that map to this provider (lowercase, without "://"). */
+	schemes: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Registry
+// ---------------------------------------------------------------------------
+
+export const PROVIDERS: Record<ProviderId, ProviderDef> = {
+	s3: {
+		label: 'AWS S3',
+		description: 'Amazon S3 or any S3-compatible service',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'us-east-1',
+		endpointTemplate: null,
+		regions: [
+			{ code: 'us-east-1', label: 'US East (N. Virginia)' },
+			{ code: 'us-east-2', label: 'US East (Ohio)' },
+			{ code: 'us-west-1', label: 'US West (N. California)' },
+			{ code: 'us-west-2', label: 'US West (Oregon)' },
+			{ code: 'eu-west-1', label: 'EU (Ireland)' },
+			{ code: 'eu-west-2', label: 'EU (London)' },
+			{ code: 'eu-west-3', label: 'EU (Paris)' },
+			{ code: 'eu-central-1', label: 'EU (Frankfurt)' },
+			{ code: 'eu-central-2', label: 'EU (Zurich)' },
+			{ code: 'eu-north-1', label: 'EU (Stockholm)' },
+			{ code: 'eu-south-1', label: 'EU (Milan)' },
+			{ code: 'eu-south-2', label: 'EU (Spain)' },
+			{ code: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
+			{ code: 'ap-northeast-2', label: 'Asia Pacific (Seoul)' },
+			{ code: 'ap-northeast-3', label: 'Asia Pacific (Osaka)' },
+			{ code: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
+			{ code: 'ap-southeast-2', label: 'Asia Pacific (Sydney)' },
+			{ code: 'ap-southeast-3', label: 'Asia Pacific (Jakarta)' },
+			{ code: 'ap-south-1', label: 'Asia Pacific (Mumbai)' },
+			{ code: 'ap-south-2', label: 'Asia Pacific (Hyderabad)' },
+			{ code: 'ap-east-1', label: 'Asia Pacific (Hong Kong)' },
+			{ code: 'sa-east-1', label: 'South America (São Paulo)' },
+			{ code: 'ca-central-1', label: 'Canada (Central)' },
+			{ code: 'ca-west-1', label: 'Canada (Calgary)' },
+			{ code: 'me-south-1', label: 'Middle East (Bahrain)' },
+			{ code: 'me-central-1', label: 'Middle East (UAE)' },
+			{ code: 'af-south-1', label: 'Africa (Cape Town)' },
+			{ code: 'il-central-1', label: 'Israel (Tel Aviv)' }
+		],
+		endpointPlaceholder: 'Leave empty for AWS, or enter custom S3 endpoint',
+		schemes: ['s3', 's3a', 's3n', 'aws']
+	},
+
+	gcs: {
+		label: 'Google Cloud',
+		description: 'Google Cloud Storage',
+		authMethod: 'sigv4',
+		needsRegion: false,
+		needsEndpoint: false,
+		defaultRegion: 'auto',
+		endpointTemplate: 'https://storage.googleapis.com',
+		regions: [],
+		endpointPlaceholder: 'https://storage.googleapis.com',
+		schemes: ['gs', 'gcs']
+	},
+
+	r2: {
+		label: 'Cloudflare R2',
+		description: 'Cloudflare R2 Storage',
+		authMethod: 'sigv4',
+		needsRegion: false,
+		needsEndpoint: true,
+		defaultRegion: 'auto',
+		endpointTemplate: null,
+		regions: [],
+		endpointPlaceholder: 'https://<account-id>.r2.cloudflarestorage.com',
+		schemes: ['r2']
+	},
+
+	azure: {
+		label: 'Azure',
+		description: 'Azure Blob Storage',
+		authMethod: 'sas-token',
+		needsRegion: false,
+		needsEndpoint: true,
+		defaultRegion: '',
+		endpointTemplate: null,
+		regions: [],
+		bucketLabel: 'Container',
+		endpointPlaceholder: 'https://<account>.blob.core.windows.net',
+		schemes: ['azure', 'az', 'abfs', 'abfss', 'wasbs', 'adl']
+	},
+
+	minio: {
+		label: 'MinIO',
+		description: 'Self-hosted MinIO or S3-compatible',
+		authMethod: 'sigv4',
+		needsRegion: false,
+		needsEndpoint: true,
+		defaultRegion: 'us-east-1',
+		endpointTemplate: null,
+		regions: [],
+		endpointPlaceholder: 'https://minio.example.com or http://localhost:9000',
+		schemes: []
+	},
+
+	storj: {
+		label: 'Storj',
+		description: 'Storj Decentralized Cloud',
+		authMethod: 'sigv4',
+		needsRegion: false,
+		needsEndpoint: false,
+		defaultRegion: 'us1',
+		endpointTemplate: 'https://gateway.storjshare.io',
+		regions: [
+			{ code: 'us1', label: 'US1' },
+			{ code: 'eu1', label: 'EU1' },
+			{ code: 'ap1', label: 'AP1' }
+		],
+		endpointPlaceholder: 'https://gateway.storjshare.io',
+		schemes: ['storj', 'sj']
+	},
+
+	b2: {
+		label: 'Backblaze B2',
+		description: 'Backblaze B2 Cloud Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'us-west-004',
+		endpointTemplate: 'https://s3.{region}.backblazeb2.com',
+		regions: [
+			{ code: 'us-west-000', label: 'US West (Sacramento)' },
+			{ code: 'us-west-001', label: 'US West (Stockton)' },
+			{ code: 'us-west-002', label: 'US West (Phoenix)' },
+			{ code: 'us-west-004', label: 'US West' },
+			{ code: 'us-east-005', label: 'US East (Reston)' },
+			{ code: 'eu-central-003', label: 'EU Central (Amsterdam)' },
+			{ code: 'ca-central-001', label: 'Canada (Toronto)' }
+		],
+		endpointPlaceholder: 'https://s3.us-west-004.backblazeb2.com',
+		schemes: []
+	},
+
+	digitalocean: {
+		label: 'DigitalOcean',
+		description: 'DigitalOcean Spaces',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'nyc3',
+		endpointTemplate: 'https://{region}.digitaloceanspaces.com',
+		regions: [
+			{ code: 'nyc3', label: 'New York 3' },
+			{ code: 'sfo3', label: 'San Francisco 3' },
+			{ code: 'ams3', label: 'Amsterdam 3' },
+			{ code: 'sgp1', label: 'Singapore 1' },
+			{ code: 'lon1', label: 'London 1' },
+			{ code: 'fra1', label: 'Frankfurt 1' },
+			{ code: 'tor1', label: 'Toronto 1' },
+			{ code: 'blr1', label: 'Bangalore 1' },
+			{ code: 'syd1', label: 'Sydney 1' }
+		],
+		endpointPlaceholder: 'https://nyc3.digitaloceanspaces.com',
+		schemes: []
+	},
+
+	wasabi: {
+		label: 'Wasabi',
+		description: 'Wasabi Hot Cloud Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'us-east-1',
+		endpointTemplate: 'https://s3.{region}.wasabisys.com',
+		regions: [
+			{ code: 'us-east-1', label: 'US East 1 (Virginia)' },
+			{ code: 'us-east-2', label: 'US East 2 (Virginia)' },
+			{ code: 'us-central-1', label: 'US Central 1 (Texas)' },
+			{ code: 'us-west-1', label: 'US West 1 (Oregon)' },
+			{ code: 'eu-central-1', label: 'EU Central 1 (Amsterdam)' },
+			{ code: 'eu-central-2', label: 'EU Central 2 (Frankfurt)' },
+			{ code: 'eu-west-1', label: 'EU West 1 (London)' },
+			{ code: 'eu-west-2', label: 'EU West 2 (Paris)' },
+			{ code: 'ap-northeast-1', label: 'AP Northeast 1 (Tokyo)' },
+			{ code: 'ap-northeast-2', label: 'AP Northeast 2 (Osaka)' },
+			{ code: 'ap-southeast-1', label: 'AP Southeast 1 (Singapore)' },
+			{ code: 'ap-southeast-2', label: 'AP Southeast 2 (Sydney)' },
+			{ code: 'ca-central-1', label: 'Canada (Toronto)' }
+		],
+		endpointPlaceholder: 'https://s3.us-east-1.wasabisys.com',
+		schemes: []
+	},
+
+	contabo: {
+		label: 'Contabo',
+		description: 'Contabo Object Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'eu2',
+		endpointTemplate: 'https://{region}.contabostorage.com',
+		regions: [
+			{ code: 'eu2', label: 'European Union' },
+			{ code: 'usc1', label: 'US Central' },
+			{ code: 'sin1', label: 'Singapore' }
+		],
+		endpointPlaceholder: 'https://eu2.contabostorage.com',
+		schemes: []
+	},
+
+	hetzner: {
+		label: 'Hetzner',
+		description: 'Hetzner Object Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'fsn1',
+		endpointTemplate: 'https://{region}.your-objectstorage.com',
+		regions: [
+			{ code: 'fsn1', label: 'Falkenstein, DE' },
+			{ code: 'nbg1', label: 'Nuremberg, DE' },
+			{ code: 'hel1', label: 'Helsinki, FI' }
+		],
+		endpointPlaceholder: 'https://fsn1.your-objectstorage.com',
+		schemes: []
+	},
+
+	linode: {
+		label: 'Linode / Akamai',
+		description: 'Akamai / Linode Object Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'us-east-1',
+		endpointTemplate: 'https://{region}.linodeobjects.com',
+		regions: [
+			{ code: 'us-east-1', label: 'Newark, NJ' },
+			{ code: 'us-southeast-1', label: 'Atlanta, GA' },
+			{ code: 'us-ord-1', label: 'Chicago, IL' },
+			{ code: 'us-iad-1', label: 'Washington, DC' },
+			{ code: 'us-lax-1', label: 'Los Angeles, CA' },
+			{ code: 'us-sea-1', label: 'Seattle, WA' },
+			{ code: 'us-mia-1', label: 'Miami, FL' },
+			{ code: 'eu-central-1', label: 'Frankfurt, DE' },
+			{ code: 'nl-ams-1', label: 'Amsterdam, NL' },
+			{ code: 'gb-lon-1', label: 'London, UK' },
+			{ code: 'fr-par-1', label: 'Paris, FR' },
+			{ code: 'ap-south-1', label: 'Singapore' },
+			{ code: 'jp-osa-1', label: 'Osaka, JP' },
+			{ code: 'au-mel-1', label: 'Melbourne, AU' },
+			{ code: 'br-gru-1', label: 'São Paulo, BR' },
+			{ code: 'in-maa-1', label: 'Chennai, IN' },
+			{ code: 'id-cgk-1', label: 'Jakarta, ID' },
+			{ code: 'it-mil-1', label: 'Milan, IT' },
+			{ code: 'se-sto-1', label: 'Stockholm, SE' }
+		],
+		endpointPlaceholder: 'https://us-east-1.linodeobjects.com',
+		schemes: []
+	},
+
+	ovhcloud: {
+		label: 'OVHcloud',
+		description: 'OVHcloud Object Storage',
+		authMethod: 'sigv4',
+		needsRegion: true,
+		needsEndpoint: false,
+		defaultRegion: 'gra',
+		endpointTemplate: 'https://s3.{region}.io.cloud.ovh.net',
+		regions: [
+			{ code: 'gra', label: 'Gravelines, FR' },
+			{ code: 'sbg', label: 'Strasbourg, FR' },
+			{ code: 'bhs', label: 'Beauharnois, CA' },
+			{ code: 'de', label: 'Frankfurt, DE' },
+			{ code: 'uk', label: 'London, UK' },
+			{ code: 'waw', label: 'Warsaw, PL' }
+		],
+		endpointPlaceholder: 'https://s3.gra.io.cloud.ovh.net',
+		schemes: []
+	}
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** All provider IDs, ordered for the UI. */
+export const PROVIDER_IDS: ProviderId[] = [
+	's3',
+	'gcs',
+	'r2',
+	'azure',
+	'b2',
+	'digitalocean',
+	'wasabi',
+	'storj',
+	'hetzner',
+	'contabo',
+	'linode',
+	'ovhcloud',
+	'minio'
+];
+
+/** Get provider def, falling back to S3 for unknown. */
+export function getProvider(id: string): ProviderDef {
+	return PROVIDERS[id as ProviderId] ?? PROVIDERS.s3;
+}
+
+/** Build endpoint URL from template + region. */
+export function buildEndpointFromTemplate(id: ProviderId, region: string): string {
+	const def = PROVIDERS[id];
+	if (!def?.endpointTemplate) return '';
+	return def.endpointTemplate.replace('{region}', region);
+}
+
+/**
+ * Build the base URL for API requests (endpoint + bucket).
+ * Used by browser-cloud adapter and url-state.
+ */
+export function buildProviderBaseUrl(
+	provider: ProviderId,
+	endpoint: string,
+	bucket: string,
+	region: string
+): string {
+	if (endpoint) {
+		return `${endpoint.replace(/\/$/, '')}/${bucket}`;
+	}
+	const def = PROVIDERS[provider];
+	if (def?.endpointTemplate) {
+		const resolved = def.endpointTemplate.replace('{region}', region || def.defaultRegion);
+		return `${resolved}/${bucket}`;
+	}
+	// Fallback: AWS S3 path-style
+	return `https://s3.${region || 'us-east-1'}.amazonaws.com/${bucket}`;
+}
+
+/** Check if a provider uses the GCS JSON API (not S3 XML). */
+export function isGcsProvider(provider: string, endpoint: string): boolean {
+	return provider === 'gcs' || (!!endpoint && /storage\.googleapis\.com/i.test(endpoint));
+}

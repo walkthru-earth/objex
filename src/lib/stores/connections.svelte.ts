@@ -276,7 +276,8 @@ function createConnectionsStore() {
 
 			const id = await this.save({
 				name,
-				provider: detected.provider === 'unknown' ? 's3' : detected.provider,
+				provider:
+					detected.provider === 'unknown' ? 's3' : (detected.provider as Connection['provider']),
 				endpoint: detected.endpoint,
 				bucket: detected.bucket,
 				region: detected.region,

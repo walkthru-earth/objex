@@ -36,7 +36,9 @@
  * Also handles plain bucket names (no protocol).
  */
 
-export type StorageProvider = 's3' | 'gcs' | 'r2' | 'minio' | 'azure' | 'storj' | 'unknown';
+import { PROVIDERS } from '$lib/storage/providers.js';
+
+export type StorageProvider = string;
 
 export interface ParsedStorageUrl {
 	bucket: string;
@@ -47,25 +49,25 @@ export interface ParsedStorageUrl {
 	prefix: string;
 }
 
-/** All recognized URI scheme prefixes (lowercase) */
-const SCHEME_MAP: Record<string, { provider: StorageProvider; strip: number }> = {
-	's3://': { provider: 's3', strip: 5 },
-	's3a://': { provider: 's3', strip: 6 },
-	's3n://': { provider: 's3', strip: 6 },
-	'aws://': { provider: 's3', strip: 6 },
-	'r2://': { provider: 'r2', strip: 5 },
-	'gs://': { provider: 'gcs', strip: 5 },
-	'gcs://': { provider: 'gcs', strip: 6 },
-	'azure://': { provider: 'azure', strip: 8 },
-	'az://': { provider: 'azure', strip: 5 },
-	'abfs://': { provider: 'azure', strip: 7 },
-	'abfss://': { provider: 'azure', strip: 8 },
-	'wasbs://': { provider: 'azure', strip: 8 },
-	'adl://': { provider: 'azure', strip: 6 },
-	'storj://': { provider: 'storj', strip: 8 },
-	'sj://': { provider: 'storj', strip: 5 },
-	'swift://': { provider: 'unknown', strip: 8 }
-};
+/**
+ * Build SCHEME_MAP from the provider registry's `schemes` arrays.
+ * Each scheme like "s3" generates an entry `"s3://": { provider: "s3", strip: 5 }`.
+ */
+function buildSchemeMap(): Record<string, { provider: StorageProvider; strip: number }> {
+	const map: Record<string, { provider: StorageProvider; strip: number }> = {};
+	for (const [id, def] of Object.entries(PROVIDERS)) {
+		for (const scheme of def.schemes) {
+			const key = `${scheme}://`;
+			map[key] = { provider: id, strip: key.length };
+		}
+	}
+	// Non-registry schemes (no corresponding provider)
+	map['swift://'] = { provider: 'unknown', strip: 8 };
+	return map;
+}
+
+/** All recognized URI scheme prefixes (lowercase), derived from provider registry */
+const SCHEME_MAP = buildSchemeMap();
 
 export interface Defaults {
 	region?: string;
@@ -205,7 +207,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					bucket: doVhost[1],
 					region: doVhost[2],
 					endpoint: `${url.protocol}//${doVhost[2]}.digitaloceanspaces.com`,
-					provider: 's3',
+					provider: 'digitalocean',
 					prefix: pathParts.join('/')
 				};
 			}
@@ -217,7 +219,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					bucket: pathParts[0],
 					region: doPath[1],
 					endpoint: `${url.protocol}//${url.host}`,
-					provider: 's3',
+					provider: 'digitalocean',
 					prefix: pathParts.slice(1).join('/')
 				};
 			}
@@ -230,7 +232,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					bucket: pathParts[0],
 					region: wasabiMatch[1],
 					endpoint: `${url.protocol}//${url.host}`,
-					provider: 's3',
+					provider: 'wasabi',
 					prefix: pathParts.slice(1).join('/')
 				};
 			}
@@ -243,7 +245,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					bucket: b2S3[1],
 					region: b2S3[2],
 					endpoint: `${url.protocol}//s3.${b2S3[2]}.backblazeb2.com`,
-					provider: 's3',
+					provider: 'b2',
 					prefix: pathParts.join('/')
 				};
 			}
@@ -255,7 +257,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					bucket: pathParts[1],
 					region: defaults.region || 'us-west-000',
 					endpoint: `${url.protocol}//${url.host}`,
-					provider: 's3',
+					provider: 'b2',
 					prefix: pathParts.slice(2).join('/')
 				};
 			}
@@ -294,6 +296,68 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 					region: defaults.region || 'ru-central1',
 					endpoint: `${url.protocol}//${url.host}`,
 					provider: 's3',
+					prefix: pathParts.slice(1).join('/')
+				};
+			}
+
+			// --- Contabo ---
+			// <region>.contabostorage.com/<bucket>
+			const contaboMatch = host.match(/^([a-z0-9]+)\.contabostorage\.com$/);
+			if (contaboMatch && pathParts.length > 0) {
+				return {
+					bucket: pathParts[0],
+					region: contaboMatch[1],
+					endpoint: `${url.protocol}//${url.host}`,
+					provider: 'contabo',
+					prefix: pathParts.slice(1).join('/')
+				};
+			}
+
+			// --- Hetzner ---
+			// <region>.your-objectstorage.com/<bucket>
+			const hetznerMatch = host.match(/^([a-z0-9]+)\.your-objectstorage\.com$/);
+			if (hetznerMatch && pathParts.length > 0) {
+				return {
+					bucket: pathParts[0],
+					region: hetznerMatch[1],
+					endpoint: `${url.protocol}//${url.host}`,
+					provider: 'hetzner',
+					prefix: pathParts.slice(1).join('/')
+				};
+			}
+
+			// --- Linode / Akamai ---
+			// <bucket>.<region>.linodeobjects.com or <region>.linodeobjects.com/<bucket>
+			const linodeVhost = host.match(/^(.+)\.([a-z0-9-]+)\.linodeobjects\.com$/);
+			if (linodeVhost) {
+				return {
+					bucket: linodeVhost[1],
+					region: linodeVhost[2],
+					endpoint: `${url.protocol}//${linodeVhost[2]}.linodeobjects.com`,
+					provider: 'linode',
+					prefix: pathParts.join('/')
+				};
+			}
+			const linodePath = host.match(/^([a-z0-9-]+)\.linodeobjects\.com$/);
+			if (linodePath && pathParts.length > 0) {
+				return {
+					bucket: pathParts[0],
+					region: linodePath[1],
+					endpoint: `${url.protocol}//${url.host}`,
+					provider: 'linode',
+					prefix: pathParts.slice(1).join('/')
+				};
+			}
+
+			// --- OVHcloud ---
+			// s3.<region>.io.cloud.ovh.net/<bucket>
+			const ovhMatch = host.match(/^s3\.([a-z0-9-]+)\.io\.cloud\.ovh\.(?:net|us)$/);
+			if (ovhMatch && pathParts.length > 0) {
+				return {
+					bucket: pathParts[0],
+					region: ovhMatch[1],
+					endpoint: `${url.protocol}//${url.host}`,
+					provider: 'ovhcloud',
 					prefix: pathParts.slice(1).join('/')
 				};
 			}

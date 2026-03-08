@@ -8,6 +8,7 @@
  * Also extracts `rootPrefix` when the app is hosted inside a subfolder.
  */
 
+import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
 import type { StorageProvider } from './storage-url.js';
 import { parseStorageUrl } from './storage-url.js';
 
@@ -39,20 +40,18 @@ function extractRootPrefix(pathname: string): string {
 /**
  * Build a normalized API endpoint URL for a detected provider.
  */
-function buildBucketUrl(provider: StorageProvider, endpoint: string, bucket: string): string {
-	if (endpoint) {
-		return `${endpoint.replace(/\/$/, '')}/${bucket}`;
-	}
-	switch (provider) {
-		case 'gcs':
-			return `https://storage.googleapis.com/${bucket}`;
-		case 'azure':
-			return `${endpoint}/${bucket}`;
-		case 'storj':
-			return `https://gateway.storjshare.io/${bucket}`;
-		default:
-			return `https://s3.us-east-1.amazonaws.com/${bucket}`;
-	}
+function buildBucketUrl(
+	provider: StorageProvider,
+	endpoint: string,
+	bucket: string,
+	region?: string
+): string {
+	return buildProviderBaseUrl(
+		(provider === 'unknown' ? 's3' : provider) as ProviderId,
+		endpoint,
+		bucket,
+		region || ''
+	);
 }
 
 /**
@@ -201,7 +200,7 @@ export function detectHostBucket(): DetectedHost | null {
 	const doSpaces = host.match(/^(.+)\.([a-z0-9-]+)\.digitaloceanspaces\.com$/);
 	if (doSpaces) {
 		return {
-			provider: 's3',
+			provider: 'digitalocean',
 			bucket: doSpaces[1],
 			region: doSpaces[2],
 			endpoint: `https://${doSpaces[2]}.digitaloceanspaces.com`,
@@ -214,7 +213,7 @@ export function detectHostBucket(): DetectedHost | null {
 	const doCdn = host.match(/^(.+)\.([a-z0-9-]+)\.cdn\.digitaloceanspaces\.com$/);
 	if (doCdn) {
 		return {
-			provider: 's3',
+			provider: 'digitalocean',
 			bucket: doCdn[1],
 			region: doCdn[2],
 			endpoint: `https://${doCdn[2]}.digitaloceanspaces.com`,
@@ -229,7 +228,7 @@ export function detectHostBucket(): DetectedHost | null {
 		const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
 		if (parts.length > 0) {
 			return {
-				provider: 's3',
+				provider: 'wasabi',
 				bucket: parts[0],
 				region: wasabi[1],
 				endpoint: `https://${host}`,
@@ -243,7 +242,7 @@ export function detectHostBucket(): DetectedHost | null {
 	const b2s3 = host.match(/^(.+)\.s3\.([a-z0-9-]+)\.backblazeb2\.com$/);
 	if (b2s3) {
 		return {
-			provider: 's3',
+			provider: 'b2',
 			bucket: b2s3[1],
 			region: b2s3[2],
 			endpoint: `https://s3.${b2s3[2]}.backblazeb2.com`,
@@ -293,6 +292,81 @@ export function detectHostBucket(): DetectedHost | null {
 				endpoint: `${url.protocol}//${url.host}/${parts[0]}/${parts[1]}`,
 				rootPrefix: parts.length > 3 ? extractRootPrefix(`/${parts.slice(3).join('/')}`) : '',
 				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}/${parts[1]}/${parts[2]}`
+			};
+		}
+	}
+
+	// Contabo: <region>.contabostorage.com/<bucket>
+	const contabo = host.match(/^([a-z0-9]+)\.contabostorage\.com$/);
+	if (contabo) {
+		const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
+		if (parts.length > 0) {
+			return {
+				provider: 'contabo',
+				bucket: parts[0],
+				region: contabo[1],
+				endpoint: `${url.protocol}//${url.host}`,
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
+				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}`
+			};
+		}
+	}
+
+	// Hetzner: <region>.your-objectstorage.com/<bucket>
+	const hetzner = host.match(/^([a-z0-9]+)\.your-objectstorage\.com$/);
+	if (hetzner) {
+		const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
+		if (parts.length > 0) {
+			return {
+				provider: 'hetzner',
+				bucket: parts[0],
+				region: hetzner[1],
+				endpoint: `${url.protocol}//${url.host}`,
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
+				bucketUrl: `${url.protocol}//${url.host}/${parts[0]}`
+			};
+		}
+	}
+
+	// Linode / Akamai: <bucket>.<region>.linodeobjects.com or <region>.linodeobjects.com/<bucket>
+	const linodeVhost = host.match(/^(.+)\.([a-z0-9-]+)\.linodeobjects\.com$/);
+	if (linodeVhost) {
+		return {
+			provider: 'linode',
+			bucket: linodeVhost[1],
+			region: linodeVhost[2],
+			endpoint: `https://${linodeVhost[2]}.linodeobjects.com`,
+			rootPrefix: extractRootPrefix(pathname),
+			bucketUrl: `https://${linodeVhost[2]}.linodeobjects.com/${linodeVhost[1]}`
+		};
+	}
+	const linodePath = host.match(/^([a-z0-9-]+)\.linodeobjects\.com$/);
+	if (linodePath) {
+		const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
+		if (parts.length > 0) {
+			return {
+				provider: 'linode',
+				bucket: parts[0],
+				region: linodePath[1],
+				endpoint: `https://${url.host}`,
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
+				bucketUrl: `https://${url.host}/${parts[0]}`
+			};
+		}
+	}
+
+	// OVHcloud: s3.<region>.io.cloud.ovh.net/<bucket>
+	const ovh = host.match(/^s3\.([a-z0-9-]+)\.io\.cloud\.ovh\.(?:net|us)$/);
+	if (ovh) {
+		const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
+		if (parts.length > 0) {
+			return {
+				provider: 'ovhcloud',
+				bucket: parts[0],
+				region: ovh[1],
+				endpoint: `https://${url.host}`,
+				rootPrefix: parts.length > 1 ? extractRootPrefix(`/${parts.slice(1).join('/')}`) : '',
+				bucketUrl: `https://${url.host}/${parts[0]}`
 			};
 		}
 	}

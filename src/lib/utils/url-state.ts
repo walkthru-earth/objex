@@ -11,6 +11,7 @@
  */
 
 import { replaceState } from '$app/navigation';
+import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
 import type { Connection } from '$lib/types.js';
 import { parseStorageUrl } from './storage-url.js';
 
@@ -18,13 +19,7 @@ import { parseStorageUrl } from './storage-url.js';
  * Build the base HTTPS URL for a connection (endpoint + bucket).
  */
 function buildBaseUrl(conn: Connection): string {
-	if (conn.endpoint) {
-		return `${conn.endpoint.replace(/\/$/, '')}/${conn.bucket}`;
-	}
-	if (conn.provider === 'gcs') {
-		return `https://storage.googleapis.com/${conn.bucket}`;
-	}
-	return `https://s3.${conn.region || 'us-east-1'}.amazonaws.com/${conn.bucket}`;
+	return buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region);
 }
 
 /**

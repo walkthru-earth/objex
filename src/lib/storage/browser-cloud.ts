@@ -3,6 +3,7 @@ import { connectionStore } from '$lib/stores/connections.svelte.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
 import type { Connection, FileEntry, WriteResult } from '$lib/types.js';
 import type { ListPage, StorageAdapter } from './adapter.js';
+import { buildProviderBaseUrl, isGcsProvider, type ProviderId } from './providers.js';
 
 // --- Helpers ---
 
@@ -22,26 +23,10 @@ function extensionFromName(name: string): string {
 
 /**
  * Build the base URL for S3-compatible API requests.
- * Uses path-style addressing (safer for buckets with dots in names).
+ * Delegates to the provider registry for endpoint resolution.
  */
 function buildBaseUrl(conn: Connection): string {
-	if (conn.endpoint) {
-		const base = conn.endpoint.replace(/\/$/, '');
-		return `${base}/${conn.bucket}`;
-	}
-	// Default GCS endpoint for gcs provider
-	if (conn.provider === 'gcs') {
-		return `https://storage.googleapis.com/${conn.bucket}`;
-	}
-	// Default AWS S3 — path-style
-	return `https://s3.${conn.region}.amazonaws.com/${conn.bucket}`;
-}
-
-/** Check whether a connection uses GCS (by provider or endpoint). */
-function isGcs(conn: Connection): boolean {
-	return (
-		conn.provider === 'gcs' || (!!conn.endpoint && /storage\.googleapis\.com/i.test(conn.endpoint))
-	);
+	return buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region);
 }
 
 /**
@@ -147,7 +132,7 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		signal?: AbortSignal
 	): Promise<ListPage> {
 		const conn = this.getConnection();
-		if (isGcs(conn) && conn.anonymous) {
+		if (isGcsProvider(conn.provider, conn.endpoint) && conn.anonymous) {
 			return this.listPageGcs(conn, path, continuationToken, pageSize, signal);
 		}
 		return this.listPageS3(conn, path, continuationToken, pageSize, signal);

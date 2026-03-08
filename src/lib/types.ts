@@ -10,7 +10,7 @@ export interface FileEntry {
 export interface Connection {
 	id: string;
 	name: string;
-	provider: 's3' | 'gcs' | 'r2' | 'minio' | 'azure' | 'storj';
+	provider: string;
 	endpoint: string;
 	bucket: string;
 	region: string;
@@ -22,7 +22,7 @@ export interface Connection {
 // Used when creating/updating connections (includes optional credentials)
 export interface ConnectionConfig {
 	name: string;
-	provider: 's3' | 'gcs' | 'r2' | 'minio' | 'azure' | 'storj';
+	provider: string;
 	endpoint: string;
 	bucket: string;
 	region: string;

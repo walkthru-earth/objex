@@ -18,6 +18,13 @@ import {
 } from '$lib/components/ui/sheet/index.js';
 import { Switch } from '$lib/components/ui/switch/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
+import {
+	buildEndpointFromTemplate,
+	getProvider,
+	PROVIDER_IDS,
+	PROVIDERS,
+	type ProviderId
+} from '$lib/storage/providers.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
 import { describeParseResult, looksLikeUrl, parseStorageUrl } from '$lib/utils/storage-url.js';
@@ -26,24 +33,24 @@ interface Props {
 	open: boolean;
 	editConnection?: Connection | null;
 	onSaved?: () => void;
+	onClose?: () => void;
 }
 
-let { open = $bindable(false), editConnection = null, onSaved = () => {} }: Props = $props();
+let {
+	open = $bindable(false),
+	editConnection = null,
+	onSaved = () => {},
+	onClose = () => {}
+}: Props = $props();
 
-const providers: Array<{ value: Connection['provider']; label: string }> = [
-	{ value: 's3', label: 'S3' },
-	{ value: 'gcs', label: 'GCS' },
-	{ value: 'r2', label: 'R2' },
-	{ value: 'minio', label: 'MinIO' },
-	{ value: 'azure', label: 'Azure' },
-	{ value: 'storj', label: 'Storj' }
-];
+// ---------------------------------------------------------------------------
+// Form state
+// ---------------------------------------------------------------------------
 
-// Form state — initialized with defaults, then reset via $effect when editConnection changes
 let name = $state('');
-let provider = $state<Connection['provider']>('s3');
+let provider = $state<ProviderId>('s3');
 let bucket = $state('');
-let region = $state('us-west-2');
+let region = $state('us-east-1');
 let endpoint = $state('');
 let anonymous = $state(true);
 let accessKey = $state('');
@@ -53,11 +60,79 @@ let saving = $state(false);
 let testing = $state(false);
 let testResult = $state<'success' | 'error' | null>(null);
 let parsedHint = $state<string | null>(null);
+let endpointAutoFilled = $state(false);
 
+// ---------------------------------------------------------------------------
+// Derived state from provider registry
+// ---------------------------------------------------------------------------
+
+let providerDef = $derived(getProvider(provider));
 let isAzure = $derived(provider === 'azure');
-let isStorj = $derived(provider === 'storj');
-let needsRegion = $derived(provider !== 'azure' && provider !== 'r2' && provider !== 'storj');
-let bucketLabel = $derived(isAzure ? t('connection.container') : t('connection.bucket'));
+let hasRegions = $derived(providerDef.regions.length > 0);
+let needsRegion = $derived(providerDef.needsRegion);
+let bucketLabel = $derived(providerDef.bucketLabel ?? t('connection.bucket'));
+
+let isEditMode = $derived(editConnection !== null && editConnection !== undefined);
+let title = $derived(isEditMode ? t('connection.editTitle') : t('connection.newTitle'));
+let canSave = $derived(
+	name.trim() !== '' &&
+		bucket.trim() !== '' &&
+		(!needsRegion || region.trim() !== '') &&
+		(!providerDef.needsEndpoint || endpoint.trim() !== '')
+);
+
+// ---------------------------------------------------------------------------
+// Form helpers
+// ---------------------------------------------------------------------------
+
+function resetForm(conn: Connection | null | undefined) {
+	const def = conn ? getProvider(conn.provider) : PROVIDERS.s3;
+	name = conn?.name ?? '';
+	provider = (conn?.provider as ProviderId) ?? 's3';
+	bucket = conn?.bucket ?? '';
+	region = conn?.region ?? def.defaultRegion;
+	endpoint = conn?.endpoint ?? '';
+	anonymous = conn?.anonymous ?? true;
+	accessKey = '';
+	secretKey = '';
+	sasToken = '';
+	saving = false;
+	testing = false;
+	testResult = null;
+	parsedHint = null;
+	endpointAutoFilled = false;
+}
+
+function selectProvider(id: ProviderId) {
+	const prev = provider;
+	if (id === prev) return;
+
+	provider = id;
+	const def = getProvider(id);
+
+	// Clear auto-filled endpoint from previous provider
+	if (endpointAutoFilled) {
+		endpoint = '';
+		endpointAutoFilled = false;
+	}
+
+	// Set default region
+	region = def.defaultRegion;
+
+	// Auto-fill endpoint from template if available and not user-typed
+	if (!endpoint && def.endpointTemplate) {
+		endpoint = buildEndpointFromTemplate(id, def.defaultRegion);
+		endpointAutoFilled = true;
+	}
+}
+
+function selectRegion(regionCode: string) {
+	region = regionCode;
+	// Update endpoint if it was auto-filled from template
+	if (endpointAutoFilled && providerDef.endpointTemplate) {
+		endpoint = buildEndpointFromTemplate(provider, regionCode);
+	}
+}
 
 function handleBucketInput(value: string) {
 	bucket = value;
@@ -80,50 +155,13 @@ function applyParsedUrl() {
 	bucket = parsed.bucket;
 	if (parsed.endpoint) endpoint = parsed.endpoint;
 	if (parsed.region) region = parsed.region;
-	// Auto-detect provider from URL
-	const providerMap: Record<string, Connection['provider']> = {
-		s3: 's3',
-		gcs: 'gcs',
-		r2: 'r2',
-		minio: 'minio',
-		azure: 'azure',
-		storj: 'storj'
-	};
-	if (parsed.provider in providerMap) {
-		provider = providerMap[parsed.provider];
+	if (parsed.provider && parsed.provider !== 'unknown' && parsed.provider in PROVIDERS) {
+		provider = parsed.provider as ProviderId;
 	}
 	parsedHint = null;
 }
 
-let isEditMode = $derived(editConnection !== null && editConnection !== undefined);
-let title = $derived(isEditMode ? t('connection.editTitle') : t('connection.newTitle'));
-let canSave = $derived(
-	name.trim() !== '' && bucket.trim() !== '' && (!needsRegion || region.trim() !== '')
-);
-
-// Reset form fields when editConnection changes
-$effect(() => {
-	const conn = editConnection;
-	name = conn?.name ?? '';
-	provider = conn?.provider ?? 's3';
-	bucket = conn?.bucket ?? '';
-	region = conn?.region ?? 'us-west-2';
-	endpoint = conn?.endpoint ?? '';
-	anonymous = conn?.anonymous ?? true;
-	accessKey = '';
-	secretKey = '';
-	sasToken = '';
-	saving = false;
-	testing = false;
-	testResult = null;
-	parsedHint = null;
-});
-
-async function handleSave() {
-	if (!canSave) return;
-	saving = true;
-
-	// Auto-parse URL in bucket field before saving
+function buildConfig(fallbackName?: string): ConnectionConfig {
 	let finalBucket = bucket.trim();
 	let finalRegion = region.trim();
 	let finalEndpoint = endpoint.trim();
@@ -136,29 +174,56 @@ async function handleSave() {
 		if (parsed.endpoint) finalEndpoint = parsed.endpoint;
 		if (parsed.region) finalRegion = parsed.region;
 	}
+	const def = getProvider(provider);
+	return {
+		name: name.trim() || fallbackName || '',
+		provider,
+		bucket: finalBucket,
+		region: finalRegion,
+		endpoint: finalEndpoint,
+		anonymous,
+		authMethod:
+			def.authMethod === 'sas-token' && !anonymous ? 'sas-token' : !anonymous ? 'sigv4' : undefined,
+		...(anonymous
+			? {}
+			: def.authMethod === 'sas-token'
+				? { sas_token: sasToken }
+				: { access_key: accessKey, secret_key: secretKey })
+	};
+}
 
+// ---------------------------------------------------------------------------
+// Effects
+// ---------------------------------------------------------------------------
+
+// Reset form when dialog opens
+$effect(() => {
+	if (open) {
+		resetForm(editConnection);
+	}
+});
+
+// Notify parent when dialog closes
+$effect(() => {
+	if (!open) {
+		onClose();
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
+async function handleSave() {
+	if (!canSave) return;
+	saving = true;
 	try {
-		const config: ConnectionConfig = {
-			name: name.trim(),
-			provider,
-			bucket: finalBucket,
-			region: finalRegion,
-			endpoint: finalEndpoint,
-			anonymous,
-			authMethod: isAzure && !anonymous ? 'sas-token' : !anonymous ? 'sigv4' : undefined,
-			...(anonymous
-				? {}
-				: isAzure
-					? { sas_token: sasToken }
-					: { access_key: accessKey, secret_key: secretKey })
-		};
-
+		const config = buildConfig();
 		if (isEditMode && editConnection) {
 			await connections.update(editConnection.id, config);
 		} else {
 			await connections.save(config);
 		}
-
 		onSaved();
 		open = false;
 	} catch (err) {
@@ -171,37 +236,8 @@ async function handleSave() {
 async function handleTestConnection() {
 	testing = true;
 	testResult = null;
-
 	try {
-		// Auto-parse URL in bucket field before testing
-		let finalBucket = bucket.trim();
-		let finalRegion = region.trim();
-		let finalEndpoint = endpoint.trim();
-		if (looksLikeUrl(finalBucket)) {
-			const parsed = parseStorageUrl(finalBucket, {
-				region: finalRegion || undefined,
-				endpoint: finalEndpoint || undefined
-			});
-			finalBucket = parsed.bucket;
-			if (parsed.endpoint) finalEndpoint = parsed.endpoint;
-			if (parsed.region) finalRegion = parsed.region;
-		}
-
-		const config: ConnectionConfig = {
-			name: name.trim() || 'test',
-			provider,
-			bucket: finalBucket,
-			region: finalRegion,
-			endpoint: finalEndpoint,
-			anonymous,
-			authMethod: isAzure && !anonymous ? 'sas-token' : !anonymous ? 'sigv4' : undefined,
-			...(anonymous
-				? {}
-				: isAzure
-					? { sas_token: sasToken }
-					: { access_key: accessKey, secret_key: secretKey })
-		};
-
+		const config = buildConfig('test');
 		const ok = await connections.testWithConfig(config, editConnection?.id);
 		testResult = ok ? 'success' : 'error';
 	} catch {
@@ -209,10 +245,6 @@ async function handleTestConnection() {
 	} finally {
 		testing = false;
 	}
-}
-
-function handleCancel() {
-	open = false;
 }
 </script>
 
@@ -248,39 +280,20 @@ function handleCancel() {
 			<!-- Provider -->
 			<fieldset class="flex flex-col gap-1.5">
 				<legend class="text-sm font-medium">{t('connection.provider')}</legend>
-				<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Cloud storage provider">
-					{#each providers as p (p.value)}
+				<div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Cloud storage provider">
+					{#each PROVIDER_IDS as id (id)}
 						<Button
-							variant={provider === p.value ? 'default' : 'outline'}
+							variant={provider === id ? 'default' : 'outline'}
 							size="sm"
-							class="h-8 px-3 text-xs"
-							aria-pressed={provider === p.value}
-							onclick={() => {
-								const prev = provider;
-								provider = p.value;
-								// Clear auto-filled endpoint/region from previous provider
-								const autoEndpoints = new Set([
-									'https://storage.googleapis.com',
-									'https://gateway.storjshare.io'
-								]);
-								if (autoEndpoints.has(endpoint)) {
-									endpoint = '';
-									region = 'us-west-2';
-								}
-								// Auto-fill for the newly selected provider
-								if (p.value === 'gcs' && !endpoint) {
-									endpoint = 'https://storage.googleapis.com';
-									region = 'auto';
-								} else if (p.value === 'storj' && !endpoint) {
-									endpoint = 'https://gateway.storjshare.io';
-									region = 'us1';
-								}
-							}}
+							class="h-7 px-2.5 text-xs"
+							aria-pressed={provider === id}
+							onclick={() => selectProvider(id)}
 						>
-							{p.label}
+							{PROVIDERS[id].label}
 						</Button>
 					{/each}
 				</div>
+				<p class="text-xs text-muted-foreground">{providerDef.description}</p>
 			</fieldset>
 
 			<!-- Bucket / Container -->
@@ -309,39 +322,60 @@ function handleCancel() {
 				</p>
 			</div>
 
-			<!-- Region (hidden for Azure and R2) -->
+			<!-- Region -->
 			{#if needsRegion}
 				<div class="flex flex-col gap-1.5">
 					<label for="conn-region" class="text-sm font-medium">
 						{t('connection.region')} <span class="text-destructive">*</span>
 					</label>
-					<Input
-						id="conn-region"
-						placeholder="us-west-2"
-						bind:value={region}
-					/>
+					{#if hasRegions}
+						<!-- Dropdown for providers with known regions -->
+						<select
+							id="conn-region"
+							class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+							value={region}
+							onchange={(e) => selectRegion((e.target as HTMLSelectElement).value)}
+						>
+							{#each providerDef.regions as r (r.code)}
+								<option value={r.code}>{r.label} ({r.code})</option>
+							{/each}
+						</select>
+					{:else}
+						<Input
+							id="conn-region"
+							placeholder={providerDef.defaultRegion}
+							bind:value={region}
+						/>
+					{/if}
 				</div>
 			{/if}
 
 			<!-- Endpoint -->
 			<div class="flex flex-col gap-1.5">
-				<label for="conn-endpoint" class="text-sm font-medium">{t('connection.endpoint')}{isAzure ? ' *' : ''}</label>
+				<label for="conn-endpoint" class="text-sm font-medium">
+					{t('connection.endpoint')}{providerDef.needsEndpoint ? ' *' : ''}
+				</label>
 				<Input
 					id="conn-endpoint"
-					placeholder={isAzure
-						? 'https://myaccount.blob.core.windows.net'
-						: isStorj
-							? 'https://gateway.storjshare.io'
-							: 'https://custom-endpoint.example.com'}
+					placeholder={providerDef.endpointPlaceholder}
 					bind:value={endpoint}
+					oninput={() => {
+						endpointAutoFilled = false;
+					}}
 				/>
-				<p class="text-xs text-muted-foreground">
-					{isAzure
-						? t('connection.azureEndpointHelper')
-						: isStorj
-							? t('connection.storjEndpointHelper')
-							: t('connection.endpointHelper')}
-				</p>
+				{#if providerDef.endpointTemplate && !providerDef.needsEndpoint}
+					<p class="text-xs text-muted-foreground">
+						{t('connection.endpointHelper')}
+					</p>
+				{:else if isAzure}
+					<p class="text-xs text-muted-foreground">
+						{t('connection.azureEndpointHelper')}
+					</p>
+				{:else}
+					<p class="text-xs text-muted-foreground">
+						{t('connection.endpointHelper')}
+					</p>
+				{/if}
 			</div>
 
 			<!-- Anonymous Access -->
@@ -431,7 +465,7 @@ function handleCancel() {
 			</Button>
 
 			<div class="flex min-w-0 flex-1 justify-end gap-2">
-				<Button variant="ghost" size="sm" onclick={handleCancel} disabled={saving}>
+				<Button variant="ghost" size="sm" onclick={() => (open = false)} disabled={saving}>
 					{t('connection.cancel')}
 				</Button>
 

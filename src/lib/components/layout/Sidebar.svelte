@@ -321,6 +321,10 @@ async function handleBrowseConnection(connection: Connection) {
 				syncUrlParam(conn);
 			}
 		}
+		editingConnection = null;
 		handleAutoDetection();
+	}}
+	onClose={() => {
+		editingConnection = null;
 	}}
 />

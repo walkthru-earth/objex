@@ -1,3 +1,4 @@
+import { buildProviderBaseUrl, PROVIDERS, type ProviderId } from '$lib/storage/providers.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
 import type { Tab } from '$lib/types.js';
@@ -20,29 +21,18 @@ export function buildHttpsUrl(tab: Tab): string {
 		return appendAzureSas(base, conn.id);
 	}
 
-	if (conn.endpoint) {
-		return `${conn.endpoint.replace(/\/$/, '')}/${conn.bucket}/${cleanPath}`;
-	}
-
-	return `https://s3.${conn.region || 'us-east-1'}.amazonaws.com/${conn.bucket}/${cleanPath}`;
+	return `${buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region)}/${cleanPath}`;
 }
 
-/** Map provider to its native URI scheme prefix. */
+/**
+ * Map provider to its native URI scheme prefix.
+ * Derived from the registry's `schemes` array (first entry is the primary scheme).
+ * Falls back to 's3' for providers without a scheme (S3-compatible).
+ */
 export function getNativeScheme(provider: string): string {
-	switch (provider) {
-		case 'gcs':
-			return 'gs';
-		case 'azure':
-			return 'az';
-		case 'r2':
-			return 'r2';
-		case 'storj':
-			return 'sj';
-		case 'minio':
-			return 's3';
-		default:
-			return 's3';
-	}
+	const def = PROVIDERS[provider as ProviderId];
+	if (def?.schemes.length) return def.schemes[0];
+	return 's3';
 }
 
 /**
@@ -146,7 +136,7 @@ export function resolveCloudUrl(url: string): string {
 		// Detect region from bucket name (e.g. "us-west-2.opendata.source.coop")
 		const regionMatch = bucket.match(AWS_REGION_RE);
 		const region = regionMatch ? regionMatch[0] : 'us-east-1';
-		const base = `https://s3.${region}.amazonaws.com/${bucket}`;
+		const base = buildProviderBaseUrl('s3', '', bucket, region);
 		return key ? `${base}/${key}` : base;
 	}
 
@@ -154,7 +144,7 @@ export function resolveCloudUrl(url: string): string {
 	const gcsMatch = url.match(/^gcs?:\/\/([^/]+)\/?(.*)$/);
 	if (gcsMatch) {
 		const [, bucket, key] = gcsMatch;
-		const base = `https://storage.googleapis.com/${bucket}`;
+		const base = buildProviderBaseUrl('gcs', '', bucket, '');
 		return key ? `${base}/${key}` : base;
 	}
 
