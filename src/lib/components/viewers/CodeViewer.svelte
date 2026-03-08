@@ -153,12 +153,23 @@ const language = $derived(languageMap[ext] ?? 'Plain Text');
 /** File types that support native formatting */
 const canFormat = $derived(['.json', '.sql', '.css', '.html', '.xml'].includes(ext));
 
+// Auto-switch to STAC Browser when STAC JSON is detected (unless URL explicitly set #code)
+let stacAutoSwitched = false;
+$effect(() => {
+	if (isStacJson && !stacAutoSwitched && viewMode === 'code' && urlView !== 'code') {
+		stacAutoSwitched = true;
+		viewMode = 'stac-browser';
+		updateUrlView('stac-browser');
+	}
+});
+
 // Reset iframe view mode when tab changes (component reuse across code-type tabs)
 let prevTabId = '';
 $effect(() => {
 	const id = tab.id;
 	if (prevTabId && prevTabId !== id) {
 		viewMode = isHtml ? 'render' : 'code';
+		stacAutoSwitched = false;
 		updateUrlView('');
 	}
 	prevTabId = id;
