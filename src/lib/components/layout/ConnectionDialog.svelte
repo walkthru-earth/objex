@@ -256,8 +256,22 @@ function handleCancel() {
 							class="h-8 px-3 text-xs"
 							aria-pressed={provider === p.value}
 							onclick={() => {
+								const prev = provider;
 								provider = p.value;
-								if (p.value === 'storj' && !endpoint) {
+								// Clear auto-filled endpoint/region from previous provider
+								const autoEndpoints = new Set([
+									'https://storage.googleapis.com',
+									'https://gateway.storjshare.io'
+								]);
+								if (autoEndpoints.has(endpoint)) {
+									endpoint = '';
+									region = 'us-west-2';
+								}
+								// Auto-fill for the newly selected provider
+								if (p.value === 'gcs' && !endpoint) {
+									endpoint = 'https://storage.googleapis.com';
+									region = 'auto';
+								} else if (p.value === 'storj' && !endpoint) {
 									endpoint = 'https://gateway.storjshare.io';
 									region = 'us1';
 								}

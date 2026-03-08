@@ -29,8 +29,28 @@ function buildBaseUrl(conn: Connection): string {
 		const base = conn.endpoint.replace(/\/$/, '');
 		return `${base}/${conn.bucket}`;
 	}
+	// Default GCS endpoint for gcs provider
+	if (conn.provider === 'gcs') {
+		return `https://storage.googleapis.com/${conn.bucket}`;
+	}
 	// Default AWS S3 — path-style
 	return `https://s3.${conn.region}.amazonaws.com/${conn.bucket}`;
+}
+
+/** Check whether a connection uses GCS (by provider or endpoint). */
+function isGcs(conn: Connection): boolean {
+	return (
+		conn.provider === 'gcs' || (!!conn.endpoint && /storage\.googleapis\.com/i.test(conn.endpoint))
+	);
+}
+
+/**
+ * Build the GCS JSON API base URL for a bucket.
+ * JSON API includes CORS headers (`Access-Control-Allow-Origin: *`) for public data,
+ * unlike the S3-compatible XML API which requires bucket-level CORS configuration.
+ */
+function gcsJsonApiBase(bucket: string): string {
+	return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o`;
 }
 
 /** Decode a possibly percent-encoded S3 key (some providers URL-encode non-ASCII in XML). */
@@ -127,6 +147,84 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		signal?: AbortSignal
 	): Promise<ListPage> {
 		const conn = this.getConnection();
+		if (isGcs(conn) && conn.anonymous) {
+			return this.listPageGcs(conn, path, continuationToken, pageSize, signal);
+		}
+		return this.listPageS3(conn, path, continuationToken, pageSize, signal);
+	}
+
+	/**
+	 * List via GCS JSON API — works for public buckets without CORS configuration.
+	 * Endpoint: `storage.googleapis.com/storage/v1/b/{bucket}/o`
+	 */
+	private async listPageGcs(
+		conn: Connection,
+		path: string,
+		pageToken?: string,
+		pageSize?: number,
+		signal?: AbortSignal
+	): Promise<ListPage> {
+		const url = gcsJsonApiBase(conn.bucket);
+		const params = new URLSearchParams({ delimiter: '/' });
+		if (path) params.set('prefix', path);
+		if (pageToken) params.set('pageToken', pageToken);
+		if (pageSize) params.set('maxResults', String(pageSize));
+
+		const res = await fetch(`${url}?${params}`, { signal });
+		if (!res.ok) {
+			const body = await res.text().catch(() => '');
+			throw new Error(`GCS list failed (${res.status}): ${body || res.statusText}`);
+		}
+
+		const json = await res.json();
+		const entries: FileEntry[] = [];
+
+		// Directories (prefixes)
+		if (Array.isArray(json.prefixes)) {
+			for (const prefix of json.prefixes) {
+				const dirName = nameFromKey(prefix);
+				entries.push({
+					name: decodeKey(dirName),
+					path: prefix,
+					is_dir: true,
+					size: 0,
+					modified: 0,
+					extension: dirName.endsWith('.zarr') || dirName.endsWith('.zr3') ? 'zarr' : ''
+				});
+			}
+		}
+
+		// Files (items)
+		if (Array.isArray(json.items)) {
+			for (const item of json.items) {
+				const key: string = item.name ?? '';
+				if (!key || key === path || key.endsWith('/')) continue;
+				const name = decodeKey(nameFromKey(key));
+				const size = parseInt(item.size ?? '0', 10);
+				const lastMod: string = item.updated ?? '';
+				entries.push({
+					name,
+					path: key,
+					is_dir: false,
+					size,
+					modified: lastMod ? Date.parse(lastMod) || 0 : 0,
+					extension: extensionFromName(name)
+				});
+			}
+		}
+
+		const nextToken: string | undefined = json.nextPageToken ?? undefined;
+		return { entries, continuationToken: nextToken, hasMore: !!nextToken };
+	}
+
+	/** List via S3-compatible XML API (AWS, R2, MinIO, Storj, etc.). */
+	private async listPageS3(
+		conn: Connection,
+		path: string,
+		continuationToken?: string,
+		pageSize?: number,
+		signal?: AbortSignal
+	): Promise<ListPage> {
 		const baseUrl = buildBaseUrl(conn);
 		const cloudFetch = this.getFetcher();
 
