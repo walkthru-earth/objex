@@ -25,10 +25,18 @@
 		"build": "tsup"
 	},
 	"peerDependencies": {
-		"apache-arrow": ">=14"
+		"apache-arrow": ">=14",
+		"hyparquet": ">=1.25",
+		"hyparquet-compressors": ">=1.1"
 	},
 	"peerDependenciesMeta": {
 		"apache-arrow": {
+			"optional": true
+		},
+		"hyparquet": {
+			"optional": true
+		},
+		"hyparquet-compressors": {
 			"optional": true
 		}
 	},

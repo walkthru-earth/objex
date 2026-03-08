@@ -17,14 +17,14 @@ graph LR
 
 | File | Exports | Used by |
 |------|---------|---------|
-| `providers.ts` | `PROVIDERS`, `PROVIDER_IDS`, `ProviderId`, `ProviderDef`, `getProvider()`, `buildEndpointFromTemplate()`, `buildProviderBaseUrl()`, `isGcsProvider()` | ConnectionDialog, browser-cloud, url-state, host-detection, url.ts |
+| `providers.ts` | `PROVIDERS`, `PROVIDER_IDS`, `ProviderId`, `ProviderDef`, `ProviderRegion`, `getProvider()`, `buildEndpointFromTemplate()`, `buildProviderBaseUrl()`, `isGcsProvider()` | ConnectionDialog, browser-cloud, url-state, host-detection, url.ts, storage-url.ts |
 | `adapter.ts` | `StorageAdapter` (interface), `ListPage` | lib/index.ts (npm export) |
 | `browser-cloud.ts` | `BrowserCloudAdapter` | index.ts (factory) |
 | `browser-azure.ts` | `BrowserAzureAdapter` | index.ts (factory) |
 | `url-adapter.ts` | `UrlAdapter` | lib/index.ts (npm export) |
 | `index.ts` | `getAdapter()`, `clearAdapterCache()` | stores/browser, FileTreeSidebar, ArchiveViewer, ModelViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer |
 
-`adapter.ts` and `url-adapter.ts` use relative imports (not `$lib`) — they're published to npm.
+`adapter.ts`, `url-adapter.ts`, and `utils/storage-url.ts` use relative imports (not `$lib`) — they're published to npm via `objex-utils`. `providers.ts` is also imported by `storage-url.ts` via relative path.
 
 ## Provider Registry (`providers.ts`)
 

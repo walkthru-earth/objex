@@ -36,7 +36,7 @@
  * Also handles plain bucket names (no protocol).
  */
 
-import { PROVIDERS } from '$lib/storage/providers.js';
+import { PROVIDERS } from '../storage/providers.js';
 
 export type StorageProvider = string;
 

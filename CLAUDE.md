@@ -70,7 +70,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Don't skip cleanup of query handles, blob URLs, WebGL contexts, event listeners
 - Don't hold module-level references to heavy objects without nulling in cleanup
 - Don't add `console.log` in library code -- Vite strips them in production via config
-- Don't use `$lib` alias in `src/lib/storage/adapter.ts` or `url-adapter.ts` (breaks outside SvelteKit)
+- Don't use `$lib` alias in npm-published files: `storage/adapter.ts`, `storage/url-adapter.ts`, `utils/storage-url.ts`, or any file they import (breaks `objex-utils` tsup build)
 - Don't materialize all Arrow rows via `.toArray().map(r => r.toJSON())` -- use columnar access
 - Don't use the shadcn CLI -- manually create/edit UI components in `src/lib/components/ui/` using bits-ui primitives (reference: https://bits-ui.com/llms.txt)
 
