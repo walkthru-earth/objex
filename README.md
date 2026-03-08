@@ -13,7 +13,7 @@ graph LR
 
 ## Features
 
-- **Browse** cloud storage (S3, GCS, Azure, R2, MinIO, Wasabi, Storj, direct URLs)
+- **Browse** cloud storage (S3, GCS, Azure, R2, B2, DigitalOcean, Wasabi, Storj, Hetzner, Contabo, Linode, OVHcloud, MinIO, direct URLs)
 - **Query** Parquet, CSV, JSONL with SQL (DuckDB-WASM, cancellable queries)
 - **Visualize** GeoParquet, GeoJSON, COG, PMTiles, FlatGeobuf, Zarr on maps (MapLibre + deck.gl)
 - **View** 100+ file formats: code (30+ languages), Jupyter notebooks, PDF, 3D models, archives, media
