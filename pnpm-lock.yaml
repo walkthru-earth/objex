@@ -59,9 +59,6 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev34.0
         version: 1.33.1-dev34.0
-      '@fontsource/cairo':
-        specifier: ^5.2.7
-        version: 5.2.7
       '@geoarrow/deck.gl-layers':
         specifier: ^0.3.1
         version: 0.3.1(34ae092dc0c3a9116be4167f056775b2)
@@ -134,9 +131,6 @@ importers:
       pmtiles:
         specifier: ^4.4.0
         version: 4.4.0
-      posthog-js:
-        specifier: ^1.360.0
-        version: 1.360.0
       proj4:
         specifier: ^2.20.4
         version: 2.20.4
@@ -162,6 +156,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.30.0
         version: 2.30.0(@types/node@25.4.0)
+      '@fontsource/cairo':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@internationalized/date':
         specifier: ^3.12.0
         version: 3.12.0
@@ -201,6 +198,9 @@ importers:
       paneforge:
         specifier: ^1.0.2
         version: 1.0.2(svelte@5.53.9)
+      posthog-js:
+        specifier: ^1.360.0
+        version: 1.360.0
       publint:
         specifier: ^0.3.18
         version: 0.3.18
