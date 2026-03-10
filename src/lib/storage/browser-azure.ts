@@ -1,6 +1,6 @@
-import { connectionStore } from '$lib/stores/connections.svelte.js';
-import { type AzureCredentials, credentialStore } from '$lib/stores/credentials.svelte.js';
-import type { Connection, FileEntry, WriteResult } from '$lib/types.js';
+import { connectionStore } from '../stores/connections.svelte.js';
+import { type AzureCredentials, credentialStore } from '../stores/credentials.svelte.js';
+import type { Connection, FileEntry, WriteResult } from '../types.js';
 import type { ListPage, StorageAdapter } from './adapter.js';
 
 // --- Helpers ---

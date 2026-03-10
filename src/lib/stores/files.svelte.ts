@@ -1,4 +1,4 @@
-import type { FileEntry } from '$lib/types.js';
+import type { FileEntry } from '../types.js';
 
 export type SortField = 'name' | 'size' | 'modified' | 'extension';
 export type SortDirection = 'asc' | 'desc';

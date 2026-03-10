@@ -14,56 +14,70 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"svelte": "./dist/index.js"
+			"svelte": "./dist/index.js",
+			"import": "./dist/index.js"
 		},
 		"./storage": {
 			"types": "./dist/storage/index.d.ts",
-			"svelte": "./dist/storage/index.js"
+			"svelte": "./dist/storage/index.js",
+			"import": "./dist/storage/index.js"
 		},
 		"./query": {
 			"types": "./dist/query/engine.d.ts",
-			"svelte": "./dist/query/engine.js"
+			"svelte": "./dist/query/engine.js",
+			"import": "./dist/query/engine.js"
 		},
 		"./utils/wkb": {
 			"types": "./dist/utils/wkb.d.ts",
-			"svelte": "./dist/utils/wkb.js"
+			"svelte": "./dist/utils/wkb.js",
+			"import": "./dist/utils/wkb.js"
 		},
 		"./utils/geoarrow": {
 			"types": "./dist/utils/geoarrow.d.ts",
-			"svelte": "./dist/utils/geoarrow.js"
+			"svelte": "./dist/utils/geoarrow.js",
+			"import": "./dist/utils/geoarrow.js"
 		},
 		"./utils/storage-url": {
 			"types": "./dist/utils/storage-url.d.ts",
-			"svelte": "./dist/utils/storage-url.js"
+			"svelte": "./dist/utils/storage-url.js",
+			"import": "./dist/utils/storage-url.js"
 		},
 		"./utils/parquet-metadata": {
 			"types": "./dist/utils/parquet-metadata.d.ts",
-			"svelte": "./dist/utils/parquet-metadata.js"
+			"svelte": "./dist/utils/parquet-metadata.js",
+			"import": "./dist/utils/parquet-metadata.js"
 		},
 		"./utils/format": {
 			"types": "./dist/utils/format.d.ts",
-			"svelte": "./dist/utils/format.js"
+			"svelte": "./dist/utils/format.js",
+			"import": "./dist/utils/format.js"
 		},
 		"./utils/hex": {
 			"types": "./dist/utils/hex.d.ts",
-			"svelte": "./dist/utils/hex.js"
+			"svelte": "./dist/utils/hex.js",
+			"import": "./dist/utils/hex.js"
 		},
 		"./utils/column-types": {
 			"types": "./dist/utils/column-types.d.ts",
-			"svelte": "./dist/utils/column-types.js"
+			"svelte": "./dist/utils/column-types.js",
+			"import": "./dist/utils/column-types.js"
 		},
 		"./file-icons": {
 			"types": "./dist/file-icons/index.d.ts",
-			"svelte": "./dist/file-icons/index.js"
+			"svelte": "./dist/file-icons/index.js",
+			"import": "./dist/file-icons/index.js"
 		},
 		"./types": {
 			"types": "./dist/types.d.ts",
-			"svelte": "./dist/types.js"
+			"svelte": "./dist/types.js",
+			"import": "./dist/types.js"
 		}
 	},
 	"files": [
 		"dist",
-		"!dist/**/*.test.*"
+		"!dist/**/*.test.*",
+		"!dist/**/CLAUDE.md",
+		"!dist/assets"
 	],
 	"sideEffects": [
 		"**/*.css"
@@ -139,8 +153,10 @@
 		"@tailwindcss/vite": "^4.2.1",
 		"bits-ui": "^2.16.3",
 		"clsx": "^2.1.1",
+		"@fontsource/cairo": "^5.2.7",
 		"lefthook": "^2.1.3",
 		"paneforge": "^1.0.2",
+		"posthog-js": "^1.360.0",
 		"publint": "^0.3.18",
 		"svelte": "^5.53.9",
 		"svelte-check": "^4.4.5",
@@ -169,7 +185,6 @@
 		"@deck.gl/mesh-layers": "^9.2.11",
 		"@developmentseed/deck.gl-geotiff": "^0.2.0",
 		"@duckdb/duckdb-wasm": "1.33.1-dev34.0",
-		"@fontsource/cairo": "^5.2.7",
 		"@geoarrow/deck.gl-layers": "^0.3.1",
 		"@luma.gl/core": "^9.2.6",
 		"@mapbox/vector-tile": "^2.0.4",
@@ -194,7 +209,6 @@
 		"pbf": "^4.0.1",
 		"pdfjs-dist": "^5.5.207",
 		"pmtiles": "^4.4.0",
-		"posthog-js": "^1.360.0",
 		"proj4": "^2.20.4",
 		"shiki": "^3.23.0",
 		"sql-formatter": "^15.7.2",

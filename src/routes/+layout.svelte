@@ -4,7 +4,7 @@ import { afterNavigate, beforeNavigate } from '$app/navigation';
 import { base } from '$app/paths';
 import { getDir } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
-import { capturePageleave, capturePageview, initAnalytics } from '$lib/utils/analytics.js';
+import { capturePageleave, capturePageview, initAnalytics } from './analytics.js';
 
 let { children } = $props();
 

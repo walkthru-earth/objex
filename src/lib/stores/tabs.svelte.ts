@@ -1,4 +1,4 @@
-import type { Tab } from '$lib/types.js';
+import type { Tab } from '../types.js';
 import { tabResources } from './tab-resources.svelte.js';
 
 /** Maximum number of viewer instances kept alive (mounted but hidden). */

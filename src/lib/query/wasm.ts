@@ -1,7 +1,7 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
-import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '$lib/constants.js';
-import { buildDuckDbSource } from '$lib/file-icons/index.js';
-import { credentialStore } from '$lib/stores/credentials.svelte.js';
+import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
+import { buildDuckDbSource } from '../file-icons/index.js';
+import { credentialStore } from '../stores/credentials.svelte.js';
 import {
 	type MapQueryHandle,
 	type MapQueryResult,

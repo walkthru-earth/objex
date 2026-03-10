@@ -1,7 +1,7 @@
 import { AwsClient } from 'aws4fetch';
-import { connectionStore } from '$lib/stores/connections.svelte.js';
-import { credentialStore } from '$lib/stores/credentials.svelte.js';
-import type { Connection, FileEntry, WriteResult } from '$lib/types.js';
+import { connectionStore } from '../stores/connections.svelte.js';
+import { credentialStore } from '../stores/credentials.svelte.js';
+import type { Connection, FileEntry, WriteResult } from '../types.js';
 import type { ListPage, StorageAdapter } from './adapter.js';
 import { buildProviderBaseUrl, isGcsProvider, type ProviderId } from './providers.js';
 

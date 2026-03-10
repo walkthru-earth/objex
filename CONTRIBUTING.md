@@ -35,7 +35,23 @@ Two packages are published from this repo:
 | `@walkthru-earth/objex` | Full Svelte 5 library (components + stores + utils) | `pnpm -w run package` |
 | `@walkthru-earth/objex-utils` | Pure TS utilities (zero Svelte dependency) | `pnpm --filter @walkthru-earth/objex-utils run build` |
 
-Publishing is automated via `.github/workflows/publish.yml` — create a GitHub Release to trigger.
+Publishing is automated via Changesets (see `RELEASE.md`).
+
+### npm Publishing Rules
+
+All code under `src/lib/` is published to npm. These rules prevent broken packages:
+
+1. **No `$lib/` imports in `src/lib/`** — use relative paths (`../types.js`, `../constants.js`). `svelte-package` resolves static `$lib/` imports, but dynamic `import()` is NOT resolved and ships broken.
+2. **No `$app/` or `$env/` imports in `src/lib/`** — these are SvelteKit-only. App-specific code (analytics, layout) belongs in `src/routes/`.
+3. **Every export in `package.json` needs three conditions**: `"types"`, `"svelte"`, and `"import"`. Non-Svelte consumers need `"import"`.
+4. **Keep `dependencies` lean** — only packages imported by `src/lib/` code. App-only deps (`posthog-js`, `@fontsource/*`) go in `devDependencies`.
+5. **When adding public utilities**, export from both `src/lib/index.ts` and `packages/objex-utils/src/index.ts`.
+6. **Verify before publish**:
+   ```bash
+   pnpm -w run package                                    # builds dist/ + publint
+   pnpm --filter @walkthru-earth/objex-utils run build     # builds utils
+   grep -r '\$lib/' dist/ --include='*.js'                 # must be empty
+   ```
 
 ## Stack
 

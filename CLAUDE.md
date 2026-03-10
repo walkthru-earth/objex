@@ -56,7 +56,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Use `conn.send()` via `queryCancellable()` for data queries (non-blocking)
 - Use `$derived.by()` to flatten derived chains (max 2-3 levels)
 - Use `$state` only for small UI primitives (booleans, loading flags)
-- Keep `$lib` alias imports only in app code -- library exports use relative paths
+- Use relative imports (not `$lib`) in ALL files under `src/lib/` — see npm Publishing Rules below
 - Use i18n `t()` for all user-facing strings
 - Run `pnpm -w run format && pnpm -w run lint:fix && pnpm -w run check` before committing
 
@@ -71,7 +71,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Don't skip cleanup of query handles, blob URLs, WebGL contexts, event listeners
 - Don't hold module-level references to heavy objects without nulling in cleanup
 - Don't add `console.log` in library code -- Vite strips them in production via config
-- Don't use `$lib` alias in npm-published files: `storage/adapter.ts`, `storage/url-adapter.ts`, `utils/storage-url.ts`, or any file they import (breaks `objex-utils` tsup build)
+- Don't use `$lib` alias in any file under `src/lib/` — it breaks dynamic imports in dist/ and the objex-utils tsup build (see npm Publishing Rules)
 - Don't materialize all Arrow rows via `.toArray().map(r => r.toJSON())` -- use columnar access
 - Don't use the shadcn CLI -- manually create/edit UI components in `src/lib/components/ui/` using bits-ui primitives (reference: https://bits-ui.com/llms.txt)
 
@@ -104,6 +104,40 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - **Zarr numcodecs-wrapped codecs**: Zarr v3 stores from Python zarr-python use `numcodecs.` prefix (e.g. `numcodecs.shuffle`, `numcodecs.zlib`). zarrita only registers bare names. `ensureCodecsRegistered()` in `zarr.ts` adds aliases + byte shuffle implementation. Must be awaited before creating `ZarrLayer`
 - **Zarr non-consolidated v3**: stores without `consolidated_metadata` in zarr.json (e.g. TCI.zarr) use `discoverV3Children()` which parses multiscales convention to discover child arrays. Stores with no root metadata at all (e.g. landcovernet.zr3) require S3 XML listing (not yet implemented)
 - **Cloud protocol URLs**: `resolveCloudUrl()` in `url.ts` converts `s3://` → HTTPS with AWS region auto-detection from bucket name. Called once in `openUrlTab()` (+page.svelte) as single entry point -- never duplicate in individual viewers
+
+## npm Publishing Rules
+
+Everything under `src/lib/` is published to npm via `svelte-package`. Follow these rules to prevent broken packages:
+
+### Import Rules
+- **NEVER use `$lib/` in any file under `src/lib/`** — use relative imports (`../types.js`, `../constants.js`)
+- `svelte-package` resolves static `$lib/` imports, but **dynamic `import()` with `@vite-ignore` is NOT resolved** — it ships as-is and crashes at runtime
+- `$app/` and `$env/` imports are SvelteKit-only — files using them must NOT be in `src/lib/`
+- App-only code (analytics, layout CSS, route logic) belongs in `src/routes/`, not `src/lib/`
+
+### Exports Map (`package.json`)
+- Every export entry MUST have all three conditions: `"types"`, `"svelte"`, and `"import"`
+- `"svelte"` is only recognized by Svelte tooling; `"import"` is needed for non-Svelte ESM consumers
+- When adding a new public utility, add it to both `src/lib/index.ts` AND `packages/objex-utils/src/index.ts`
+
+### Files Field
+- The `"files"` field excludes `CLAUDE.md`, `assets/`, and test files from the npm tarball
+- After adding new non-code files to `src/lib/`, verify they don't leak into the tarball: `pnpm pack --pack-destination /tmp && tar tf /tmp/*.tgz | grep <filename>`
+
+### Dependency Classification
+- `dependencies`: packages imported by code in `src/lib/` (shipped to consumers)
+- `devDependencies`: packages only used in `src/routes/`, build tooling, or dev server
+- App-only packages (`posthog-js`, `@fontsource/*`) must be in `devDependencies`
+- Run `pnpm -w run package` + `pnpm --filter @walkthru-earth/objex-utils run build` to verify both packages build
+
+### Pre-Publish Checklist
+```bash
+pnpm -w run format && pnpm -w run lint:fix && pnpm -w run check
+pnpm -w run package                                    # builds dist/ + publint
+pnpm --filter @walkthru-earth/objex-utils run build     # builds objex-utils
+grep -r '\$lib/' dist/ --include='*.js'                 # must find nothing
+pnpm pack --pack-destination /tmp                       # inspect tarball
+```
 
 ## Viewer Pattern
 

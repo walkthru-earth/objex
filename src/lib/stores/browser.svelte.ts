@@ -1,5 +1,5 @@
-import { getAdapter } from '$lib/storage/index.js';
-import type { Connection, FileEntry } from '$lib/types.js';
+import { getAdapter } from '../storage/index.js';
+import type { Connection, FileEntry } from '../types.js';
 import { credentialStore } from './credentials.svelte.js';
 import { safeLock } from './safelock.svelte.js';
 

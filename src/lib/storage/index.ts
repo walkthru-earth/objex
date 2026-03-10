@@ -1,4 +1,4 @@
-import { connectionStore } from '$lib/stores/connections.svelte.js';
+import { connectionStore } from '../stores/connections.svelte.js';
 import type { StorageAdapter } from './adapter.js';
 import { BrowserAzureAdapter } from './browser-azure.js';
 import { BrowserCloudAdapter } from './browser-cloud.js';

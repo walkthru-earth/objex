@@ -1,6 +1,6 @@
-import { STORAGE_KEYS } from '$lib/constants.js';
-import { type Locale, setLocale } from '$lib/i18n/index.svelte.js';
-import type { Theme } from '$lib/types.js';
+import { STORAGE_KEYS } from '../constants.js';
+import { type Locale, setLocale } from '../i18n/index.svelte.js';
+import type { Theme } from '../types.js';
 
 interface PersistedSettings {
 	theme: Theme;

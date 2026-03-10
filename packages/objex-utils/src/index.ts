@@ -1,5 +1,17 @@
 // Core types
 
+// Constants
+export {
+	COPY_FEEDBACK_MS,
+	DEFAULT_TARGET_CRS,
+	DUCKDB_INIT_TIMEOUT_MS,
+	LAYER_HUE_MULTIPLIER,
+	MAX_QUERY_HISTORY_ENTRIES,
+	SQL_PREVIEW_LENGTH,
+	STORAGE_KEYS,
+	VIEWER_DIR_EXTENSIONS,
+	WGS84_CODES
+} from '../../../src/lib/constants.js';
 export type {
 	DuckDbReadFn,
 	FileCategory,
@@ -44,7 +56,15 @@ export {
 	typeColor,
 	typeLabel
 } from '../../../src/lib/utils/column-types.js';
-export { formatDate, formatFileSize, getFileExtension } from '../../../src/lib/utils/format.js';
+// Error handling
+export { handleLoadError } from '../../../src/lib/utils/error.js';
+export {
+	formatDate,
+	formatFileSize,
+	formatValue,
+	getFileExtension,
+	jsonReplacerBigInt
+} from '../../../src/lib/utils/format.js';
 export type { GeoArrowGeomType, GeoArrowResult } from '../../../src/lib/utils/geoarrow.js';
 export { buildGeoArrowTables, normalizeGeomType } from '../../../src/lib/utils/geoarrow.js';
 export type { HexRow } from '../../../src/lib/utils/hex.js';

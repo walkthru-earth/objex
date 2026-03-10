@@ -1,6 +1,6 @@
 # utils/
 
-Pure utility modules. No Svelte dependency except `url-state.ts` and `analytics.ts`.
+Pure utility modules. No Svelte dependency except `url-state.ts`.
 Shared constants live in `src/lib/constants.ts` (imported by stores, query, and utils).
 
 ```mermaid
@@ -24,6 +24,8 @@ graph TD
         SHIKI[shiki.ts<br/>highlightCode]
         NB[notebook.ts<br/>renderNotebook]
         ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl, fetchHierarchy, ZarrNode, ZarrHierarchy]
+    end
+    subgraph "Published (npm) — new"
         CB[clipboard.ts<br/>copyToClipboard, wireCodeCopyButtons]
         ERR[error.ts<br/>handleLoadError]
     end
@@ -50,7 +52,6 @@ graph TD
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
 | `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `ensureCodecsRegistered()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
-| `analytics.ts` | `initAnalytics()`, `capturePageview()` | +layout.svelte |
 | `export.ts` | `exportToCsv()`, `exportToJson()` | TableStatusBar |
 | `pdf.ts` | `loadPdfDocument()` | PdfViewer |
 | `model3d.ts` | `createModelScene()`, `loadModel()` | ModelViewer |
@@ -59,5 +60,5 @@ graph TD
 | `host-detection.ts` | `detectHostBucket()` | stores/connections, Sidebar |
 | `markdown-sql.ts` | `parseMarkdownDocument()`, `interpolateTemplates()` | MarkdownViewer |
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
-| `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer |
-| `error.ts` | `handleLoadError()` | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer |
+| `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
+| `error.ts` | `handleLoadError()` | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer, lib/index.ts |

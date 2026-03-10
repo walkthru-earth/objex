@@ -1,4 +1,4 @@
-import { MAX_QUERY_HISTORY_ENTRIES, STORAGE_KEYS } from '$lib/constants.js';
+import { MAX_QUERY_HISTORY_ENTRIES, STORAGE_KEYS } from '../constants.js';
 
 export interface QueryHistoryEntry {
 	id: string;

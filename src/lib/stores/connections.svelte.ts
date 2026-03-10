@@ -1,6 +1,6 @@
-import { STORAGE_KEYS } from '$lib/constants.js';
-import type { Connection, ConnectionConfig } from '$lib/types.js';
-import type { DetectedHost } from '$lib/utils/host-detection.js';
+import { STORAGE_KEYS } from '../constants.js';
+import type { Connection, ConnectionConfig } from '../types.js';
+import type { DetectedHost } from '../utils/host-detection.js';
 import { credentialStore, storeToNative } from './credentials.svelte.js';
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ function createConnectionsStore() {
 			persistToLocalStorage(connections);
 
 			// Invalidate cached adapter for this connection
-			import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
+			import('../storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
 
 			// Update in-memory credentials.
 			if (!config.anonymous) {
@@ -160,7 +160,7 @@ function createConnectionsStore() {
 			persistToLocalStorage(connections);
 			credentialStore.remove(id);
 			// Invalidate cached adapter for this connection
-			import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
+			import('../storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
 			return connections.length < before;
 		},
 
@@ -168,7 +168,7 @@ function createConnectionsStore() {
 		 * Test whether a connection is reachable via a lightweight list.
 		 */
 		async test(id: string): Promise<boolean> {
-			const { getAdapter } = await import(/* @vite-ignore */ '$lib/storage/index.js');
+			const { getAdapter } = await import('../storage/index.js');
 			const adapter = getAdapter('remote', id);
 			await adapter.list('');
 			return true;
@@ -213,7 +213,7 @@ function createConnectionsStore() {
 			}
 
 			try {
-				const { getAdapter } = await import(/* @vite-ignore */ '$lib/storage/index.js');
+				const { getAdapter } = await import('../storage/index.js');
 				const adapter = getAdapter('remote', tempId);
 				await adapter.list(config.rootPrefix || '');
 				return true;
