@@ -1,5 +1,10 @@
 # objex
 
+[![npm](https://img.shields.io/npm/v/@walkthru-earth/objex?label=%40walkthru-earth%2Fobjex&color=cb3837)](https://www.npmjs.com/package/@walkthru-earth/objex)
+[![npm](https://img.shields.io/npm/v/@walkthru-earth/objex-utils?label=%40walkthru-earth%2Fobjex-utils&color=cb3837)](https://www.npmjs.com/package/@walkthru-earth/objex-utils)
+[![CI](https://github.com/walkthru-earth/objex/actions/workflows/ci.yml/badge.svg)](https://github.com/walkthru-earth/objex/actions/workflows/ci.yml)
+[![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+
 Cloud storage explorer that runs entirely in the browser. Connect to S3, Azure, GCS, R2, MinIO -- browse files, query data with SQL, and visualize geospatial formats on interactive maps. No backend required.
 
 ```mermaid
@@ -92,11 +97,13 @@ import {
 | `./utils/geoarrow` | `buildGeoArrowTables`, `normalizeGeomType` |
 | `./utils/storage-url` | `parseStorageUrl`, `looksLikeUrl` |
 | `./utils/parquet-metadata` | `readParquetMetadata`, `extractEpsgFromGeoMeta` |
-| `./utils/format` | `formatFileSize`, `formatDate`, `getFileExtension` |
+| `./utils/format` | `formatFileSize`, `formatDate`, `formatValue`, `getFileExtension`, `jsonReplacerBigInt` |
 | `./utils/hex` | `generateHexDump` |
 | `./utils/column-types` | `classifyType`, `typeColor`, `typeBadgeClass` |
 | `./file-icons` | `getFileTypeInfo`, `getDuckDbReadFn`, `getViewerKind` |
 | `./types` | `FileEntry`, `Connection`, `Tab`, `WriteResult`, `Theme` |
+
+The main export also includes `copyToClipboard`, `handleLoadError`, and shared constants (`WGS84_CODES`, `STORAGE_KEYS`, `DEFAULT_TARGET_CRS`, etc.).
 
 ## Quick Start (Development)
 
