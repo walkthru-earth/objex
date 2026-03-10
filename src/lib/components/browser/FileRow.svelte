@@ -1,6 +1,7 @@
 <script lang="ts">
 import PencilIcon from '@lucide/svelte/icons/pencil';
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
+import { VIEWER_DIR_EXTENSIONS } from '$lib/constants.js';
 import FileTypeIcon from '$lib/file-icons/FileTypeIcon.svelte';
 import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -17,9 +18,6 @@ interface Props {
 }
 
 let { entry, onDelete, onRename }: Props = $props();
-
-/** Extensions that represent "virtual files" — directories that open as viewers. */
-const VIEWER_DIR_EXTENSIONS = new Set(['zarr', 'zr3']);
 
 function isViewerDir(e: FileEntry): boolean {
 	return e.is_dir && VIEWER_DIR_EXTENSIONS.has(e.extension);

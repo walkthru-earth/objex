@@ -8,6 +8,7 @@ import {
 	ResizablePaneGroup
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
+import { formatFileSize } from '$lib/utils/format.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import { highlightCode } from '$lib/utils/shiki';
 
@@ -151,12 +152,7 @@ async function selectZoom(zoom: number) {
 	loadingEntries = false;
 }
 
-function formatBytes(bytes: number): string {
-	if (bytes === 0) return '0 B';
-	const units = ['B', 'KB', 'MB', 'GB'];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	return `${(bytes / 1024 ** i).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-}
+const formatBytes = formatFileSize;
 
 const maxCount = $derived(Math.max(1, ...zoomSummaries.map((s) => s.count)));
 const dedupRatio = $derived(

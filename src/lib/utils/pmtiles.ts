@@ -1,4 +1,5 @@
 import { type Header, PMTiles, Protocol } from 'pmtiles';
+import { LAYER_HUE_MULTIPLIER } from '../constants.js';
 
 let protocol: Protocol | null = null;
 
@@ -154,7 +155,7 @@ export function buildPmtilesLayers(
 
 	for (let i = 0; i < metadata.layers.length; i++) {
 		const layerId = metadata.layers[i];
-		const hue = (i * 137) % 360;
+		const hue = (i * LAYER_HUE_MULTIPLIER) % 360;
 
 		layers.push({
 			id: `${layerId}-fill`,

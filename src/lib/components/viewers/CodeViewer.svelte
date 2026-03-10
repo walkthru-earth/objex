@@ -8,6 +8,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { copyToClipboard } from '$lib/utils/clipboard.js';
+import { handleLoadError } from '$lib/utils/error.js';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
@@ -206,8 +208,9 @@ async function loadCode() {
 		rawCode = new TextDecoder().decode(data);
 		html = await highlightCode(rawCode, lang);
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}
@@ -298,13 +301,7 @@ function setViewMode(mode: 'code' | 'render' | 'stac-browser' | 'kepler' | 'mapu
 }
 
 async function copyCode() {
-	try {
-		await navigator.clipboard.writeText(rawCode);
-		copied = true;
-		setTimeout(() => (copied = false), 2000);
-	} catch {
-		// clipboard not available
-	}
+	await copyToClipboard(rawCode, (v) => (copied = v));
 }
 </script>
 

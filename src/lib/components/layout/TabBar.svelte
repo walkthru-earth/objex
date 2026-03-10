@@ -8,6 +8,7 @@ import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
+import { copyToClipboard } from '$lib/utils/clipboard.js';
 import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
 
 let { leading }: { leading?: Snippet } = $props();
@@ -27,13 +28,9 @@ function handleClose(event: MouseEvent, id: string) {
 async function handleCopy(type: 'https' | 's3', tab: (typeof tabs.items)[0]) {
 	const url = type === 'https' ? buildHttpsUrl(tab) : buildStorageUrl(tab);
 	if (!url) return;
-	try {
-		await navigator.clipboard.writeText(url);
-		copiedType = `${type}-${tab.id}`;
-		setTimeout(() => (copiedType = null), 2000);
-	} catch {
-		// clipboard API may fail in some contexts
-	}
+	await copyToClipboard(url, (copied) => {
+		copiedType = copied ? `${type}-${tab.id}` : null;
+	});
 }
 </script>
 

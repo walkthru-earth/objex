@@ -32,6 +32,11 @@ graph TD
     PMT --> PMV[pmtiles/PmtilesMapView]
     PMT --> PMA[pmtiles/PmtilesArchiveView]
     PMT --> PMI[pmtiles/PmtilesTileInspector]
+    PMI --> SVG[pmtiles/SvgTileRenderer]
+
+    TV --> FI[FileInfo]
+    TV --> LP[LoadProgress]
+    GPM --> LP
 ```
 
 | Viewer | Powered by | Key deps used |

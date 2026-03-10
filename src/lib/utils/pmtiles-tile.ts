@@ -7,6 +7,7 @@
  */
 
 import type { PMTiles } from 'pmtiles';
+import { LAYER_HUE_MULTIPLIER } from '../constants.js';
 
 export interface DecodedTile {
 	z: number;
@@ -103,5 +104,5 @@ export function tileMimeType(format: string): string {
 
 /** Compute the hue for layer index i (same palette as buildPmtilesLayers). */
 export function layerHue(i: number): number {
-	return (i * 137) % 360;
+	return (i * LAYER_HUE_MULTIPLIER) % 360;
 }

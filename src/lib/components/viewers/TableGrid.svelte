@@ -15,6 +15,7 @@ import {
 	typeBadgeClass,
 	typeLabel
 } from '$lib/utils/column-types.js';
+import { jsonReplacerBigInt } from '$lib/utils/format.js';
 
 const INITIAL_ROWS = 100;
 const BATCH_SIZE = 100;
@@ -167,7 +168,7 @@ function copyRow() {
 	for (const [k, v] of Object.entries(ctxMenu.rowData)) {
 		if (!k.startsWith('__')) clean[k] = v;
 	}
-	copyToClipboard(JSON.stringify(clean, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2));
+	copyToClipboard(JSON.stringify(clean, jsonReplacerBigInt, 2));
 }
 
 function copyColumn() {
@@ -195,7 +196,7 @@ function formatCell(value: any, category: TypeCategory): string {
 	}
 	if (typeof value === 'bigint') return value.toString();
 	if (typeof value === 'object') {
-		return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+		return JSON.stringify(value, jsonReplacerBigInt);
 	}
 	return String(value);
 }

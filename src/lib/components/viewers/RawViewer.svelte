@@ -5,6 +5,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { handleLoadError } from '$lib/utils/error.js';
 import { formatFileSize } from '$lib/utils/format';
 import { generateHexDump, type HexRow } from '$lib/utils/hex';
 
@@ -55,8 +56,9 @@ async function loadHexDump() {
 		truncated = fileSize > MAX_BYTES;
 		rows = generateHexDump(data);
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}

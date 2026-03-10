@@ -52,3 +52,23 @@ export function getFileExtension(filename: string): string {
 	if (lastDot <= 0) return '';
 	return filename.slice(lastDot).toLowerCase();
 }
+
+/**
+ * JSON replacer that converts BigInt values to strings.
+ * Use with `JSON.stringify(value, jsonReplacerBigInt)`.
+ */
+export function jsonReplacerBigInt(_key: string, value: unknown): unknown {
+	return typeof value === 'bigint' ? value.toString() : value;
+}
+
+/**
+ * Format a value for display in tables, attribute panels, and exports.
+ * Handles null, undefined, Date, BigInt, and objects uniformly.
+ */
+export function formatValue(value: unknown): string {
+	if (value === null || value === undefined) return 'NULL';
+	if (value instanceof Date) return value.toISOString();
+	if (typeof value === 'bigint') return value.toString();
+	if (typeof value === 'object') return JSON.stringify(value, jsonReplacerBigInt);
+	return String(value);
+}

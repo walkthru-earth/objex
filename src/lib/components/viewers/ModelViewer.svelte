@@ -11,6 +11,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { handleLoadError } from '$lib/utils/error.js';
 import {
 	createModelScene,
 	disposeModelScene,
@@ -52,8 +53,9 @@ async function loadModelFile() {
 		meshCount = info.meshCount;
 		vertexCount = info.vertexCount;
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}

@@ -9,6 +9,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { copyToClipboard, wireCodeCopyButtons } from '$lib/utils/clipboard.js';
+import { handleLoadError } from '$lib/utils/error.js';
 import { renderNotebook } from '$lib/utils/notebook';
 import { highlightCodeReversed } from '$lib/utils/shiki';
 
@@ -70,8 +72,9 @@ async function loadNotebook() {
 
 		await renderNotebookContent(notebook);
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}
@@ -110,18 +113,7 @@ async function renderNotebookContent(notebook: any) {
 	}
 
 	// Wire copy button click handlers
-	for (const btn of container.querySelectorAll('.nb-copy-btn')) {
-		btn.addEventListener('click', async () => {
-			const code = decodeURIComponent((btn as HTMLElement).dataset.code ?? '');
-			try {
-				await navigator.clipboard.writeText(code);
-				btn.classList.add('copied');
-				setTimeout(() => btn.classList.remove('copied'), 2000);
-			} catch {
-				// clipboard not available
-			}
-		});
-	}
+	wireCodeCopyButtons(container, '.nb-copy-btn');
 }
 
 function toggleCode() {
@@ -135,13 +127,7 @@ function toggleCode() {
 }
 
 async function copyRaw() {
-	try {
-		await navigator.clipboard.writeText(rawContent);
-		copied = true;
-		setTimeout(() => (copied = false), 2000);
-	} catch {
-		// clipboard not available
-	}
+	await copyToClipboard(rawContent, (v) => (copied = v));
 }
 </script>
 

@@ -21,7 +21,8 @@ Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diag
 | `src/lib/stores/` | `stores/CLAUDE.md` | Svelte 5 rune stores |
 | `src/lib/storage/` | `storage/CLAUDE.md` | S3/Azure/URL adapters |
 | `src/lib/query/` | `query/CLAUDE.md` | DuckDB-WASM engine |
-| `src/lib/utils/` | `utils/CLAUDE.md` | WKB, GeoArrow, format, hex, deck |
+| `src/lib/constants.ts` | — | Shared constants (STORAGE_KEYS, WGS84_CODES, DEFAULT_TARGET_CRS, etc.) |
+| `src/lib/utils/` | `utils/CLAUDE.md` | WKB, GeoArrow, format, hex, deck, clipboard, error |
 | `src/lib/file-icons/` | `file-icons/CLAUDE.md` | Extension → viewer registry |
 | `src/lib/i18n/` | `i18n/CLAUDE.md` | en/ar translations |
 | `packages/objex-utils/` | `CLAUDE.md` | Pure TS sub-package |
@@ -151,4 +152,11 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 - `docs/arrow-table-grid-research.md` -- TableGrid rewrite, quak analysis, append-on-scroll
 - `docs/svelte5-performance-guide.md` -- Reactivity patterns, $state.raw, $effect cleanup
 - `docs/performance-audit.md` -- Per-viewer memory/perf audit
+- `docs/performance-optimization.md` -- Performance optimization strategies
+- `docs/performance-fix-plan.md` -- Performance fix implementation plan
+- `docs/performance-file-map.md` -- Performance-related file map
 - `docs/duckdb-wasm-concurrency-research.md` -- Worker threading model
+- `docs/archive-range-request-research.md` -- Archive range request research
+- `docs/ipynb-viewer-research.md` -- Jupyter notebook viewer research
+- `docs/notebook-viewer-research.md` -- Notebook viewer implementation research
+- `docs/ui-ux-improvement-plan.md` -- UI/UX improvement plan

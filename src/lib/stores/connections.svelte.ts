@@ -1,8 +1,7 @@
+import { STORAGE_KEYS } from '$lib/constants.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
 import type { DetectedHost } from '$lib/utils/host-detection.js';
 import { credentialStore, storeToNative } from './credentials.svelte.js';
-
-const CONNECTIONS_KEY = 'obstore-explore-connections';
 
 // ---------------------------------------------------------------------------
 // localStorage helpers
@@ -11,7 +10,7 @@ const CONNECTIONS_KEY = 'obstore-explore-connections';
 function loadFromLocalStorage(): Connection[] {
 	if (typeof window === 'undefined') return [];
 	try {
-		const raw = localStorage.getItem(CONNECTIONS_KEY);
+		const raw = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
 		if (raw) {
 			return JSON.parse(raw) as Connection[];
 		}
@@ -24,7 +23,7 @@ function loadFromLocalStorage(): Connection[] {
 function persistToLocalStorage(connections: Connection[]): void {
 	if (typeof window === 'undefined') return;
 	try {
-		localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(connections));
+		localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(connections));
 	} catch {
 		// ignore storage errors
 	}

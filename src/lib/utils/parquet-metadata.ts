@@ -7,9 +7,8 @@
  * This provides instant metadata display before DuckDB-WASM finishes loading.
  */
 
+import { WGS84_CODES } from '../constants.js';
 import type { GeoArrowGeomType } from './geoarrow.js';
-
-const WGS84_CODES = new Set([4326, 4979]);
 
 export interface GeoColumnMeta {
 	encoding: string;

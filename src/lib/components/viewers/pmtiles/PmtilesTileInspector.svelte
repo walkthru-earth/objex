@@ -4,6 +4,7 @@ import XIcon from '@lucide/svelte/icons/x';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { formatFileSize } from '$lib/utils/format.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import {
 	type DecodedTile,
@@ -167,12 +168,7 @@ onDestroy(() => {
 	if (rasterUrl) URL.revokeObjectURL(rasterUrl);
 });
 
-function formatBytes(bytes: number): string {
-	if (bytes === 0) return '0 B';
-	const units = ['B', 'KB', 'MB'];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	return `${(bytes / 1024 ** i).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-}
+const formatBytes = formatFileSize;
 
 function formatValue(v: unknown): string {
 	if (v === null || v === undefined) return 'NULL';

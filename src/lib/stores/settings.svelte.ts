@@ -1,7 +1,6 @@
+import { STORAGE_KEYS } from '$lib/constants.js';
 import { type Locale, setLocale } from '$lib/i18n/index.svelte.js';
 import type { Theme } from '$lib/types.js';
-
-const SETTINGS_KEY = 'obstore-explore-settings';
 
 interface PersistedSettings {
 	theme: Theme;
@@ -14,13 +13,13 @@ function loadSettings(): PersistedSettings {
 		return { theme: 'system', locale: 'en', featureLimit: 1000 };
 	}
 	try {
-		const raw = localStorage.getItem(SETTINGS_KEY);
+		const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
 		if (raw) {
 			const parsed = JSON.parse(raw);
 			return {
 				theme: parsed.theme ?? 'system',
 				locale: parsed.locale ?? 'en',
-				featureLimit: parsed.featureLimit ?? 100
+				featureLimit: parsed.featureLimit ?? 1000
 			};
 		}
 	} catch {
@@ -32,7 +31,7 @@ function loadSettings(): PersistedSettings {
 function persistSettings(settings: PersistedSettings): void {
 	if (typeof window === 'undefined') return;
 	try {
-		localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+		localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
 	} catch {
 		// ignore storage errors
 	}

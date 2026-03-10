@@ -4,6 +4,7 @@ Svelte 5 rune-based stores. All use `$state` / `$state.raw` / `$derived`.
 
 ```mermaid
 graph LR
+    CONST[../constants.ts] --> CONN & SET & QH
     CONN[connections.svelte.ts] --> CRED[credentials.svelte.ts]
     TABS[tabs.svelte.ts] --> TR[tab-resources.svelte.ts]
     FILES[files.svelte.ts] --> CONN

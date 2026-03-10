@@ -14,6 +14,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { handleLoadError } from '$lib/utils/error.js';
 import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
@@ -73,10 +74,11 @@ async function loadPdf() {
 		totalPages = doc.numPages;
 		currentPage = 1;
 	} catch (err: any) {
-		// Ignore cancellation errors (destroyed loading task) and aborts
-		if (err instanceof DOMException && err.name === 'AbortError') return;
+		// Ignore PDF-specific cancellation errors (destroyed loading task)
 		if (err?.name === 'PasswordException' || err?.message?.includes('destroy')) return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}

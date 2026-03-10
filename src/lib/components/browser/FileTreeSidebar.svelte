@@ -10,6 +10,7 @@ import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 import SearchIcon from '@lucide/svelte/icons/search';
 import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+import { VIEWER_DIR_EXTENSIONS } from '$lib/constants.js';
 import FileTypeIcon from '$lib/file-icons/FileTypeIcon.svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
@@ -169,9 +170,6 @@ function openFile(entry: FileEntry) {
 	// Update URL for shareable links
 	syncUrlParam(connection, entry.path);
 }
-
-/** Extensions that represent "virtual files" — directories that open as viewers. */
-const VIEWER_DIR_EXTENSIONS = new Set(['zarr', 'zr3']);
 
 function isViewerDir(entry: FileEntry): boolean {
 	return entry.is_dir && VIEWER_DIR_EXTENSIONS.has(entry.extension);

@@ -7,6 +7,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { wireCodeCopyButtons } from '$lib/utils/clipboard.js';
+import { handleLoadError } from '$lib/utils/error.js';
 import { EvidenceContext } from '$lib/utils/evidence-context';
 import { detectRTL, processDirection, renderMarkdown } from '$lib/utils/markdown';
 import {
@@ -114,8 +116,9 @@ async function loadMarkdown() {
 			html = processDirection(rendered, isRTL);
 		}
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}
@@ -124,24 +127,13 @@ async function loadMarkdown() {
 	if (!error) {
 		await tick();
 		await renderMermaidDiagrams();
-		wireCodeCopyButtons();
+		wireCopyButtons();
 	}
 }
 
-function wireCodeCopyButtons() {
+function wireCopyButtons() {
 	if (!contentEl) return;
-	for (const btn of contentEl.querySelectorAll('.code-copy-btn')) {
-		btn.addEventListener('click', async () => {
-			const code = decodeURIComponent((btn as HTMLElement).dataset.code ?? '');
-			try {
-				await navigator.clipboard.writeText(code);
-				btn.classList.add('copied');
-				setTimeout(() => btn.classList.remove('copied'), 2000);
-			} catch {
-				// clipboard not available
-			}
-		});
-	}
+	wireCodeCopyButtons(contentEl, '.code-copy-btn');
 }
 
 async function renderMermaidDiagrams() {

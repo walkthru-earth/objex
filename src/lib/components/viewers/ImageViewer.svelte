@@ -9,23 +9,13 @@ import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+import { getMimeType } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { handleLoadError } from '$lib/utils/error.js';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
-
-const mimeMap: Record<string, string> = {
-	png: 'image/png',
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	gif: 'image/gif',
-	webp: 'image/webp',
-	avif: 'image/avif',
-	svg: 'image/svg+xml',
-	bmp: 'image/bmp',
-	ico: 'image/x-icon'
-};
 
 let { tab }: { tab: Tab } = $props();
 
@@ -64,16 +54,16 @@ async function loadImage() {
 			// Authenticated S3 — download via storage adapter
 			const adapter = getAdapter(tab.source, tab.connectionId);
 			const data = await adapter.read(tab.path, undefined, undefined, signal);
-			const ext = tab.extension.toLowerCase();
 			const blob = new Blob([data as unknown as BlobPart], {
-				type: mimeMap[ext] || 'application/octet-stream'
+				type: getMimeType(tab.extension)
 			});
 			blobUrl = URL.createObjectURL(blob);
 			imgSrc = blobUrl;
 		}
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}

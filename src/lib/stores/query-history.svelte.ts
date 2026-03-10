@@ -1,5 +1,4 @@
-const STORAGE_KEY = 'obstore-explore-query-history';
-const MAX_ENTRIES = 200;
+import { MAX_QUERY_HISTORY_ENTRIES, STORAGE_KEYS } from '$lib/constants.js';
 
 export interface QueryHistoryEntry {
 	id: string;
@@ -14,7 +13,7 @@ export interface QueryHistoryEntry {
 function loadEntries(): QueryHistoryEntry[] {
 	if (typeof window === 'undefined') return [];
 	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
+		const raw = localStorage.getItem(STORAGE_KEYS.QUERY_HISTORY);
 		if (raw) return JSON.parse(raw) as QueryHistoryEntry[];
 	} catch {
 		// ignore parse errors
@@ -25,7 +24,7 @@ function loadEntries(): QueryHistoryEntry[] {
 function persistEntries(entries: QueryHistoryEntry[]) {
 	if (typeof window === 'undefined') return;
 	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+		localStorage.setItem(STORAGE_KEYS.QUERY_HISTORY, JSON.stringify(entries));
 	} catch {
 		// ignore storage errors
 	}
@@ -47,7 +46,7 @@ function createQueryHistoryStore() {
 				...entry,
 				id: crypto.randomUUID()
 			};
-			entries = [newEntry, ...entries].slice(0, MAX_ENTRIES);
+			entries = [newEntry, ...entries].slice(0, MAX_QUERY_HISTORY_ENTRIES);
 			save();
 		},
 		remove(id: string) {

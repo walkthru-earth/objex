@@ -1,27 +1,16 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
+import { getMimeType } from '$lib/file-icons/index.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import { handleLoadError } from '$lib/utils/error.js';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 
 let { tab }: { tab: Tab } = $props();
 
 const videoExtensions = new Set(['mp4', 'webm', 'mov', 'avi', 'mkv']);
 const mediaType = $derived(videoExtensions.has(tab.extension.toLowerCase()) ? 'video' : 'audio');
-
-const mimeMap: Record<string, string> = {
-	mp4: 'video/mp4',
-	webm: 'video/webm',
-	mov: 'video/quicktime',
-	avi: 'video/x-msvideo',
-	mkv: 'video/x-matroska',
-	mp3: 'audio/mpeg',
-	wav: 'audio/wav',
-	ogg: 'audio/ogg',
-	flac: 'audio/flac',
-	aac: 'audio/aac'
-};
 
 let abortController: AbortController | null = null;
 let mediaSrc = $state<string | null>(null);
@@ -51,14 +40,14 @@ async function loadMedia() {
 			// Authenticated S3 — download via storage adapter (blob fallback)
 			const adapter = getAdapter(tab.source, tab.connectionId);
 			const data = await adapter.read(tab.path, undefined, undefined, signal);
-			const mime = mimeMap[tab.extension.toLowerCase()] || 'application/octet-stream';
-			const blob = new Blob([data as unknown as BlobPart], { type: mime });
+			const blob = new Blob([data as unknown as BlobPart], { type: getMimeType(tab.extension) });
 			blobUrl = URL.createObjectURL(blob);
 			mediaSrc = blobUrl;
 		}
 	} catch (err) {
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		const msg = handleLoadError(err);
+		if (msg === null) return;
+		error = msg;
 	} finally {
 		loading = false;
 	}

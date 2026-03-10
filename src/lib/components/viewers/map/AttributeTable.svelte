@@ -1,5 +1,6 @@
 <script lang="ts">
 import XIcon from '@lucide/svelte/icons/x';
+import { formatValue } from '$lib/utils/format.js';
 
 let {
 	feature = null,
@@ -10,12 +11,6 @@ let {
 	visible?: boolean;
 	onClose?: () => void;
 } = $props();
-
-function formatValue(value: any): string {
-	if (value === null || value === undefined) return 'NULL';
-	if (typeof value === 'object') return JSON.stringify(value);
-	return String(value);
-}
 </script>
 
 {#if visible && feature}

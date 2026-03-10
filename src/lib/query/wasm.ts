@@ -1,4 +1,5 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '$lib/constants.js';
 import { buildDuckDbSource } from '$lib/file-icons/index.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
 import {
@@ -21,7 +22,7 @@ const mvp_worker = `${CDN_BASE}/duckdb-browser-mvp.worker.js`;
 const duckdb_wasm_eh = `${CDN_BASE}/duckdb-eh.wasm`;
 const eh_worker = `${CDN_BASE}/duckdb-browser-eh.worker.js`;
 
-const INIT_TIMEOUT_MS = 30_000;
+const INIT_TIMEOUT_MS = DUCKDB_INIT_TIMEOUT_MS; // Centralized in constants.ts
 
 // ─── Performance & diagnostic logging ────────────────────────────────
 
@@ -150,7 +151,7 @@ async function ensureGeoConversionDisabled(conn: any): Promise<void> {
 
 // ─── CRS detection helpers ───────────────────────────────────────────
 
-const WGS84_CODES = new Set([4326, 4979]);
+// WGS84_CODES imported from constants.ts
 
 /** Extract EPSG code from a PROJJSON object. Returns null for WGS84/CRS84. */
 function extractEpsgFromProjjson(crs: any): string | null {
@@ -427,7 +428,7 @@ export class WasmQueryEngine implements QueryEngine {
 				// always_xy := true forces lon/lat (x/y) axis order for both source and
 				// target, matching the GeoParquet convention regardless of CRS authority.
 				if (sourceCrs) {
-					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}', always_xy := true)`;
 				}
 
 				// ST_AsWKB needed — DuckDB GEOMETRY columns (from ST_ReadSHP, ST_Read)
@@ -894,7 +895,7 @@ export class WasmQueryEngine implements QueryEngine {
 							? `ST_GeomFromWKB(${quoted})`
 							: `ST_GeomFromGeoJSON(${quoted})`;
 					if (sourceCrs) {
-						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}', always_xy := true)`;
 					}
 					wkbExpr = `ST_AsWKB(${geomExpr})`;
 				}
