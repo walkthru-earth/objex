@@ -1,6 +1,6 @@
 {
 	"name": "@walkthru-earth/objex",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Svelte 5 components and utilities for exploring geospatial object storage — S3, GCS, Azure, R2",
 	"author": "Youssef Harby <yharby@walkthru.earth>",
 	"license": "CC-BY-4.0",
