@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../constants.js';
 import { type Locale, setLocale } from '../i18n/index.svelte.js';
 import type { Theme } from '../types.js';
+import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
 
 interface PersistedSettings {
 	theme: Theme;
@@ -8,36 +9,18 @@ interface PersistedSettings {
 	featureLimit: number;
 }
 
+const SETTINGS_DEFAULTS: PersistedSettings = { theme: 'system', locale: 'en', featureLimit: 1000 };
+
 function loadSettings(): PersistedSettings {
-	if (typeof window === 'undefined') {
-		return { theme: 'system', locale: 'en', featureLimit: 1000 };
-	}
-	try {
-		const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-		if (raw) {
-			const parsed = JSON.parse(raw);
-			return {
-				theme: parsed.theme ?? 'system',
-				locale: parsed.locale ?? 'en',
-				featureLimit: parsed.featureLimit ?? 1000
-			};
-		}
-	} catch {
-		// ignore parse errors
-	}
-	return { theme: 'system', locale: 'en', featureLimit: 1000 };
+	const stored = loadFromStorage<Partial<PersistedSettings>>(STORAGE_KEYS.SETTINGS, {});
+	return {
+		theme: stored.theme ?? SETTINGS_DEFAULTS.theme,
+		locale: stored.locale ?? SETTINGS_DEFAULTS.locale,
+		featureLimit: stored.featureLimit ?? SETTINGS_DEFAULTS.featureLimit
+	};
 }
 
-function persistSettings(settings: PersistedSettings): void {
-	if (typeof window === 'undefined') return;
-	try {
-		localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-	} catch {
-		// ignore storage errors
-	}
-}
-
-function resolveTheme(theme: Theme): 'light' | 'dark' {
+export function resolveTheme(theme: Theme): 'light' | 'dark' {
 	if (theme !== 'system') return theme;
 	if (typeof window === 'undefined') return 'light';
 	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -59,7 +42,7 @@ function createSettingsStore() {
 	}
 
 	function persist() {
-		persistSettings({ theme, locale, featureLimit });
+		persistToStorage(STORAGE_KEYS.SETTINGS, { theme, locale, featureLimit });
 	}
 
 	function applyTheme(t: Theme) {

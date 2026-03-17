@@ -30,7 +30,8 @@
 	"peerDependencies": {
 		"apache-arrow": ">=14",
 		"hyparquet": ">=1.25",
-		"hyparquet-compressors": ">=1.1"
+		"hyparquet-compressors": ">=1.1",
+		"yaml": ">=2"
 	},
 	"peerDependenciesMeta": {
 		"apache-arrow": {
@@ -40,6 +41,9 @@
 			"optional": true
 		},
 		"hyparquet-compressors": {
+			"optional": true
+		},
+		"yaml": {
 			"optional": true
 		}
 	},

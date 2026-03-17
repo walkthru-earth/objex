@@ -8,6 +8,12 @@ import { browser } from '$lib/stores/browser.svelte.js';
 import { safeLock } from '$lib/stores/safelock.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { FileEntry } from '$lib/types.js';
+import {
+	type SortConfig,
+	type SortField,
+	sortFileEntries,
+	toggleSortField
+} from '$lib/utils/file-sort.js';
 import { detectZarrMarkers } from '$lib/utils/zarr.js';
 import Breadcrumb from './Breadcrumb.svelte';
 import CreateFolderDialog from './CreateFolderDialog.svelte';
@@ -18,12 +24,8 @@ import RenameDialog from './RenameDialog.svelte';
 import SearchBar from './SearchBar.svelte';
 import UploadButton from './UploadButton.svelte';
 
-type SortField = 'name' | 'size' | 'modified' | 'extension';
-type SortDirection = 'asc' | 'desc';
-
 let filterQuery = $state('');
-let sortField = $state<SortField>('name');
-let sortDirection = $state<SortDirection>('asc');
+let sortConfig = $state<SortConfig>({ field: 'name', direction: 'asc' });
 
 let deleteDialogOpen = $state(false);
 let deleteTarget = $state<FileEntry | null>(null);
@@ -50,7 +52,7 @@ function openAsZarr() {
 }
 
 const sortedAndFilteredEntries = $derived.by(() => {
-	let result = [...browser.entries];
+	let result = browser.entries;
 
 	// Filter
 	if (filterQuery) {
@@ -58,28 +60,7 @@ const sortedAndFilteredEntries = $derived.by(() => {
 		result = result.filter((entry: FileEntry) => entry.name.toLowerCase().includes(q));
 	}
 
-	// Sort
-	const dir = sortDirection === 'asc' ? 1 : -1;
-	result.sort((a, b) => {
-		// Directories always come first
-		if (a.is_dir && !b.is_dir) return -1;
-		if (!a.is_dir && b.is_dir) return 1;
-
-		switch (sortField) {
-			case 'name':
-				return dir * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-			case 'size':
-				return dir * (a.size - b.size);
-			case 'modified':
-				return dir * (a.modified - b.modified);
-			case 'extension':
-				return dir * a.extension.localeCompare(b.extension, undefined, { sensitivity: 'base' });
-			default:
-				return 0;
-		}
-	});
-
-	return result;
+	return sortFileEntries(result, sortConfig);
 });
 
 function handleFilter(query: string) {
@@ -91,12 +72,7 @@ function handleNavigate(path: string) {
 }
 
 function handleSort(field: SortField) {
-	if (sortField === field) {
-		sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-	} else {
-		sortField = field;
-		sortDirection = 'asc';
-	}
+	sortConfig = toggleSortField(sortConfig, field);
 }
 
 function handleDelete(entry: FileEntry) {
@@ -152,8 +128,8 @@ function handleRename(entry: FileEntry) {
 			onclick={() => handleSort('name')}
 		>
 			{t('fileBrowser.name')}
-			{#if sortField === 'name'}
-				{#if sortDirection === 'asc'}
+			{#if sortConfig.field === 'name'}
+				{#if sortConfig.direction === 'asc'}
 					<ArrowUp class="size-3" />
 				{:else}
 					<ArrowDown class="size-3" />
@@ -166,8 +142,8 @@ function handleRename(entry: FileEntry) {
 			class="text-muted-foreground hover:text-foreground flex w-20 shrink-0 items-center justify-end gap-1 transition-colors"
 			onclick={() => handleSort('size')}
 		>
-			{#if sortField === 'size'}
-				{#if sortDirection === 'asc'}
+			{#if sortConfig.field === 'size'}
+				{#if sortConfig.direction === 'asc'}
 					<ArrowUp class="size-3" />
 				{:else}
 					<ArrowDown class="size-3" />
@@ -179,8 +155,8 @@ function handleRename(entry: FileEntry) {
 			class="text-muted-foreground hover:text-foreground flex w-24 shrink-0 items-center justify-end gap-1 transition-colors"
 			onclick={() => handleSort('modified')}
 		>
-			{#if sortField === 'modified'}
-				{#if sortDirection === 'asc'}
+			{#if sortConfig.field === 'modified'}
+				{#if sortConfig.direction === 'asc'}
 					<ArrowUp class="size-3" />
 				{:else}
 					<ArrowDown class="size-3" />

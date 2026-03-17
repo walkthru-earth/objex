@@ -8,5 +8,5 @@ export default defineConfig({
 	clean: true,
 	splitting: false,
 	treeshake: true,
-	external: ['apache-arrow', 'hyparquet', 'hyparquet-compressors']
+	external: ['apache-arrow', 'hyparquet', 'hyparquet-compressors', 'yaml']
 });

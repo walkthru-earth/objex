@@ -5,6 +5,8 @@ Svelte 5 rune-based stores. All use `$state` / `$state.raw` / `$derived`.
 ```mermaid
 graph LR
     CONST[../constants.ts] --> CONN & SET & QH
+    LS[../utils/local-storage.ts] --> CONN & SET & QH
+    FSORT[../utils/file-sort.ts] --> FILES
     CONN[connections.svelte.ts] --> CRED[credentials.svelte.ts]
     TABS[tabs.svelte.ts] --> TR[tab-resources.svelte.ts]
     FILES[files.svelte.ts] --> CONN
@@ -13,6 +15,10 @@ graph LR
     QH[query-history.svelte.ts]
     SL[safelock.svelte.ts]
 ```
+
+Stores use shared utilities from `../utils/`:
+- `local-storage.ts` — generic `loadFromStorage()`/`persistToStorage()` (used by connections, settings, query-history)
+- `file-sort.ts` — `sortFileEntries()`, `toggleSortField()` (used by files)
 
 | File | Export | Used by |
 |------|--------|--------|

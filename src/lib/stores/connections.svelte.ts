@@ -1,33 +1,8 @@
 import { STORAGE_KEYS } from '../constants.js';
 import type { Connection, ConnectionConfig } from '../types.js';
 import type { DetectedHost } from '../utils/host-detection.js';
+import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
 import { credentialStore, storeToNative } from './credentials.svelte.js';
-
-// ---------------------------------------------------------------------------
-// localStorage helpers
-// ---------------------------------------------------------------------------
-
-function loadFromLocalStorage(): Connection[] {
-	if (typeof window === 'undefined') return [];
-	try {
-		const raw = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
-		if (raw) {
-			return JSON.parse(raw) as Connection[];
-		}
-	} catch {
-		// ignore parse errors
-	}
-	return [];
-}
-
-function persistToLocalStorage(connections: Connection[]): void {
-	if (typeof window === 'undefined') return;
-	try {
-		localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(connections));
-	} catch {
-		// ignore storage errors
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Store
@@ -53,7 +28,7 @@ function createConnectionsStore() {
 		 */
 		async load() {
 			if (loaded) return;
-			connections = loadFromLocalStorage();
+			connections = loadFromStorage<Connection[]>(STORAGE_KEYS.CONNECTIONS, []);
 			loaded = true;
 		},
 
@@ -82,7 +57,7 @@ function createConnectionsStore() {
 				rootPrefix: config.rootPrefix
 			};
 			connections = [...connections, conn];
-			persistToLocalStorage(connections);
+			persistToStorage(STORAGE_KEYS.CONNECTIONS, connections);
 
 			// Store credentials in memory (never persisted to localStorage).
 			if (!config.anonymous) {
@@ -122,7 +97,7 @@ function createConnectionsStore() {
 				rootPrefix: config.rootPrefix
 			};
 			connections = [...connections];
-			persistToLocalStorage(connections);
+			persistToStorage(STORAGE_KEYS.CONNECTIONS, connections);
 
 			// Invalidate cached adapter for this connection
 			import('../storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
@@ -157,7 +132,7 @@ function createConnectionsStore() {
 		async remove(id: string): Promise<boolean> {
 			const before = connections.length;
 			connections = connections.filter((c) => c.id !== id);
-			persistToLocalStorage(connections);
+			persistToStorage(STORAGE_KEYS.CONNECTIONS, connections);
 			credentialStore.remove(id);
 			// Invalidate cached adapter for this connection
 			import('../storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(id));
@@ -230,7 +205,7 @@ function createConnectionsStore() {
 					credentialStore.remove(tempId);
 				}
 				// Also clear any cached adapter for the temp connection
-				import('$lib/storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(tempId));
+				import('../storage/index.js').then(({ clearAdapterCache }) => clearAdapterCache(tempId));
 			}
 		},
 

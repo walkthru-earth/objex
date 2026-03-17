@@ -1,38 +1,10 @@
 import type { FileEntry } from '../types.js';
-
-export type SortField = 'name' | 'size' | 'modified' | 'extension';
-export type SortDirection = 'asc' | 'desc';
-
-export interface SortConfig {
-	field: SortField;
-	direction: SortDirection;
-}
-
-function sortEntries(entries: FileEntry[], config: SortConfig): FileEntry[] {
-	const sorted = [...entries];
-	const dir = config.direction === 'asc' ? 1 : -1;
-
-	sorted.sort((a, b) => {
-		// Directories always come first
-		if (a.is_dir && !b.is_dir) return -1;
-		if (!a.is_dir && b.is_dir) return 1;
-
-		switch (config.field) {
-			case 'name':
-				return dir * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-			case 'size':
-				return dir * (a.size - b.size);
-			case 'modified':
-				return dir * (a.modified - b.modified);
-			case 'extension':
-				return dir * a.extension.localeCompare(b.extension, undefined, { sensitivity: 'base' });
-			default:
-				return 0;
-		}
-	});
-
-	return sorted;
-}
+import {
+	type SortConfig,
+	type SortField,
+	sortFileEntries,
+	toggleSortField
+} from '../utils/file-sort.js';
 
 function createFilesStore() {
 	let files = $state<FileEntry[]>([]);
@@ -63,7 +35,7 @@ function createFilesStore() {
 		},
 
 		setFiles(entries: FileEntry[]) {
-			files = sortEntries(entries, sortConfig);
+			files = sortFileEntries(entries, sortConfig);
 			error = null;
 		},
 
@@ -80,16 +52,8 @@ function createFilesStore() {
 		},
 
 		sort(field: SortField) {
-			if (sortConfig.field === field) {
-				// Toggle direction if clicking the same field
-				sortConfig = {
-					field,
-					direction: sortConfig.direction === 'asc' ? 'desc' : 'asc'
-				};
-			} else {
-				sortConfig = { field, direction: 'asc' };
-			}
-			files = sortEntries(files, sortConfig);
+			sortConfig = toggleSortField(sortConfig, field);
+			files = sortFileEntries(files, sortConfig);
 		}
 	};
 }

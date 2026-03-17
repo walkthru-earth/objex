@@ -1,4 +1,5 @@
 import { MAX_QUERY_HISTORY_ENTRIES, STORAGE_KEYS } from '../constants.js';
+import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
 
 export interface QueryHistoryEntry {
 	id: string;
@@ -10,31 +11,13 @@ export interface QueryHistoryEntry {
 	connectionId?: string;
 }
 
-function loadEntries(): QueryHistoryEntry[] {
-	if (typeof window === 'undefined') return [];
-	try {
-		const raw = localStorage.getItem(STORAGE_KEYS.QUERY_HISTORY);
-		if (raw) return JSON.parse(raw) as QueryHistoryEntry[];
-	} catch {
-		// ignore parse errors
-	}
-	return [];
-}
-
-function persistEntries(entries: QueryHistoryEntry[]) {
-	if (typeof window === 'undefined') return;
-	try {
-		localStorage.setItem(STORAGE_KEYS.QUERY_HISTORY, JSON.stringify(entries));
-	} catch {
-		// ignore storage errors
-	}
-}
-
 function createQueryHistoryStore() {
-	let entries = $state<QueryHistoryEntry[]>(loadEntries());
+	let entries = $state<QueryHistoryEntry[]>(
+		loadFromStorage<QueryHistoryEntry[]>(STORAGE_KEYS.QUERY_HISTORY, [])
+	);
 
 	function save() {
-		persistEntries(entries);
+		persistToStorage(STORAGE_KEYS.QUERY_HISTORY, entries);
 	}
 
 	return {

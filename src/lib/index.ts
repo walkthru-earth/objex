@@ -40,14 +40,34 @@ export type {
 export { QueryCancelledError } from './query/engine.js';
 // Storage
 export type { ListPage, StorageAdapter } from './storage/adapter.js';
+export type {
+	ProviderDef,
+	ProviderId,
+	ProviderRegion
+} from './storage/providers.js';
+export {
+	buildEndpointFromTemplate,
+	buildProviderBaseUrl,
+	getProvider,
+	isGcsProvider,
+	PROVIDER_IDS,
+	PROVIDERS
+} from './storage/providers.js';
 export { UrlAdapter } from './storage/url-adapter.js';
 export type { Connection, ConnectionConfig, FileEntry, Tab, Theme, WriteResult } from './types.js';
 // Clipboard
 export { copyToClipboard, wireCodeCopyButtons } from './utils/clipboard.js';
+// Cloud URL resolution
+export { getNativeScheme, resolveCloudUrl, safeDecodeURIComponent } from './utils/cloud-url.js';
 export type { TypeCategory } from './utils/column-types.js';
 export { classifyType, typeBadgeClass, typeColor, typeLabel } from './utils/column-types.js';
 // Error handling
 export { handleLoadError } from './utils/error.js';
+// Data export / serialization
+export { escapeCsvField, serializeToCsv, serializeToJson } from './utils/export.js';
+// File sorting
+export type { SortConfig, SortDirection, SortField } from './utils/file-sort.js';
+export { sortFileEntries, toggleSortField } from './utils/file-sort.js';
 export {
 	formatDate,
 	formatFileSize,
@@ -59,6 +79,15 @@ export type { GeoArrowGeomType, GeoArrowResult } from './utils/geoarrow.js';
 export { buildGeoArrowTables, normalizeGeomType } from './utils/geoarrow.js';
 export type { HexRow } from './utils/hex.js';
 export { generateHexDump } from './utils/hex.js';
+// localStorage helpers
+export { loadFromStorage, persistToStorage } from './utils/local-storage.js';
+// Markdown / SQL parsing
+export type { ParsedMarkdownDocument, SqlBlock } from './utils/markdown-sql.js';
+export {
+	interpolateTemplates,
+	markSqlBlocks,
+	parseMarkdownDocument
+} from './utils/markdown-sql.js';
 export type {
 	GeoColumnMeta,
 	GeoParquetMeta,

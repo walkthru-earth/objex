@@ -17,7 +17,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection, FileEntry } from '$lib/types.js';
-import { getNativeScheme } from '$lib/utils/url.js';
+import { getNativeScheme } from '$lib/utils/cloud-url.js';
 import { syncUrlParam } from '$lib/utils/url-state.js';
 
 let {
