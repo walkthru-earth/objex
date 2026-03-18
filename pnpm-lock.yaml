@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@developmentseed/deck.gl-geotiff':
-    hash: 802ec5f5a51c38aaa71925b4f1f5f511b650b3371d728c07c00401a5ba88f11d
+    hash: 27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0
     path: patches/@developmentseed__deck.gl-geotiff.patch
   '@developmentseed/deck.gl-raster@0.3.0':
     hash: 97e89d62617ff157cb1cc720a261edbd2ca037390a3456c27da5be8af8dc457c
@@ -66,7 +66,7 @@ importers:
         version: 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))
       '@developmentseed/deck.gl-geotiff':
         specifier: ^0.3.0
-        version: 0.3.0(patch_hash=802ec5f5a51c38aaa71925b4f1f5f511b650b3371d728c07c00401a5ba88f11d)(57c667b0f66ce60d98aa9e692e6cf175)
+        version: 0.3.0(patch_hash=27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0)(57c667b0f66ce60d98aa9e692e6cf175)
       '@developmentseed/geotiff':
         specifier: ^0.3.0
         version: 0.3.0
@@ -5092,7 +5092,7 @@ snapshots:
 
   '@developmentseed/affine@0.3.0': {}
 
-  '@developmentseed/deck.gl-geotiff@0.3.0(patch_hash=802ec5f5a51c38aaa71925b4f1f5f511b650b3371d728c07c00401a5ba88f11d)(57c667b0f66ce60d98aa9e692e6cf175)':
+  '@developmentseed/deck.gl-geotiff@0.3.0(patch_hash=27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0)(57c667b0f66ce60d98aa9e692e6cf175)':
     dependencies:
       '@cogeotiff/core': 9.4.0
       '@deck.gl/core': 9.2.11

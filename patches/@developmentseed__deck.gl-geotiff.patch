@@ -23,7 +23,7 @@ index fe0c33a2c2fe047dcbbf05fb2d7b0870a46b56b7..b7df81305bf4cad1324a5688d19e4bf3
  }
  export {};
 diff --git a/dist/cog-layer.js b/dist/cog-layer.js
-index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16776e1bbd 100644
+index ed424a226d3280c4ae2ba21a51ffb67e886441c5..4a8167405967512aa73b9eb8c0d760fc6181efb2 100644
 --- a/dist/cog-layer.js
 +++ b/dist/cog-layer.js
 @@ -1,4 +1,4 @@
@@ -76,7 +76,7 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16
              this.clearState();
              this._parseGeoTIFF();
          }
-@@ -42,199 +57,228 @@ export class COGLayer extends CompositeLayer {
+@@ -42,199 +57,211 @@ export class COGLayer extends CompositeLayer {
              forwardTo4326: undefined,
              inverseFrom4326: undefined,
              forwardTo3857: undefined,
@@ -95,6 +95,13 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16
          const tms = generateTileMatrixSet(geotiff, sourceProjection);
 -        // @ts-expect-error - proj4 typings are incomplete and don't support
 -        // wkt-parser input
+-        const converter4326 = proj4(sourceProjection, "EPSG:4326");
+-        const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
+-        const inverseFrom4326 = (x, y) => converter4326.inverse([x, y], false);
+-        // @ts-expect-error - proj4 typings are incomplete and don't support
+-        // wkt-parser input
+-        const converter3857 = proj4(sourceProjection, "EPSG:3857");
+-        const forwardTo3857 = (x, y) => converter3857.forward([x, y], false);
 +        console.log('[DBG] TMS:', {
 +            numMatrices: tms.tileMatrices?.length,
 +            crs,
@@ -102,32 +109,21 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16
 +            overviews: geotiff.overviews?.length,
 +            boundingBox: tms.boundingBox,
 +        });
++        // Use +over flag to disable proj4's adjust_lon longitude normalization.
++        // Without +over, proj4 wraps longitude at ±180° (adjust_lon), causing:
++        // - forward(-180.001°) → positive easting (wrong sign)
++        // - inverse(-WM_HALF) → +180° instead of -180°
++        // These 360° round-trip errors make mesh refinement unconvergeable for
++        // tiles at the antimeridian. +over is safe for longlat and Mercator
++        // targets where the 180° meridian is a straight line.
 +        // @ts-expect-error
-         const converter4326 = proj4(sourceProjection, "EPSG:4326");
--        const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
--        const inverseFrom4326 = (x, y) => converter4326.inverse([x, y], false);
--        // @ts-expect-error - proj4 typings are incomplete and don't support
--        // wkt-parser input
++        const converter4326 = proj4(sourceProjection, "+proj=longlat +datum=WGS84 +over");
 +        const forwardTo4326 = dbgProj((x, y) => converter4326.forward([x, y], false), 'fwd4326');
-+        const inverseFrom4326 = dbgProj((x, y) => {
-+            const r = converter4326.inverse([x, y], false);
-+            // Normalize longitude to [-180, 180) — proj4 can return +180° for
-+            // coords at the antimeridian, causing a 360° round-trip error
-+            if (r[0] >= 180) r[0] -= 360;
-+            else if (r[0] < -180) r[0] += 360;
-+            return r;
-+        }, 'inv4326');
++        const inverseFrom4326 = dbgProj((x, y) => converter4326.inverse([x, y], false), 'inv4326');
 +        // @ts-expect-error
-         const converter3857 = proj4(sourceProjection, "EPSG:3857");
--        const forwardTo3857 = (x, y) => converter3857.forward([x, y], false);
++        const converter3857 = proj4(sourceProjection, "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +over");
 +        const forwardTo3857 = dbgProj((x, y) => converter3857.forward([x, y], false), 'fwd3857');
-+        const inverseFrom3857 = dbgProj((x, y) => {
-+            const r = converter3857.inverse([x, y], false);
-+            // Normalize longitude to [-180, 180)
-+            if (r[0] >= 180) r[0] -= 360;
-+            else if (r[0] < -180) r[0] += 360;
-+            return r;
-+        }, 'inv3857');
++        const inverseFrom3857 = dbgProj((x, y) => converter3857.inverse([x, y], false), 'inv3857');
          if (this.props.onGeoTIFFLoad) {
              const geographicBounds = getGeographicBounds(geotiff, converter4326);
 +            console.log('[DBG] onGeoTIFFLoad geographicBounds:', geographicBounds);
@@ -268,21 +264,10 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16
 +                };
 +                rasterLayerProps = {};
 +            } else {
-+                // Create tile-aware inverse that normalizes longitude relative to
-+                // this tile's CRS center. Fixes antimeridian round-trip where
-+                // inverseFrom3857 returns +180° instead of -180° for tiles at the
-+                // left edge (proj4 floating-point ambiguity at ±π).
-+                const tileCrsCenter = forwardTransform(0.5, 0.5);
-+                const tileInverse3857 = (x, y) => {
-+                    const r = inverseFrom3857(x, y);
-+                    while (r[0] - tileCrsCenter[0] > 180) r[0] -= 360;
-+                    while (r[0] - tileCrsCenter[0] < -180) r[0] += 360;
-+                    return r;
-+                };
 +                reprojectionFns = {
 +                    forwardTransform, inverseTransform,
 +                    forwardReproject: forwardTo3857,
-+                    inverseReproject: tileInverse3857,
++                    inverseReproject: inverseFrom3857,
 +                };
 +                rasterLayerProps = {
 +                    coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
