@@ -123,6 +123,35 @@ export function cleanupNativeBitmap(map: maplibregl.Map): void {
 	}
 }
 
+// ─── Terrain color ramp ──────────────────────────────────────────
+
+/** Terrain-inspired color ramp: deep blue → green → brown → white. */
+const TERRAIN_RAMP: [number, number, number][] = [
+	[0, 0, 128], // deep water
+	[0, 100, 200], // shallow water
+	[0, 154, 80], // lowland green
+	[120, 180, 50], // mid green
+	[200, 170, 60], // savanna
+	[180, 120, 50], // brown
+	[140, 90, 40], // dark brown
+	[200, 200, 200], // rock
+	[255, 255, 255] // snow / peak
+];
+
+/** Interpolate a 0..1 value into a terrain RGB color. */
+function terrainColor(t: number): [number, number, number] {
+	const n = TERRAIN_RAMP.length - 1;
+	const idx = Math.max(0, Math.min(n, t * n));
+	const lo = Math.floor(idx);
+	const hi = Math.min(lo + 1, n);
+	const f = idx - lo;
+	return [
+		Math.round(TERRAIN_RAMP[lo][0] + f * (TERRAIN_RAMP[hi][0] - TERRAIN_RAMP[lo][0])),
+		Math.round(TERRAIN_RAMP[lo][1] + f * (TERRAIN_RAMP[hi][1] - TERRAIN_RAMP[lo][1])),
+		Math.round(TERRAIN_RAMP[lo][2] + f * (TERRAIN_RAMP[hi][2] - TERRAIN_RAMP[lo][2]))
+	];
+}
+
 // ─── Non-tiled bitmap rendering ──────────────────────────────────
 
 /**
@@ -237,7 +266,6 @@ export async function renderNonTiledBitmap(options: {
 
 	// Size gate
 	if (totalPixels > MAX_NONTILED_PIXELS) {
-		const info: CogInfo = { width: imgW, height: imgH, bandCount, dataType, bounds: geoBounds };
 		fitCogBounds(map, geoBounds);
 		throw new Error(
 			`Non-tiled GeoTIFF too large (${imgW.toLocaleString()} \u00d7 ${imgH.toLocaleString()} = ` +
@@ -264,15 +292,17 @@ export async function renderNonTiledBitmap(options: {
 
 	const arr = tile.array;
 	const bandData: ArrayLike<number> = arr.layout === 'band-separate' ? arr.bands[0] : arr.data;
+	const isSingleBand = bandCount === 1;
 
-	// Compute min/max for linear stretch
+	// Compute min/max for linear stretch (with scale/offset applied)
 	let bMin = Infinity;
 	let bMax = -Infinity;
 	const len = Math.min(bandData.length, readW * readH);
 	for (let i = 0; i < len; i++) {
-		const v = bandData[i];
-		if (nodata !== null && v === nodata) continue;
-		if (!Number.isFinite(v)) continue;
+		const raw = bandData[i];
+		if (nodata !== null && raw === nodata) continue;
+		if (!Number.isFinite(raw)) continue;
+		const v = raw;
 		if (v < bMin) bMin = v;
 		if (v > bMax) bMax = v;
 	}
@@ -282,18 +312,34 @@ export async function renderNonTiledBitmap(options: {
 	}
 	const bRange = bMax - bMin || 1;
 
-	// Normalize to grayscale RGBA
+	// Normalize to RGBA (terrain color ramp for single-band int/float)
 	const pixelCount = len;
+	const useTerrainRamp = isSingleBand && (sampleFormat === 2 || sampleFormat === 3);
 	const rgba = new Uint8ClampedArray(pixelCount * 4);
 	for (let i = 0; i < pixelCount; i++) {
-		const v = bandData[i];
-		const isND = (nodata !== null && v === nodata) || !Number.isFinite(v);
-		const g = isND ? 0 : Math.round(((v - bMin) / bRange) * 255);
+		const raw = bandData[i];
+		const isND = (nodata !== null && raw === nodata) || !Number.isFinite(raw);
 		const idx = i * 4;
-		rgba[idx] = g;
-		rgba[idx + 1] = g;
-		rgba[idx + 2] = g;
-		rgba[idx + 3] = isND ? 0 : 255;
+		if (isND) {
+			rgba[idx] = 0;
+			rgba[idx + 1] = 0;
+			rgba[idx + 2] = 0;
+			rgba[idx + 3] = 0;
+			continue;
+		}
+		const t = Math.max(0, Math.min(1, (raw - bMin) / bRange));
+		if (useTerrainRamp) {
+			const [r, g, b] = terrainColor(t);
+			rgba[idx] = r;
+			rgba[idx + 1] = g;
+			rgba[idx + 2] = b;
+		} else {
+			const gray = Math.round(t * 255);
+			rgba[idx] = gray;
+			rgba[idx + 1] = gray;
+			rgba[idx + 2] = gray;
+		}
+		rgba[idx + 3] = 255;
 	}
 
 	// Render to canvas → data URL
@@ -358,9 +404,21 @@ export function needsCustomPipeline(geotiff: GeoTIFFType): boolean {
 
 /**
  * Create custom getTileData for non-uint COGs.
- * Reads band 0, normalizes to grayscale RGBA, returns ImageData.
+ * Reads band 0, normalizes using GDAL statistics / per-tile adaptive stretch,
+ * applies terrain color ramp for single-band data.
  */
 export function createCustomGetTileData(geotiff: GeoTIFFType) {
+	// Read Scale/Offset TIFF tags (GDAL convention for scaled datasets like DEMs)
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const tags = geotiff.cachedTags as Record<string, any>;
+	// GDAL stores data-scaling Scale/Offset as TIFF tags (33550-area).
+	// @developmentseed/geotiff exposes them in cachedTags but the TS type
+	// doesn't declare them — access via any.
+	const gdalScale: number | null = tags.scale ?? null;
+	const gdalOffset: number | null = tags.offset ?? null;
+	const hasScaleOffset =
+		gdalScale !== null && gdalOffset !== null && (gdalScale !== 1 || gdalOffset !== 0);
+
 	// Pre-compute normalization range from stored GDAL statistics if available
 	const stats = geotiff.storedStats;
 	let globalMin: number | null = null;
@@ -373,27 +431,16 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 		}
 	}
 
-	// Fallback: infer from data type
-	const tags = geotiff.cachedTags;
-	const sf = tags.sampleFormat?.[0] ?? 1;
-	const bps = tags.bitsPerSample?.[0] ?? 8;
-
-	if (globalMin === null || globalMax === null) {
-		if (sf === 2) {
-			// Signed integer
-			const half = 2 ** (bps - 1);
-			globalMin = -half;
-			globalMax = half - 1;
-		} else {
-			// Float — no known range, use 0..1 as default
-			globalMin = 0;
-			globalMax = 1;
-		}
+	// If we have global stats, apply scale/offset to get real-world units
+	if (globalMin !== null && globalMax !== null && hasScaleOffset) {
+		globalMin = globalMin * (gdalScale ?? 1) + (gdalOffset ?? 0);
+		globalMax = globalMax * (gdalScale ?? 1) + (gdalOffset ?? 0);
 	}
 
-	const rangeMin = globalMin;
-	const rangeMax = globalMax;
-	const range = rangeMax - rangeMin || 1;
+	const useAdaptive = globalMin === null || globalMax === null;
+	const bandCount = geotiff.count;
+	const sf = tags.sampleFormat?.[0] ?? 1;
+	const isSingleBand = bandCount === 1;
 
 	return async (
 		image: GeoTIFFType | Overview,
@@ -410,18 +457,64 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 		const { width, height, nodata } = arr;
 		const bandData: ArrayLike<number> = arr.layout === 'band-separate' ? arr.bands[0] : arr.data;
 
-		// Normalize to grayscale RGBA
 		const pixelCount = width * height;
+		const scale = gdalScale ?? 1;
+		const offset = gdalOffset ?? 0;
+
+		// Determine min/max for this tile
+		let tMin: number;
+		let tMax: number;
+		if (useAdaptive) {
+			// Per-tile adaptive stretch: scan actual values
+			tMin = Infinity;
+			tMax = -Infinity;
+			for (let i = 0; i < pixelCount; i++) {
+				const raw = bandData[i];
+				if (nodata !== null && raw === nodata) continue;
+				if (!Number.isFinite(raw)) continue;
+				const v = hasScaleOffset ? raw * scale + offset : raw;
+				if (v < tMin) tMin = v;
+				if (v > tMax) tMax = v;
+			}
+			if (!Number.isFinite(tMin)) {
+				tMin = 0;
+				tMax = 1;
+			}
+		} else {
+			tMin = globalMin!;
+			tMax = globalMax!;
+		}
+		const range = tMax - tMin || 1;
+
+		// Render to RGBA
 		const rgba = new Uint8ClampedArray(pixelCount * 4);
 		for (let i = 0; i < pixelCount; i++) {
-			const v = bandData[i];
-			const isND = (nodata !== null && v === nodata) || !Number.isFinite(v);
-			const g = isND ? 0 : Math.round(((v - rangeMin) / range) * 255);
+			const raw = bandData[i];
+			const isND = (nodata !== null && raw === nodata) || !Number.isFinite(raw);
 			const idx = i * 4;
-			rgba[idx] = g;
-			rgba[idx + 1] = g;
-			rgba[idx + 2] = g;
-			rgba[idx + 3] = isND ? 0 : 255;
+			if (isND) {
+				rgba[idx] = 0;
+				rgba[idx + 1] = 0;
+				rgba[idx + 2] = 0;
+				rgba[idx + 3] = 0;
+				continue;
+			}
+			const v = hasScaleOffset ? raw * scale + offset : raw;
+			const t = Math.max(0, Math.min(1, (v - tMin) / range));
+			if (isSingleBand && (sf === 2 || sf === 3)) {
+				// Terrain color ramp for single-band int/float (likely elevation/DEM)
+				const [r, g, b] = terrainColor(t);
+				rgba[idx] = r;
+				rgba[idx + 1] = g;
+				rgba[idx + 2] = b;
+			} else {
+				// Grayscale for multi-band or other types
+				const gray = Math.round(t * 255);
+				rgba[idx] = gray;
+				rgba[idx + 1] = gray;
+				rgba[idx + 2] = gray;
+			}
+			rgba[idx + 3] = 255;
 		}
 
 		return {
