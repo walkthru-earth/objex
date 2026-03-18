@@ -426,7 +426,7 @@ All issues are in the **[developmentseed/deck.gl-raster](https://github.com/deve
 | Model type 32767 | `@developmentseed/geotiff` | `src/crs.ts` | High | `crsFromGeoKeys` doesn't handle user-defined model type |
 | Non-uint render pipeline | `@developmentseed/deck.gl-geotiff` | `src/geotiff/render-pipeline.ts` | High | `inferRenderPipeline` only supports uint SampleFormat |
 | Oversized overviews | `@developmentseed/geotiff` | `src/tile-matrix-set.ts` | High | `generateTileMatrixSet` includes overviews smaller than tile size |
-| Polar NaN projection | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | High | `forwardTo3857`/`forwardTo4326` return NaN at ±90° latitude |
+| ~~Polar NaN projection~~ | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | ~~High~~ Fixed | Fixed in [PR #349](https://github.com/developmentseed/deck.gl-raster/pull/349) — Web Mercator rendering via CARTESIAN coordinate system + model matrix. Applied via `pnpm patch` until next npm release. Our `wrapProjection` NaN guard remains as safety net. |
 | Worker dev mode | `@developmentseed/geotiff` | `src/pool/pool.ts` | Medium | DecoderPool workers fail in Vite dev server |
 | GeoTIFFLayer WIP | `@developmentseed/deck.gl-geotiff` | `src/geotiff-layer.ts` | Low | Non-tiled layer not yet implemented |
 | Missing projections | `@developmentseed/geotiff` | `src/crs.ts` | Low | Mollweide, Eckert, Robinson not in CT table |
@@ -526,6 +526,7 @@ The v0.2 CogViewer was **1345 lines** with ~700 lines of workarounds:
 - Oversized overview filter (5 lines) — upstream bug in `generateTileMatrixSet`
 - CRS validation in pre-flight (10 lines) — upstream limitation in `crsFromGeoKeys`
 - EPSG:4326 polar bbox clamp (8 lines) — upstream missing NaN guard
-- `COGLayer.prototype.setState` NaN projection patch (20 lines) — upstream missing NaN guard
+- `COGLayer.prototype.setState` NaN projection patch (20 lines) — safety net for polar NaN (upstream partially fixed in PR #349 via Web Mercator rendering, but NaN guard retained for edge cases)
+- `pnpm patch` for `@developmentseed/deck.gl-geotiff` — backports [PR #349](https://github.com/developmentseed/deck.gl-raster/pull/349) (Web Mercator CARTESIAN rendering). Remove patch when next npm release includes the fix.
 - Custom pipeline for non-uint (import + 5 lines in CogViewer, ~100 lines in cog.ts) — upstream WIP
 - Workerless DecoderPool (3 lines) — Vite dev mode issue

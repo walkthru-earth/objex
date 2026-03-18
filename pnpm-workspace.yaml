@@ -6,3 +6,8 @@ onlyBuiltDependencies:
   - core-js
   - esbuild
   - lefthook
+
+patchedDependencies:
+  '@developmentseed/deck.gl-geotiff': patches/@developmentseed__deck.gl-geotiff.patch
+  '@developmentseed/deck.gl-raster@0.3.0': patches/@developmentseed__deck.gl-raster@0.3.0.patch
+  '@developmentseed/raster-reproject@0.3.0': patches/@developmentseed__raster-reproject@0.3.0.patch

@@ -21,47 +21,6 @@ import {
 import { buildHttpsUrl } from '../../utils/url.js';
 import MapContainer from './map/MapContainer.svelte';
 
-// ─── SafeCOGLayer ────────────────────────────────────────────────
-// Wraps projection functions to handle NaN from polar coordinates.
-// proj4.forward([lon, ±90]) → NaN when converting EPSG:4326 → EPSG:3857
-// (Mercator singularity at poles). The library doesn't guard against this,
-// so tiles touching the poles crash with "Invalid number null".
-
-const WM_HALF = 20037508.342789244; // EPSG:3857 half-circumference
-
-type ProjectionFn = (x: number, y: number) => [number, number];
-
-function wrapProjection(fn: ProjectionFn): ProjectionFn {
-	return (x: number, y: number): [number, number] => {
-		const r = fn(x, y);
-		if (Number.isNaN(r[0]) || Number.isNaN(r[1])) {
-			return [
-				Number.isNaN(r[0]) ? 0 : r[0],
-				Number.isNaN(r[1]) ? (y > 0 ? WM_HALF : -WM_HALF) : r[1]
-			];
-		}
-		return r;
-	};
-}
-
-// Patch COGLayer's setState to wrap projection functions with NaN guards.
-// We can't subclass cleanly due to deck.gl's typing, so we patch the prototype.
-const OrigSetState = COGLayer.prototype.setState;
-COGLayer.prototype.setState = function patchedSetState(
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	this: any,
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	state: Record<string, any>
-) {
-	if (state.forwardTo3857) {
-		state.forwardTo3857 = wrapProjection(state.forwardTo3857);
-	}
-	if (state.forwardTo4326) {
-		state.forwardTo4326 = wrapProjection(state.forwardTo4326);
-	}
-	return OrigSetState.call(this, state);
-};
-
 // ─── State ───────────────────────────────────────────────────────
 
 let { tab }: { tab: Tab } = $props();

@@ -1,0 +1,382 @@
+diff --git a/dist/cog-layer.d.ts b/dist/cog-layer.d.ts
+index fe0c33a2c2fe047dcbbf05fb2d7b0870a46b56b7..b7df81305bf4cad1324a5688d19e4bf3171447ea 100644
+--- a/dist/cog-layer.d.ts
++++ b/dist/cog-layer.d.ts
+@@ -138,6 +138,7 @@ export declare class COGLayer<DataT extends MinimalDataT = DefaultDataT> extends
+         forwardTo4326?: ReprojectionFns["forwardReproject"];
+         inverseFrom4326?: ReprojectionFns["inverseReproject"];
+         forwardTo3857?: ReprojectionFns["forwardReproject"];
++        inverseFrom3857?: ReprojectionFns["inverseReproject"];
+         tms?: TileMatrixSet;
+         defaultGetTileData?: COGLayerProps<TextureDataT>["getTileData"];
+         defaultRenderTile?: COGLayerProps<TextureDataT>["renderTile"];
+@@ -155,9 +156,9 @@ export declare class COGLayer<DataT extends MinimalDataT = DefaultDataT> extends
+         data?: GetTileDataResult<DataT>;
+         _offset: number;
+         tile: Tile2DHeader<GetTileDataResult<DataT>>;
+-    }, tms: TileMatrixSet, forwardTo4326: ReprojectionFns["forwardReproject"], inverseFrom4326: ReprojectionFns["inverseReproject"]): Layer | LayersList | null;
++    }, tms: TileMatrixSet, forwardTo4326: ReprojectionFns["forwardReproject"], inverseFrom4326: ReprojectionFns["inverseReproject"], forwardTo3857: ReprojectionFns["forwardReproject"], inverseFrom3857: ReprojectionFns["inverseReproject"]): Layer | LayersList | null;
+     /** Define the underlying deck.gl TileLayer. */
+-    renderTileLayer(tms: TileMatrixSet, forwardTo4326: ReprojectionFns["forwardReproject"], inverseFrom4326: ReprojectionFns["inverseReproject"], forwardTo3857: ReprojectionFns["forwardReproject"], geotiff: GeoTIFF): TileLayer;
++    renderTileLayer(tms: TileMatrixSet, forwardTo4326: ReprojectionFns["forwardReproject"], inverseFrom4326: ReprojectionFns["inverseReproject"], forwardTo3857: ReprojectionFns["forwardReproject"], inverseFrom3857: ReprojectionFns["inverseReproject"], geotiff: GeoTIFF): TileLayer;
+     renderLayers(): TileLayer<any, {}> | null;
+ }
+ export {};
+diff --git a/dist/cog-layer.js b/dist/cog-layer.js
+index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619eee3992ae 100644
+--- a/dist/cog-layer.js
++++ b/dist/cog-layer.js
+@@ -1,4 +1,4 @@
+-import { CompositeLayer } from "@deck.gl/core";
++import { COORDINATE_SYSTEM, CompositeLayer } from "@deck.gl/core";
+ import { TileLayer } from "@deck.gl/geo-layers";
+ import { PathLayer } from "@deck.gl/layers";
+ import { RasterLayer, TileMatrixSetTileset, } from "@developmentseed/deck.gl-raster";
+@@ -10,14 +10,31 @@ import { fetchGeoTIFF, getGeographicBounds } from "./geotiff/geotiff.js";
+ import { inferRenderPipeline } from "./geotiff/render-pipeline.js";
+ import { fromAffine } from "./geotiff-reprojection.js";
+ import { epsgResolver } from "./proj.js";
++const TILE_SIZE = 512;
++const WEB_MERCATOR_METER_CIRCUMFERENCE = 40075016.686;
++const WEB_MERCATOR_TO_WORLD_SCALE = TILE_SIZE / WEB_MERCATOR_METER_CIRCUMFERENCE;
+ const defaultProps = {
++    ...TileLayer.defaultProps,
+     epsgResolver,
+     debug: false,
+     debugOpacity: 0.5,
+ };
+-/**
+- * COGLayer renders a COG using a tiled approach with reprojection.
+- */
++
++// Debug: wrap a projection fn with NaN/Infinity detection logging
++function dbgProj(fn, name) {
++    let warnCount = 0;
++    return (x, y) => {
++        const r = fn(x, y);
++        if (!Number.isFinite(r[0]) || !Number.isFinite(r[1])) {
++            if (warnCount < 20) {
++                console.warn(`[DBG] ${name}(${x}, ${y}) => [${r[0]}, ${r[1]}] ← NON-FINITE`);
++                warnCount++;
++            }
++        }
++        return r;
++    };
++}
++
+ export class COGLayer extends CompositeLayer {
+     static layerName = "COGLayer";
+     static defaultProps = defaultProps;
+@@ -29,8 +46,6 @@ export class COGLayer extends CompositeLayer {
+         const { props, oldProps, changeFlags } = params;
+         const needsUpdate = Boolean(changeFlags.dataChanged) || props.geotiff !== oldProps.geotiff;
+         if (needsUpdate) {
+-            // Clear stale state so renderLayers returns null until the new GeoTIFF is
+-            // ready
+             this.clearState();
+             this._parseGeoTIFF();
+         }
+@@ -42,199 +57,190 @@ export class COGLayer extends CompositeLayer {
+             forwardTo4326: undefined,
+             inverseFrom4326: undefined,
+             forwardTo3857: undefined,
++            inverseFrom3857: undefined,
+             defaultGetTileData: undefined,
+             defaultRenderTile: undefined,
+         });
+     }
+     async _parseGeoTIFF() {
++        console.log('[DBG] _parseGeoTIFF START');
+         const geotiff = await fetchGeoTIFF(this.props.geotiff);
+         const crs = geotiff.crs;
+         const sourceProjection = typeof crs === "number"
+             ? await this.props.epsgResolver(crs)
+             : wktParser(crs);
+         const tms = generateTileMatrixSet(geotiff, sourceProjection);
+-        // @ts-expect-error - proj4 typings are incomplete and don't support
+-        // wkt-parser input
++        console.log('[DBG] TMS:', {
++            numMatrices: tms.tileMatrices?.length,
++            crs,
++            bbox: geotiff.bbox,
++            overviews: geotiff.overviews?.length,
++            boundingBox: tms.boundingBox,
++        });
++        // @ts-expect-error
+         const converter4326 = proj4(sourceProjection, "EPSG:4326");
+-        const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
+-        const inverseFrom4326 = (x, y) => converter4326.inverse([x, y], false);
+-        // @ts-expect-error - proj4 typings are incomplete and don't support
+-        // wkt-parser input
++        const forwardTo4326 = dbgProj((x, y) => converter4326.forward([x, y], false), 'fwd4326');
++        const inverseFrom4326 = dbgProj((x, y) => converter4326.inverse([x, y], false), 'inv4326');
++        // @ts-expect-error
+         const converter3857 = proj4(sourceProjection, "EPSG:3857");
+-        const forwardTo3857 = (x, y) => converter3857.forward([x, y], false);
++        const forwardTo3857 = dbgProj((x, y) => converter3857.forward([x, y], false), 'fwd3857');
++        const inverseFrom3857 = dbgProj((x, y) => converter3857.inverse([x, y], false), 'inv3857');
+         if (this.props.onGeoTIFFLoad) {
+             const geographicBounds = getGeographicBounds(geotiff, converter4326);
++            console.log('[DBG] onGeoTIFFLoad geographicBounds:', geographicBounds);
+             this.props.onGeoTIFFLoad(geotiff, {
+                 projection: sourceProjection,
+                 geographicBounds,
+             });
+         }
+-        // Only create a default render pipeline if the user did not provide a
+-        // custom one
+         if (!this.props.getTileData || !this.props.renderTile) {
+             const { getTileData: defaultGetTileData, renderTile: defaultRenderTile } = inferRenderPipeline(geotiff, this.context.device);
+             this.setState({ defaultGetTileData, defaultRenderTile });
+         }
++        console.log('[DBG] _parseGeoTIFF setState');
+         this.setState({
+-            geotiff,
+-            tms,
+-            forwardTo4326,
+-            inverseFrom4326,
+-            forwardTo3857,
++            geotiff, tms, forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857,
+         });
++        console.log('[DBG] _parseGeoTIFF DONE');
+     }
+-    /**
+-     * Inner callback passed in to the underlying TileLayer's `getTileData`.
+-     */
+     async _getTileData(tile, geotiff, tms) {
+         const { signal } = tile;
+         const { x, y, z } = tile.index;
+-        // Select overview image
+-        // If z=0, use the coarsest overview (which is the last in the array)
+-        // If z=max, use the full-resolution image (which is the first in the array)
+-        // TODO: should be able to (micro) optimize this to not create the array
+-        // Something like:
+-        // const image = z === geotiff.overviews.length - 1 ? geotiff :
+-        //   geotiff.overviews[geotiff.overviews.length - 1 - z]!;
+         const images = [geotiff, ...geotiff.overviews];
+         const image = images[images.length - 1 - z];
+         const tileMatrix = tms.tileMatrices[z];
+         const tileAffine = tileTransform(tileMatrix, { col: x, row: y });
+         const { forwardTransform, inverseTransform } = fromAffine(tileAffine);
+-        // Combine abort signals if both are defined
+         const combinedSignal = signal && this.props.signal
+             ? AbortSignal.any([signal, this.props.signal])
+             : signal || this.props.signal;
+         const getTileDataProps = {
+-            device: this.context.device,
+-            x,
+-            y,
+-            signal: combinedSignal,
++            device: this.context.device, x, y, signal: combinedSignal,
+             pool: this.props.pool ?? defaultDecoderPool(),
+         };
+         let data;
+         if (this.props.getTileData) {
+-            // In the case that the user passed in a custom `getTileData`, TS knows
+-            // that `DataT` is the return type of that function
+             data = await this.props.getTileData(image, getTileDataProps);
+-        }
+-        else {
+-            // In the case where the user did not pass in a custom `getTileData`, we
+-            // have to tell TS that `DefaultDataT` is assignable to `DataT`
++        } else {
+             data = (await this.state.defaultGetTileData(image, getTileDataProps));
+         }
+-        return {
+-            data,
+-            forwardTransform,
+-            inverseTransform,
+-        };
++        return { data, forwardTransform, inverseTransform };
+     }
+-    _renderSubLayers(
+-    // TODO: it would be nice to have a cleaner type here
+-    // this is copy-pasted from the upstream tile layer definition for props.
+-    props, tms, forwardTo4326, inverseFrom4326) {
++    _renderSubLayers(props, tms, forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857) {
+         const { maxError, debug, debugOpacity } = this.props;
+         const { tile } = props;
+-        if (!props.data) {
+-            return null;
+-        }
++        if (!props.data) return null;
+         const { data, forwardTransform, inverseTransform } = props.data;
+         const layers = [];
+         if (data) {
+             const { height, width } = data;
++            console.log(`[DBG] _renderSubLayers z=${tile?.index?.z} x=${tile?.index?.x} y=${tile?.index?.y} ${width}x${height}`);
+             let renderPipeline;
+             if (this.props.getTileData) {
+-                // In the case that the user passed in a custom `getTileData`, TS knows
+-                // that `data` can be passed in to `renderTile`.
+                 renderPipeline = this.props.renderTile(data);
+-            }
+-            else {
+-                // In the default case, `data` is `DefaultDataT` — cast required because
+-                // TS can't prove that `DataT` (which defaults to `DefaultDataT`) is
+-                // `DefaultDataT` at this point.
++            } else {
+                 renderPipeline = this.state.defaultRenderTile(data);
+             }
+-            layers.push(new RasterLayer(this.getSubLayerProps({
+-                id: `${props.id}-raster`,
+-                width,
+-                height,
+-                renderPipeline,
+-                maxError,
+-                reprojectionFns: {
+-                    forwardTransform,
+-                    inverseTransform,
++            const isGlobe = this.context.viewport.resolution !== undefined;
++            let reprojectionFns;
++            let rasterLayerProps;
++            if (isGlobe) {
++                reprojectionFns = {
++                    forwardTransform, inverseTransform,
+                     forwardReproject: forwardTo4326,
+                     inverseReproject: inverseFrom4326,
+-                },
+-                debug,
+-                debugOpacity,
++                };
++                rasterLayerProps = {};
++            } else {
++                reprojectionFns = {
++                    forwardTransform, inverseTransform,
++                    forwardReproject: forwardTo3857,
++                    inverseReproject: inverseFrom3857,
++                };
++                rasterLayerProps = {
++                    coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
++                    coordinateOrigin: [TILE_SIZE / 2, TILE_SIZE / 2, 0],
++                    modelMatrix: [
++                        WEB_MERCATOR_TO_WORLD_SCALE, 0, 0, 0,
++                        0, WEB_MERCATOR_TO_WORLD_SCALE, 0, 0,
++                        0, 0, 1, 0,
++                        0, 0, 0, 1
++                    ],
++                };
++            }
++            layers.push(new RasterLayer(this.getSubLayerProps({
++                id: `${props.id}-raster`,
++                width, height, renderPipeline, maxError, reprojectionFns,
++                debug, debugOpacity, ...rasterLayerProps,
+             })));
+         }
+         if (debug) {
+-            // Get projected bounds from tile data
+-            // getTileMetadata returns data that includes projectedBounds
+-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const projectedBounds = tile?.projectedBounds;
+-            if (!projectedBounds || !tms) {
+-                return [];
+-            }
+-            // Project bounds from image CRS to WGS84
++            if (!projectedBounds || !tms) return [];
+             const { topLeft, topRight, bottomLeft, bottomRight } = projectedBounds;
+-            const topLeftWgs84 = forwardTo4326(topLeft[0], topLeft[1]);
+-            const topRightWgs84 = forwardTo4326(topRight[0], topRight[1]);
+-            const bottomRightWgs84 = forwardTo4326(bottomRight[0], bottomRight[1]);
+-            const bottomLeftWgs84 = forwardTo4326(bottomLeft[0], bottomLeft[1]);
+-            // Create a closed path around the tile bounds
+             const path = [
+-                topLeftWgs84,
+-                topRightWgs84,
+-                bottomRightWgs84,
+-                bottomLeftWgs84,
+-                topLeftWgs84, // Close the path
++                forwardTo4326(topLeft[0], topLeft[1]),
++                forwardTo4326(topRight[0], topRight[1]),
++                forwardTo4326(bottomRight[0], bottomRight[1]),
++                forwardTo4326(bottomLeft[0], bottomLeft[1]),
++                forwardTo4326(topLeft[0], topLeft[1]),
+             ];
+             layers.push(new PathLayer({
+-                id: `${this.id}-${tile.id}-bounds`,
+-                data: [path],
+-                getPath: (d) => d,
+-                getColor: [255, 0, 0, 255], // Red
+-                getWidth: 2,
+-                widthUnits: "pixels",
+-                pickable: false,
++                id: `${this.id}-${tile.id}-bounds`, data: [path],
++                getPath: (d) => d, getColor: [255, 0, 0, 255],
++                getWidth: 2, widthUnits: "pixels", pickable: false,
+             }));
+         }
+         return layers;
+     }
+-    /** Define the underlying deck.gl TileLayer. */
+-    renderTileLayer(tms, forwardTo4326, inverseFrom4326, forwardTo3857, geotiff) {
+-        // Create a factory class that wraps COGTileset2D with the metadata
++    renderTileLayer(tms, forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857, geotiff) {
++        console.log('[DBG] renderTileLayer called');
+         class TileMatrixSetTilesetFactory extends TileMatrixSetTileset {
+             constructor(opts) {
+-                super(opts, tms, {
+-                    projectTo4326: forwardTo4326,
+-                    projectTo3857: forwardTo3857,
+-                });
++                console.log('[DBG] TilesetFactory constructor START');
++                try {
++                    super(opts, tms, {
++                        projectTo4326: forwardTo4326,
++                        projectTo3857: forwardTo3857,
++                    });
++                    console.log('[DBG] TilesetFactory constructor OK, wgs84Bounds:', this.wgs84Bounds);
++                } catch(e) {
++                    console.error('[DBG] TilesetFactory constructor THREW:', e);
++                    throw e;
++                }
+             }
+         }
+-        return new TileLayer({
+-            id: `cog-tile-layer-${this.id}`,
+-            TilesetClass: TileMatrixSetTilesetFactory,
+-            getTileData: async (tile) => this._getTileData(tile, geotiff, tms),
+-            renderSubLayers: (props) => this._renderSubLayers(props, tms, forwardTo4326, inverseFrom4326),
+-        });
++        const { maxRequests, maxCacheSize, maxCacheByteSize, debounceTime } = this.props;
++        console.log('[DBG] new TileLayer() START');
++        let tileLayer;
++        try {
++            tileLayer = new TileLayer({
++                id: `cog-tile-layer-${this.id}`,
++                TilesetClass: TileMatrixSetTilesetFactory,
++                getTileData: async (tile) => this._getTileData(tile, geotiff, tms),
++                renderSubLayers: (props) =>
++                    this._renderSubLayers(props, tms, forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857),
++                maxRequests, maxCacheSize, maxCacheByteSize, debounceTime,
++            });
++            console.log('[DBG] new TileLayer() OK');
++        } catch(e) {
++            console.error('[DBG] new TileLayer() THREW:', e);
++            throw e;
++        }
++        return tileLayer;
+     }
+     renderLayers() {
+-        const { forwardTo4326, inverseFrom4326, forwardTo3857, tms, geotiff } = this.state;
+-        if (!forwardTo4326 ||
+-            !inverseFrom4326 ||
+-            !forwardTo3857 ||
+-            !tms ||
+-            !geotiff) {
++        const { forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857, tms, geotiff } = this.state;
++        if (!forwardTo4326 || !inverseFrom4326 || !forwardTo3857 || !inverseFrom3857 || !tms || !geotiff) {
+             return null;
+         }
+-        // Split into a separate method to make TS happy, because when metadata is
+-        // nullable in any part of function scope, the tileset factory wrapper gives
+-        // a type error
+-        return this.renderTileLayer(tms, forwardTo4326, inverseFrom4326, forwardTo3857, geotiff);
++        console.log('[DBG] renderLayers → renderTileLayer');
++        try {
++            return this.renderTileLayer(tms, forwardTo4326, inverseFrom4326, forwardTo3857, inverseFrom3857, geotiff);
++        } catch(e) {
++            console.error('[DBG] renderLayers THREW:', e);
++            throw e;
++        }
+     }
+ }
+ //# sourceMappingURL=cog-layer.js.map

@@ -1,0 +1,23 @@
+diff --git a/dist/delatin.js b/dist/delatin.js
+index 5d5d2755c59ead94fe4570201314b977955ca174..a6b18c61ad4d73c508e783b9477ad1481f79295c 100644
+--- a/dist/delatin.js
++++ b/dist/delatin.js
+@@ -103,8 +103,18 @@ export class RasterReprojector {
+         if (maxError <= 0) {
+             throw new Error("maxError must be positive");
+         }
++        const MAX_ITERATIONS = 5000;
++        let iterations = 0;
++        const t0 = performance.now();
+         while (this.getMaxError() > maxError) {
+             this.refine();
++            if (++iterations >= MAX_ITERATIONS) {
++                console.warn(`[raster-reproject] mesh hit ${MAX_ITERATIONS} cap (err=${this.getMaxError().toFixed(1)} target=${maxError} tris=${this._halfedges.length / 3} ${(performance.now() - t0).toFixed(0)}ms)`);
++                break;
++            }
++        }
++        if (iterations > 50) {
++            console.log(`[raster-reproject] mesh: ${iterations} iters, ${this._halfedges.length / 3} tris, err=${this.getMaxError().toFixed(1)}, target=${maxError}, ${(performance.now() - t0).toFixed(0)}ms`);
+         }
+     }
+     // refine the mesh with a single point
