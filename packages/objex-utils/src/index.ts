@@ -68,6 +68,14 @@ export {
 	resolveCloudUrl,
 	safeDecodeURIComponent
 } from '../../../src/lib/utils/cloud-url.js';
+// COG utilities (pure helpers only — no maplibre dependency)
+export type { CogInfo, GeoBounds } from '../../../src/lib/utils/cog.js';
+export {
+	buildDataTypeLabel,
+	clampBounds,
+	SF_LABELS,
+	safeClamp
+} from '../../../src/lib/utils/cog.js';
 // Column type classification
 export type { TypeCategory } from '../../../src/lib/utils/column-types.js';
 export {

@@ -1,592 +1,531 @@
-# COG Viewer Architecture & Lessons Learned
+# COG Viewer Architecture & Known Issues
 
-> Comprehensive reference for the CogViewer.svelte rewrite using `@developmentseed/deck.gl-geotiff`.
-> Last updated: 2026-02-24
+> Reference for CogViewer.svelte using `@developmentseed/deck.gl-geotiff` v0.3.
+> Last updated: 2026-03-18
 
 ---
 
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
-- [Library Internals](#library-internals)
-- [Version Mismatch: geotiff v2 vs v3](#version-mismatch-geotiff-v2-vs-v3)
-- [Monkey-Patch Strategy](#monkey-patch-strategy)
-- [Projection & Bounds Issues](#projection--bounds-issues)
-- [Compression Support](#compression-support)
-- [Performance & Browser Hangs](#performance--browser-hangs)
-- [Tile Matrix Oversized Overview Fix](#tile-matrix-oversized-overview-fix)
-- [UI Layout](#ui-layout)
-- [Test COGs & Their Characteristics](#test-cogs--their-characteristics)
-- [Open Issues & Future Work](#open-issues--future-work)
-- [Key File Locations](#key-file-locations)
+- [Rendering Routes](#rendering-routes)
+- [Pre-flight Pipeline](#pre-flight-pipeline)
+- [Workarounds for v0.3 Bugs](#workarounds-for-v03-bugs)
+- [Extracted Utilities](#extracted-utilities)
+- [Upstream Issues to Track](#upstream-issues-to-track)
+- [Test COGs & Results](#test-cogs--results)
+- [Vite Configuration](#vite-configuration)
+- [History (v0.2 → v0.3)](#history-v02--v03)
 
 ---
 
 ## Architecture Overview
 
-```
-CogViewer.svelte
-  |
-  |-- Pre-flight (geotiff v3)
-  |     Read first IFD -> extract metadata (PI, SF, bands, tiled?)
-  |     Compute edge-sampled geographic bounds (20 sample points)
-  |     Store v3 tiff as monkey-patch fallback (currentV3Tiff)
-  |     Route to: Default Pipeline | Custom Pipeline | GeoTIFFLayer
-  |
-  |-- Default Pipeline (RGB/Palette/CMYK/YCbCr/CIELab, uint)
-  |     COGLayer with URL string, no custom getTileData
-  |     Library handles everything internally via v2 geotiff
-  |
-  |-- Custom Pipeline (Gray PI=0/1, float, int, multi-band non-RGB)
-  |     1. Read small overview for min/max stats (v3 readRasters)
-  |     2. Create COGLayer with custom getTileData + renderTile
-  |     3. Monkey-patch catches inferRenderPipeline throw
-  |     4. getTileData: read band 0 via v3, normalize to grayscale RGBA
-  |     5. renderTile: return ImageData (GPU texture created by RasterLayer)
-  |
-  |-- GeoTIFFLayer (non-tiled TIFFs)
-  |     Fallback for strip-based TIFFs, uses readRGB internally
-  |
-  |-- MapboxOverlay -> MapLibre GL map
-```
+The CogViewer renders Cloud-Optimized GeoTIFF (COG) files on a MapLibre map using deck.gl.
 
-### Routing Logic
+### Stack
 
 ```
-isDefaultPipeline = (SampleFormat === 1 [uint]) AND (PhotometricInterpretation >= 2)
+┌──────────────────────────────────────────────────────┐
+│  CogViewer.svelte (~315 lines)                       │
+│  ├─ Pre-flight: GeoTIFF.fromUrl() → CRS + tiling check│
+│  ├─ Route: tiled-uint → COGLayer (default pipeline)  │
+│  ├─ Route: tiled-int/float → COGLayer (custom pipeline)│
+│  └─ Route: non-tiled → bitmap fallback               │
+└──────────────────────────────────────────────────────┘
+         ↓                           ↓
+┌──────────────────────┐  ┌────────────────────────────┐
+│ COGLayer (v0.3)      │  │ utils/cog.ts (~440 lines)  │
+│ ├─ RasterLayer (GPU) │  │ ├─ renderNonTiledBitmap()  │
+│ ├─ TileMatrixSet     │  │ ├─ createCustomGetTileData()│
+│ └─ inferRenderPipeline│  │ ├─ customRenderTile()     │
+└──────────────────────┘  │ ├─ safeClamp, clampBounds  │
+         ↓                │ └─ fitCogBounds             │
+┌──────────────────────┐  └────────────────────────────┘
+│ @developmentseed/    │
+│   geotiff (cogeotiff)│
+│ ├─ DecoderPool       │
+│ ├─ Nodata masking    │
+│ └─ Tile streaming    │
+└──────────────────────┘
 ```
 
-| PI Value | Meaning | Pipeline |
-|----------|---------|----------|
-| 0 | WhiteIsZero | Custom (Gray) |
-| 1 | BlackIsZero | Custom (Gray) |
-| 2 | RGB | Default |
-| 3 | Palette | Default |
-| 4 | TransparencyMask | Custom |
-| 5 | CMYK | Default |
-| 6 | YCbCr | Default |
-| 8 | CIELab | Default |
+### Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@developmentseed/deck.gl-geotiff` | ^0.3.0 | COGLayer, GPU render pipeline, epsgResolver |
+| `@developmentseed/geotiff` | ^0.3.0 | GeoTIFF reader (wraps `@cogeotiff/core`), DecoderPool |
+| `@deck.gl/mapbox` | ^9.2.11 | MapboxOverlay for deck.gl ↔ MapLibre integration |
+| `maplibre-gl` | ^5.20.1 | Base map + native image source (non-tiled fallback) |
+| `proj4` | ^2.20.4 | CRS reprojection (non-tiled bitmap bounds only) |
+
+### What v0.3 Handles Natively (default pipeline)
+
+- **Photometric interpretations**: RGB, Palette, CMYK, YCbCr, CIELab, Gray (BlackIsZero/WhiteIsZero)
+- **Sample formats**: **uint only** (uint8/16/32) — signed int and float need custom pipeline
+- **Compressions**: LZW, JPEG, Deflate, ZSTD, WebP, LERC (via DecoderPool workers)
+- **CRS resolution**: Default `epsgResolver` queries epsg.io, caches results, parses with `wkt-parser`
+- **Reprojection**: GPU-based adaptive mesh (Delaunay triangulation with bounded error)
+- **Nodata masking**: Automatic detection and application of mask IFDs
+- **Overview selection**: Automatic resolution selection based on zoom level
 
 ---
 
-## Library Internals
+## Rendering Routes
 
-### `@developmentseed/deck.gl-geotiff` (v0.2.0)
+### Route 1: Tiled COG — Default Pipeline (uint)
 
-**Exports:** `COGLayer`, `GeoTIFFLayer`, `parseCOGTileMatrixSet`, `proj`, `extractGeotiffReprojectors`, `fromGeoTransform`, `loadRgbImage`, `parseColormap`, `texture`, `MosaicLayer`, `MosaicTileset2D`
-
-**Dependencies:** Bundles `geotiff@2.1.3` internally (NOT the project's v3).
-
-### `COGLayer._parseGeoTIFF()` flow
+**When**: `isTiled && !needsCustomPipeline()` (SampleFormat === 1/uint)
 
 ```
-1. fetchGeoTIFF(url)              -> opens v2 geotiff from URL
-2. parseCOGTileMatrixSet(tiff)    -> creates TileMatrixSet with tile bounds
-3. load all images                -> getImage(0..N)
-4. geoKeysParser(geoKeys)         -> parse CRS to proj4 string
-5. proj4(src, 'EPSG:4326')       -> create converter
-6. onGeoTIFFLoad(tiff, {bounds})  -> SYNC callback (before inferRenderPipeline!)
-7. inferRenderPipeline(fileDir)   -> THROWS for PI<2 or non-uint SF
-8. setState({metadata, images..}) -> triggers renderLayers -> TileLayer
+URL → pre-flight GeoTIFF.fromUrl()
+    → filter oversized overviews
+    → COGLayer({ geotiff: preflightGeotiff })
+    → library's inferRenderPipeline()
+    → GPU shader modules (CreateTexture, FilterNoDataVal, MaskTexture, Colormap, etc.)
+    → MapboxOverlay → MapLibre
 ```
 
-**Key insight:** Step 6 (`onGeoTIFFLoad`) runs BEFORE step 7 (`inferRenderPipeline`). This is how we capture the v2 GeoTIFF before the throw.
+This is the happy path. The library handles everything:
+- Opens the COG, resolves CRS via `epsgResolver`, generates TileMatrixSet
+- Creates proj4 converters for reprojection
+- Infers the appropriate GPU shader pipeline from photometric interpretation
+- Fetches tiles on demand, decodes via DecoderPool, uploads to GPU textures
 
-### `_getTileData()` z-to-image mapping
+**Key props passed to COGLayer:**
+- `geotiff` — pre-opened GeoTIFF instance (avoids double fetch)
+- `pool` — workerless `DecoderPool()` (see [DecoderPool Workers](#3-decoderpool-workers-fail-in-vite-dev-mode))
+- `signal` — AbortSignal for cancellation
+- `onGeoTIFFLoad` — metadata extraction callback
+- `onError` — error display callback
 
-```javascript
-// images[0] = finest (full resolution), images[N] = coarsest
-// tileMatrices[0] = coarsest, tileMatrices[N] = finest
-const geotiffImage = images[images.length - 1 - z];
-const tileMatrix = metadata.tileMatrices[z];
+### Route 2: Tiled COG — Custom Pipeline (signed int / float)
+
+**When**: `isTiled && needsCustomPipeline()` (SampleFormat === 2/int or 3/float)
+
+```
+URL → pre-flight GeoTIFF.fromUrl()
+    → filter oversized overviews
+    → detect non-uint via needsCustomPipeline()
+    → COGLayer({ geotiff, getTileData: custom, renderTile: custom })
+    → custom getTileData: fetchTile → normalize band 0 → grayscale RGBA ImageData
+    → custom renderTile: returns ImageData directly to RasterLayer
+    → MapboxOverlay → MapLibre
 ```
 
-### `inferRenderPipeline` (render-pipeline.js)
-
-Only supports:
-- `SampleFormat[0] === 1` (unsigned int) -- throws `"non-unsigned integers not yet supported"` otherwise
-- `PhotometricInterpretation >= 2` -- throws `"Unsupported PhotometricInterpretation"` for 0/1
-
-### `renderTile` return types
-
-`renderTile: (data: DataT) => ImageData | RasterModule[]`
-
-When `ImageData` is returned, `RasterLayer._createRenderPipeline()` creates a GPU texture:
-```javascript
-device.createTexture({ format: 'rgba8unorm', width, height, data: imageData.data })
+v0.3's `inferRenderPipeline()` throws for non-uint sample formats:
 ```
+Error: Inferring render pipeline for non-unsigned integers not yet supported.
+Found SampleFormat: 2,2,2,...
+```
+
+Our workaround: provide custom `getTileData` + `renderTile` callbacks that:
+1. Fetch the tile via `image.fetchTile(x, y, { pool, signal })`
+2. Extract band 0 (first band only — multi-band visualization not yet supported)
+3. Normalize values to [0, 255] using GDAL statistics or data-type range fallback
+4. Create grayscale RGBA `ImageData`
+5. Return `ImageData` to `RasterLayer` (which accepts it directly)
+
+**Normalization logic:**
+- If GDAL `storedStats` available (band 1 min/max): use those
+- Signed int fallback: `[-2^(bps-1), 2^(bps-1)-1]` (e.g., [-128, 127] for Int8)
+- Float fallback: `[0, 1]` (conservative default)
+
+### Route 3: Non-tiled TIFF (bitmap fallback)
+
+**When**: `!isTiled`
+
+```
+URL → GeoTIFF.fromUrl() → computeGeographicBounds()
+    → fetchTile(0, 0) → normalize → canvas → dataURL
+    → MapLibre addSource('image') + addLayer('raster')
+```
+
+`GeoTIFFLayer` is not yet exported in v0.3 (WIP — throws "not yet implemented"). Non-tiled TIFFs are rendered as a bitmap via MapLibre's native image source:
+
+1. Open with `GeoTIFF.fromUrl(url)` — reads first IFD
+2. Compute geographic bounds via edge-sampling (5 points per edge, proj4)
+3. Size gate: refuse > 100M pixels with helpful `gdal_translate` suggestion
+4. Cap to GPU `MAX_TEXTURE_SIZE` (4096 mobile, 8192-16384 desktop)
+5. Fetch entire raster via `fetchTile(0, 0)` (non-tiled = single strip)
+6. Compute band 0 min/max, normalize to grayscale RGBA
+7. Render to canvas → dataURL → MapLibre `addSource('image')` + `addLayer('raster')`
+
+### Route 4: Unsupported CRS (error)
+
+**When**: `geotiff.crs` throws (e.g., GeoTIFF model type 32767)
+
+Shows error message: `Unsupported CRS: Unsupported GeoTIFF model type: 32767`
+
+See [User-Defined CRS](#1-user-defined-crs-geotiff-model-type-32767) for details.
 
 ---
 
-## Version Mismatch: geotiff v2 vs v3
+## Pre-flight Pipeline
 
-| Feature | v2 (library) | v3 (project) |
-|---------|-------------|-------------|
-| Package | `geotiff@2.1.3` | `geotiff@^3.0.3` |
-| `fileDirectory` | Named properties (`ifd.TileWidth`, `ifd.PhotometricInterpretation`) | `actualizedFields` Map (`ifd.actualizedFields.get(262)`) |
-| Pool | `new Pool()` with `pool.bindParameters()` | `new Pool()` with different Worker structure |
-| Compression | LZW, JPEG, Deflate, PackBits, Adobe Deflate | + ZSTD (50000), WebP (50001), LERC (34887) |
+Every COG load goes through a pre-flight phase that reads the first IFD and performs validation before creating the COGLayer:
 
-### Critical rule: NEVER pass v3 objects to library functions (with one exception)
+```
+1. GeoTIFF.fromUrl(url)              → opens file, reads first IFD
+2. Check isTiled                      → routes to bitmap fallback if false
+3. Validate CRS (geotiff.crs)        → catches unsupported model types
+4. Filter oversized overviews         → prevents NaN projection errors
+5. Check needsCustomPipeline()        → detects non-uint sample formats
+6. Create COGLayer with appropriate props
+```
 
-Passing v3 GeoTIFF/Pool objects to the library causes `pool.bindParameters is not a function` because the Pool APIs differ between versions.
+The pre-flight GeoTIFF instance is passed directly to COGLayer via `geotiff: preflightGeotiff`, avoiding a redundant second HTTP fetch.
 
-**Solution:** Always pass URL strings to `COGLayer`/`GeoTIFFLayer`. The library opens its own v2 GeoTIFF internally.
+---
 
-**Exception:** `parseCOGTileMatrixSet(v3Tiff, geoKeysParser)` is safe. It only calls
-standard methods (`getImage`, `getImageCount`, `getGeoKeys`, `getBoundingBox`, `getWidth`,
-`getHeight`, `getTileWidth`, `getTileHeight`, `isTiled`) that are identical in v2 and v3.
-This is used as a fallback when the v2 capture fails (see Monkey-Patch Strategy).
+## Workarounds for v0.3 Bugs
 
-### v3 metadata access patterns
+### 1. User-Defined CRS (GeoTIFF Model Type 32767)
+
+**Bug**: `@developmentseed/geotiff`'s `crsFromGeoKeys()` only handles model types 1 (Projected) and 2 (Geographic). Model type 32767 ("user-defined") throws:
+```
+Error: Unsupported GeoTIFF model type: 32767
+```
+
+**Affected COGs**: Mollweide, Eckert IV/VI, Goode Homolosine, Van der Grinten, Robinson, Sinusoidal — any projection that uses `GTModelTypeGeoKey = 32767` instead of the standard model type 1 with `ProjectedCSTypeGeoKey = 32767`.
+
+**Note**: The library DOES handle user-defined projected CRS when `GTModelTypeGeoKey = 1` and `ProjectedCSTypeGeoKey = 32767` — it calls `_buildProjectedCrs(gkd)` which has an extensive switch statement covering Transverse Mercator, Lambert, Albers, Sinusoidal, and many others. The bug is specifically when `GTModelTypeGeoKey` itself is 32767.
+
+**Our workaround**: Catch the error in pre-flight and show a clear error message.
+
+**Proper fix**: The library's `crsFromGeoKeys()` should handle model type 32767 by checking for projection parameters (e.g., `gkd.projMethod`) and treating it as a projected CRS. This is a simple fix — just add:
+```js
+if (modelType === 32767 && gkd.projMethod !== null) {
+  return _projectedCrs(gkd); // or _buildProjectedCrs(gkd)
+}
+```
+
+**Where to track**: [`@developmentseed/geotiff`](https://github.com/developmentseed/deck.gl-raster) — file issue on `packages/geotiff/src/crs.ts`
+
+**Additional context**: Even with this fix, some pseudo-cylindrical projections (Mollweide, Eckert) are NOT in the library's coordinate transform table (`_buildConversion` switch statement). The library supports: Transverse Mercator, Oblique Mercator, Lambert (1SP/2SP), Albers, Azimuthal Equidistant, Stereographic (polar/oblique), Equirectangular, Cassini-Soldner, Polyconic, Sinusoidal, Orthographic. Missing: Mollweide, Eckert IV/VI, Robinson, Van der Grinten, Goode Homolosine, Winkel Tripel.
+
+### 2. Non-uint `inferRenderPipeline` (Signed Int / Float)
+
+**Bug**: `inferRenderPipeline()` in `@developmentseed/deck.gl-geotiff` only supports `SampleFormat.Uint`. For signed int (SF=2) and float (SF=3), it throws:
+```
+Error: Inferring render pipeline for non-unsigned integers not yet supported.
+Found SampleFormat: 2,2,2,...
+```
+
+**Our workaround**: Provide custom `getTileData`/`renderTile` callbacks via `createCustomGetTileData()` and `customRenderTile()` in `utils/cog.ts`. These read band 0, normalize to grayscale, and return `ImageData`.
+
+**Limitations of our workaround**:
+- Only renders band 0 (no multi-band visualization)
+- Single grayscale channel (no color ramps or band math)
+- Uses GDAL statistics or data-type range for normalization (not per-tile adaptive)
+
+**Proper fix**: The library should extend `inferRenderPipeline` to handle signed integers and floats. For signed ints, the data could be shifted to unsigned range before GPU upload. For floats, a normalization shader module could map values to [0, 1].
+
+**Where to track**: [`@developmentseed/deck.gl-geotiff`](https://github.com/developmentseed/deck.gl-raster) — file issue on `packages/deck.gl-geotiff/src/geotiff/render-pipeline.ts`
+
+### 3. Oversized Overviews → NaN Projection → "Invalid number null"
+
+**Bug**: `generateTileMatrixSet()` in `@developmentseed/geotiff` includes ALL overviews in the TileMatrixSet, even those where the overview image is smaller than a single tile (e.g., a 1×1 pixel overview with 1024×1024 tile size).
+
+When the tile size exceeds the image size, the tile's geographic extent is MUCH larger than the actual image — for a 1×1 overview with 1024×1024 tiles, the tile extends to `1024 × cellSize` in each direction, which for the coarsest overview can cover the entire Earth multiple times over.
+
+When `sampleReferencePointsInEPSG3857()` in `@developmentseed/deck.gl-raster` samples points within this oversized tile extent, many points fall far outside the valid domain of the source CRS (e.g., UTM zones are only valid within a 6° band). `proj4.forward()` returns `NaN` for these out-of-domain coordinates, which propagates through:
+
+```
+sampleReferencePointsInEPSG3857(tile bounds, projectTo3857)
+  → proj4.forward([x, y]) returns [NaN, NaN]
+  → rescaleEPSG3857ToCommonSpace([NaN, NaN]) returns [NaN, NaN]
+  → makeOrientedBoundingBoxFromPoints([[NaN, NaN, 0], ...])
+  → dot product with NaN → checkNumber(NaN)
+  → Error: "Invalid number null"   (JSON.stringify(NaN) === "null")
+```
+
+**Note**: The error message says `null` because `JSON.stringify(NaN)` produces `"null"` — the actual value is `NaN`, not `null`.
+
+**Our workaround**: Filter out oversized overviews in pre-flight:
+```typescript
+const validOverviews = geotiff.overviews.filter(
+  (ov) => ov.width >= ov.tileWidth && ov.height >= ov.tileHeight
+);
+(geotiff as any).overviews = validOverviews;
+```
+
+This mutates the GeoTIFF's `overviews` array before passing to COGLayer. The `overviews` property is `readonly` in TypeScript but mutable at runtime.
+
+**Impact**: For a COG with many overviews (e.g., 13 overviews for an 8192×8192 image with 1024×1024 tiles), we keep only 3-4 and discard 9-10. This means the coarsest available overview is larger than ideal — at low zoom, more tiles are loaded than necessary. At high zoom, rendering is unaffected.
+
+**Proper fix**: `generateTileMatrixSet()` should skip overviews where `width < tileWidth || height < tileHeight`, or `sampleReferencePointsInEPSG3857()` should clamp sample points to the actual image extent.
+
+**Where to track**:
+- `generateTileMatrixSet`: [`@developmentseed/geotiff`](https://github.com/developmentseed/deck.gl-raster) — `packages/geotiff/src/tile-matrix-set.ts`
+- `sampleReferencePointsInEPSG3857`: [`@developmentseed/deck.gl-raster`](https://github.com/developmentseed/deck.gl-raster) — `packages/deck.gl-raster/src/raster-tileset/raster-tile-traversal.ts`
+
+### 4. EPSG:4326 Polar Singularity → NaN in EPSG:3857 Projection
+
+**Bug**: `proj4.forward([lon, ±90])` from EPSG:4326 to EPSG:3857 returns `[NaN, NaN]`. The Mercator projection is mathematically undefined at the poles (lat = ±90°). In JavaScript, `Math.log(Math.tan(Math.PI/4 + Math.PI/4))` returns `NaN` due to floating-point evaluation of `tan(π/2)`.
+
+**Affected COGs**: Any global EPSG:4326 COG with bbox extending to ±90° latitude. Example: GEBCO 2024 (86400×43200, bbox = [−180, −90, 180, 90]).
+
+**Symptom**: `initialization of TileLayer: Invalid number null` — same as bug #3 but caused by polar NaN instead of oversized overviews. The error message says "null" because `JSON.stringify(NaN) === "null"`.
+
+**Root cause flow**:
+```
+Tile at top/bottom row has corners at lat = ±90°
+  → sampleReferencePointsInEPSG3857 projects sample points
+  → projectTo3857(lon, ±90) calls proj4.forward([lon, ±90])
+  → proj4 returns [NaN, NaN]
+  → rescaleEPSG3857ToCommonSpace([NaN, NaN]) returns [NaN, NaN]
+  → makeOrientedBoundingBoxFromPoints fails with NaN in dot product
+```
+
+**Our workaround** (two-part fix):
+
+**Part A — Clamp bbox**: Override the GeoTIFF `bbox` getter to clamp latitude to ±85.051129° before `generateTileMatrixSet` uses it for the TMS `boundingBox`:
+```typescript
+if (preflightGeotiff.crs === 4326) {
+  const [x0, y0, x1, y1] = preflightGeotiff.bbox;
+  if (y0 <= -85.051129 || y1 >= 85.051129) {
+    Object.defineProperty(preflightGeotiff, 'bbox', {
+      value: [x0, Math.max(y0, -85.051129), x1, Math.min(y1, 85.051129)]
+    });
+  }
+}
+```
+
+This alone is NOT sufficient — the TMS `boundingBox` is clamped, but individual tile matrices still have `pointOfOrigin` at lat=90° (from the overview transforms). Tiles in the first/last rows still project polar coordinates to NaN.
+
+**Part B — Patch `COGLayer.prototype.setState`**: Wrap the `forwardTo3857` and `forwardTo4326` projection functions with NaN guards. When `_parseGeoTIFF` calls `setState({ forwardTo3857, ... })`, our patch intercepts and wraps the functions:
 
 ```typescript
-// v3 getters (used in pre-flight)
-firstImage.isTiled                                    // boolean
-firstImage.getSampleFormat()                          // 1=uint, 2=int, 3=float
-firstImage.getSamplesPerPixel()                       // band count
-firstImage.getBitsPerSample()                         // e.g. 8, 16, 32
-firstImage.getGDALNoData()                            // number | null
-firstImage.getWidth() / getHeight()
-firstImage.fileDirectory.actualizedFields.get(262)    // PhotometricInterpretation
-firstImage.fileDirectory.getValue('Compression')      // Compression tag (259)
-```
+const WM_HALF = 20037508.342789244;
 
----
-
-## Monkey-Patch Strategy
-
-### Why
-
-`inferRenderPipeline` throws for Gray/float COGs, preventing `setState` from running. Without state, the TileLayer never renders.
-
-### How
-
-```javascript
-// Guard against HMR double-patching
-const _origParse = COGLayer.__origParseGeoTIFF ?? COGLayer.prototype._parseGeoTIFF;
-COGLayer.__origParseGeoTIFF = _origParse;
-
-COGLayer.prototype._parseGeoTIFF = async function() {
-  try {
-    await _origParse.call(this);
-  } catch (err) {
-    const geotiff = capturedV2Geotiff || currentV3Tiff;  // v3 fallback
-    if (this.props.getTileData && this.props.renderTile && geotiff) {
-      try {
-        const metadata = await parseCOGTileMatrixSet(geotiff, gkParser);
-        patchMetadataBounds(metadata);
-        // ... load images, skip oversized overviews, cap zoom levels ...
-        this.setState({ metadata, forwardReproject, inverseReproject, images, ... });
-      } catch (reconstructErr) {
-        if (this.props.onError) this.props.onError(reconstructErr);
-      }
-    } else if (this.props.onError) {
-      this.props.onError(err);
+function wrapProjection(fn) {
+  return (x, y) => {
+    const r = fn(x, y);
+    if (Number.isNaN(r[0]) || Number.isNaN(r[1])) {
+      return [
+        Number.isNaN(r[0]) ? 0 : r[0],
+        Number.isNaN(r[1]) ? (y > 0 ? WM_HALF : -WM_HALF) : r[1],
+      ];
     }
-  }
+    return r;
+  };
+}
+
+const OrigSetState = COGLayer.prototype.setState;
+COGLayer.prototype.setState = function(state) {
+  if (state.forwardTo3857) state.forwardTo3857 = wrapProjection(state.forwardTo3857);
+  if (state.forwardTo4326) state.forwardTo4326 = wrapProjection(state.forwardTo4326);
+  return OrigSetState.call(this, state);
 };
 ```
 
-### `capturedV2Geotiff` + `currentV3Tiff` lifecycle
+When proj4 returns `[NaN, NaN]` for polar coordinates, the wrapper substitutes:
+- `x = 0` (center of the map)
+- `y = ±WM_HALF` (edge of Web Mercator, sign matches input latitude hemisphere)
 
-Two module-level variables provide the geotiff object for reconstruction:
+This produces valid bounding volumes for polar tiles. The tiles still render — they just get extreme-but-valid EPSG:3857 coordinates. Web Mercator can't display content beyond ±85.051129° anyway, so the visual impact is that polar tiles render at the map edge.
 
-- **`capturedV2Geotiff`**: Set in `handleGeoTIFFLoad` callback (step 6 of `_parseGeoTIFF`).
-  May be **null** if `_origParse` throws BEFORE reaching `onGeoTIFFLoad` (e.g.,
-  `parseCOGTileMatrixSet` fails for the CRS).
-- **`currentV3Tiff`**: Set in `onMapReady` before creating the COGLayer. Always available
-  when the custom pipeline is used. Acts as fallback when `capturedV2Geotiff` is null.
-- Both are cleared on tab switch to prevent stale references.
+**Proper fix**: The library's `forwardTo3857` and `forwardTo4326` functions (created in `_parseGeoTIFF` in `cog-layer.ts`) should wrap proj4 calls with NaN guards. Alternatively, `sampleReferencePointsInEPSG3857()` should skip NaN results when sampling tile bounds.
 
-### Why v3 tiff works with `parseCOGTileMatrixSet`
+**Where to track**:
+- `_parseGeoTIFF`: [`@developmentseed/deck.gl-geotiff`](https://github.com/developmentseed/deck.gl-raster) — `packages/deck.gl-geotiff/src/cog-layer.ts` (lines where `forwardTo3857`/`forwardTo4326` are created)
+- `sampleReferencePointsInEPSG3857`: [`@developmentseed/deck.gl-raster`](https://github.com/developmentseed/deck.gl-raster) — `packages/deck.gl-raster/src/raster-tileset/raster-tile-traversal.ts`
 
-Despite the "never pass v3 objects to library functions" rule, `parseCOGTileMatrixSet`
-is safe because it only calls standard methods that work identically in v2 and v3:
-`getImage()`, `getImageCount()`, `getGeoKeys()`, `getBoundingBox()`, `getWidth()`,
-`getHeight()`, `getTileWidth()`, `getTileHeight()`, `isTiled`. It does NOT access
-`fileDirectory` properties directly or use the Pool.
+### 5. DecoderPool Workers Fail in Vite Dev Mode
 
----
-
-## Projection & Bounds Issues
-
-### Problem: `deck.gl lngLatToWorld` assertion
-
-```javascript
-// deck.gl/core web-mercator-utils.js
-assert(Number.isFinite(lat) && lat >= -90 && lat <= 90, "invalid latitude");
+**Bug**: `defaultDecoderPool()` in `@developmentseed/geotiff` creates Web Workers using:
+```js
+new Worker(new URL("./worker.js", import.meta.url), { type: "module" })
 ```
 
-### Causes
+In Vite dev mode, this fails because:
+- Vite's dep optimizer pre-bundles the geotiff package
+- The worker URL resolves to a path through the Vite dev server
+- The dev server serves the worker file with an incorrect/empty MIME type
+- Firefox rejects it: `Loading Worker was blocked because of a disallowed MIME type ("")`
+- Multiple `NS_ERROR_CORRUPTED_CONTENT` errors in console
 
-1. **Mollweide corners outside ellipse:** The bounding box of a Mollweide projection is rectangular, but the valid domain is elliptical. The 4 corners of the bbox are OUTSIDE the ellipse. `proj4(mollweide -> WGS84)` returns extreme longitudes (e.g. +/-277 deg) for these corners.
+The workers are created successfully (the `Worker` constructor doesn't throw), but they can't execute their script. When COGLayer tries to decode tiles through the pool, the workers silently fail.
 
-2. **EPSG:4326 at +/-90.002 deg:** Some COGs extend slightly beyond the poles (e.g. origin at 90.0022 deg). `lat = -90.002` fails the `lat >= -90` assertion.
-
-3. **Web Mercator singularity at +/-90 deg:** Even exact +/-90 deg latitude produces `Infinity` in Mercator math: `Math.log(Math.tan(PI/4 + PI/4))` = `Math.log(Infinity)` = `Infinity`.
-
-### Where bounds are used in the library
-
-| Location | What | Problem |
-|----------|------|---------|
-| `metadata.wgsBounds` | Geographic extent for frustum culling | NaN/extreme values crash TileLayer init |
-| `metadata.projectTo3857` | CRS -> EPSG:3857 for tile bounding volumes | NaN for out-of-domain points |
-| `metadata.projectToWgs84` | CRS -> WGS84 for display | NaN for edge tiles |
-| `forwardReproject` | CRS -> WGS84 for adaptive mesh in RasterLayer | Used for rendering, must be clamped |
-
-### Fix: `patchMetadataBounds()`
-
-```javascript
-function patchMetadataBounds(metadata) {
-  // 1. Clamp wgsBounds to valid Web Mercator range
-  metadata.wgsBounds = {
-    lowerLeft:  [safeClamp(lon, -180, 180, -180), safeClamp(lat, -85.05, 85.05, -85.05)],
-    upperRight: [safeClamp(lon, -180, 180,  180), safeClamp(lat, -85.05, 85.05,  85.05)]
-  };
-
-  // 2. Wrap projectTo3857 — return [0,0] for NaN/Infinity
-  metadata.projectTo3857 = (point) => {
-    const r = origTo3857(point);
-    return (isFinite(r[0]) && isFinite(r[1])) ? r : [0, 0];
-  };
-
-  // 3. Wrap projectToWgs84 — clamp to valid range
-  metadata.projectToWgs84 = (point) => {
-    const r = origToWgs84(point);
-    return [safeClamp(r[0], -180, 180, 0), safeClamp(r[1], -85.05, 85.05, 0)];
-  };
-}
-```
-
-### Fix: Edge-sampled bounds (pre-flight)
-
-The library's `getGeographicBounds` uses only 4 bbox corners. For projections where
-edges curve (UTM, Mollweide, sinusoidal), this misses the true extent. We compute
-our own bounds during pre-flight by sampling 5 points per edge (20 total):
-
-```javascript
-for (let i = 0; i <= N; i++) {
-  const t = i / N;
-  pts.push([x0 + t * dx, y0]); // bottom
-  pts.push([x0 + t * dx, y1]); // top
-  pts.push([x0, y0 + t * dy]); // left
-  pts.push([x1, y0 + t * dy]); // right
-}
-// Only accept points with |lon| <= 180 and |lat| <= 90 (rejects Mollweide corner NaN)
-```
-
-### Fix: Sign-based `forwardReproject` fallback
-
-For out-of-domain points (Mollweide edges outside the ellipse), returning `[0, 0]`
-creates spikes in the adaptive mesh (tiles stretching to the equator/prime meridian).
-Instead, use sign-based edge clamping:
-
-```javascript
-const forwardReproject = (x, y) => {
-  const r = converter.forward([x, y], false);
-  const lon = isFinite(r[0]) ? clamp(r[0], -180, 180) : (x >= 0 ? 180 : -180);
-  const lat = isFinite(r[1]) ? clamp(r[1], -85.05, 85.05) : (y >= 0 ? 85.05 : -85.05);
-  return [lon, lat];
-};
-```
-
-Same approach for `projectTo3857` — maps to EPSG:3857 world edges (±20037508.34m).
-
-### Fix: Tile matrix zoom cap
-
-ZSTD decompression runs synchronously on main thread (WASM via `zstddec`). Capping
-tile matrices at 12 levels prevents excessive tile loading at fine zoom levels:
-
-```javascript
-const MAX_TILE_LEVELS = 12;
-if (metadata.tileMatrices.length > MAX_TILE_LEVELS) {
-  metadata.tileMatrices = metadata.tileMatrices.slice(0, MAX_TILE_LEVELS);
-  images = images.slice(images.length - MAX_TILE_LEVELS);
-}
-```
-
-### Important: `safeClamp` vs `Math.max/min`
-
-```javascript
-Math.max(-180, Math.min(180, NaN))  // => NaN (WRONG!)
-safeClamp(NaN, -180, 180, -180)     // => -180 (correct fallback)
-```
-
----
-
-## Compression Support
-
-### TIFF Compression Tags (tag 259)
-
-| Code | Method | geotiff v2 | geotiff v3 |
-|------|--------|-----------|-----------|
-| 1 | None | Yes | Yes |
-| 5 | LZW | Yes | Yes |
-| 6 | Old JPEG | No | No |
-| 7 | JPEG | Yes | Yes |
-| 8 | Deflate | Yes | Yes |
-| 32773 | PackBits | Yes | Yes |
-| 32946 | Adobe Deflate | Yes | Yes |
-| 34887 | LERC | No | Yes |
-| 50000 | Zstandard (ZSTD) | **No** | **Yes** |
-| 50001 | WebP | No | Yes |
-
-### Strategy for unsupported v2 compressions
-
-When the COG uses ZSTD/WebP/LERC compression:
-1. The library's v2 `readRasters()` will throw `"Unknown compression method identifier: 50000"`
-2. Our custom `getTileData` uses **v3 images** (lazily cached by dimensions) which support these codecs
-3. Stats pre-flight also uses v3 `readRasters` (which works because it runs before the library)
-
-### Reading compression from v3
-
+**Our workaround**: Create a workerless `DecoderPool` and pass it explicitly:
 ```typescript
-const compression = firstImage.fileDirectory.getValue('Compression') || 1;
+const pool = new DecoderPool(); // No createWorker → main-thread fallback
+new COGLayer({ pool, ... });
+```
+
+When `DecoderPool` has no workers (`hasWorkers === false`), it falls back to main-thread decoding via the standard `decode()` function. This is reliable but synchronous — ZSTD decompression blocks the main thread for 50-200ms per tile.
+
+**Impact**: Tile decoding is slower (main thread vs workers). For COGs with LZW/Deflate compression, this is barely noticeable. For ZSTD/WebP, there may be brief UI freezes during rapid scrolling.
+
+**Note**: This issue is **dev mode only**. In production builds (`pnpm build`), Vite bundles the worker correctly and workers would work. However, we currently use the main-thread pool unconditionally for consistency. A future improvement could detect dev vs production mode.
+
+**Related**: In our `vite.config.ts`, we set `worker: { format: 'es' }` to prevent a separate build error (`Invalid value "iife" for option "worker.format"`). This fixes the production build but does not fix the dev mode worker loading.
+
+**Proper fix**: The `@developmentseed/geotiff` worker should be compatible with Vite's dev server. This could be achieved by:
+- Using an inline worker (`new Worker(new Blob([...]))`) instead of a URL-based worker
+- Or providing a Vite plugin that handles the worker URL resolution
+
+**Where to track**: [`@developmentseed/geotiff`](https://github.com/developmentseed/deck.gl-raster) — `packages/geotiff/src/pool/pool.ts`
+
+### 5. `GeoTIFFLayer` Not Exported (Non-tiled COGs)
+
+**Bug**: `GeoTIFFLayer` exists in the v0.3 source but is intentionally NOT exported from the package index. The implementation throws:
+```
+Error: Loading GeoTIFF image data not yet implemented
+```
+
+This means non-tiled GeoTIFFs cannot use the library's built-in layer and must be handled manually.
+
+**Our workaround**: `renderNonTiledBitmap()` in `utils/cog.ts` reads the entire raster and renders via MapLibre's native image source.
+
+**Where to track**: [`@developmentseed/deck.gl-geotiff`](https://github.com/developmentseed/deck.gl-raster) — `packages/deck.gl-geotiff/src/geotiff-layer.ts`
+
+---
+
+## Extracted Utilities (`src/lib/utils/cog.ts`)
+
+### Pure Helpers (re-exported via objex-utils)
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `SF_LABELS` | const | SampleFormat code → label map (`{1:'uint', 2:'int', 3:'float', ...}`) |
+| `CogInfo` | interface | Metadata for the info panel (width, height, bandCount, dataType, bounds) |
+| `GeoBounds` | interface | `{west, south, east, north}` |
+| `safeClamp()` | fn | Clamp with NaN/Infinity fallback — use instead of `Math.max/min` |
+| `clampBounds()` | fn | Clamp to web-Mercator-safe range (lon ±180, lat ±85.051129) |
+| `buildDataTypeLabel()` | fn | Build label from SampleFormat + BitsPerSample (e.g., "uint8", "float32") |
+
+### Map Helpers (depend on maplibre-gl, not re-exported)
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `fitCogBounds()` | fn | Responsive fit with zoom bump for small-extent COGs |
+| `getMaxTextureSize()` | fn | Query GPU `MAX_TEXTURE_SIZE` from MapLibre's WebGL context |
+| `cleanupNativeBitmap()` | fn | Remove MapLibre image source/layer (idempotent) |
+| `renderNonTiledBitmap()` | fn | Full non-tiled bitmap pipeline (open → read → normalize → render) |
+
+### Custom Pipeline Helpers
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `needsCustomPipeline()` | fn | Check if GeoTIFF needs custom pipeline (non-uint SampleFormat) |
+| `createCustomGetTileData()` | fn | Create `getTileData` callback that normalizes band 0 to grayscale |
+| `customRenderTile()` | fn | Create `renderTile` callback that returns ImageData |
+| `CustomTileData` | interface | Return type from custom getTileData (`{imageData, width, height}`) |
+
+---
+
+## Upstream Issues to Track
+
+All issues are in the **[developmentseed/deck.gl-raster](https://github.com/developmentseed/deck.gl-raster)** monorepo.
+
+| Issue | Package | File | Severity | Description |
+|-------|---------|------|----------|-------------|
+| Model type 32767 | `@developmentseed/geotiff` | `src/crs.ts` | High | `crsFromGeoKeys` doesn't handle user-defined model type |
+| Non-uint render pipeline | `@developmentseed/deck.gl-geotiff` | `src/geotiff/render-pipeline.ts` | High | `inferRenderPipeline` only supports uint SampleFormat |
+| Oversized overviews | `@developmentseed/geotiff` | `src/tile-matrix-set.ts` | High | `generateTileMatrixSet` includes overviews smaller than tile size |
+| Polar NaN projection | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | High | `forwardTo3857`/`forwardTo4326` return NaN at ±90° latitude |
+| Worker dev mode | `@developmentseed/geotiff` | `src/pool/pool.ts` | Medium | DecoderPool workers fail in Vite dev server |
+| GeoTIFFLayer WIP | `@developmentseed/deck.gl-geotiff` | `src/geotiff-layer.ts` | Low | Non-tiled layer not yet implemented |
+| Missing projections | `@developmentseed/geotiff` | `src/crs.ts` | Low | Mollweide, Eckert, Robinson not in CT table |
+
+---
+
+## Test COGs & Results
+
+| Name | URL | CRS | Bands | Type | Compression | Route | Status |
+|------|-----|-----|-------|------|-------------|-------|--------|
+| NZ Aerial | `nz-imagery.s3...CC11.tiff` | EPSG:2193 | 3 | uint8 | WebP | Default | ✅ Works |
+| TGE AEF | `source.coop...tge-labs...tiff` | EPSG:32610 | 64 | Int8 | ZSTD | Custom | ✅ Grayscale band 0 |
+| GEBCO 2024 | `source.coop...GEBCO_2024.tif` | EPSG:4326 | 1 | Int16 | Deflate | Custom | ✅ Global bathymetry (polar clamp + NaN guard) |
+| HFP 2017 | `source.coop...hfp_2017...tif` | Mollweide (32767) | 1 | uint16 | ZSTD | Error | ❌ Unsupported model type |
+| Canada 01.tif | `source.coop...dataforcanada...tif` | — | — | — | — | Error | ❌ Not a valid TIFF (magic bytes `86 DE E3 4E`) |
+
+### Testing workflow
+
+```bash
+# Standard RGB COG
+http://localhost:5173/?url=https://nz-imagery.s3-ap-southeast-2.amazonaws.com/...
+
+# Non-uint COG (should render grayscale)
+http://localhost:5173/?url=https://s3.us-west-2.amazonaws.com/.../tge-labs/...
+
+# Mollweide COG (should show CRS error)
+http://localhost:5173/?url=https://s3.us-west-2.amazonaws.com/.../hfp-100/...
 ```
 
 ---
 
-## Performance & Browser Hangs
+## Vite Configuration
 
-### CRITICAL: geotiff v3 Pool hangs in Vite dev
+### `worker.format`
 
-**Symptom:** Browser completely freezes when loading tiles.
+```js
+worker: { format: 'es' }
+```
 
-**Root cause:** `new Pool()` from geotiff v3 creates Web Workers. In Vite dev mode, these workers need to load ESM modules via `import()`. Vite's dev server may not serve worker module requests correctly, causing workers to hang silently. `pool.bindParameters()` returns a Promise that never resolves -> `readRasters()` hangs -> all tile loading blocks.
+Required because `@developmentseed/geotiff`'s DecoderPool uses `new Worker(url, { type: "module" })`. Without this, Vite's production build fails with:
+```
+Invalid value "iife" for option "worker.format" — UMD and IIFE output formats
+are not supported for code-splitting builds.
+```
 
-**Proof:** Stats `readRasters` without a pool works fine (same COG, same compression). Only pool-based tile loading hangs.
+### `optimizeDeps.include`
 
-**Fix:** Do NOT use a v3 Pool. Call `readRasters` without a pool. Decompression happens
-on the main thread synchronously via WASM (`zstddec` package). The `zstd.decode()` call
-is fully synchronous — blocks the main thread for the duration of decompression.
-
-**Correction:** Earlier docs said decompression was "async". It is NOT — `readRasters`
-returns a Promise, but the actual ZSTD WASM decode inside is synchronous. The Promise
-wrapper is just syntactic.
-
-### Event loop yielding (fix for UI freeze)
-
-Back-to-back synchronous tile decodes (each ~5-50ms depending on tile size and
-compression) can block the UI for hundreds of milliseconds, preventing paint and
-input handling. The fix: yield to the event loop before each tile decompression:
-
-```javascript
-getTileData: async (image, options) => {
-  await new Promise(r => setTimeout(r, 0));  // yield to browser
-  if (options.signal?.aborted) return null;
-  // ... readRasters + RGBA conversion ...
+```js
+optimizeDeps: {
+  include: [
+    '@developmentseed/deck.gl-geotiff',
+    '@developmentseed/geotiff',
+    '@developmentseed/deck.gl-raster',
+    '@developmentseed/raster-reproject',
+    '@developmentseed/morecantile',
+    '@developmentseed/affine',
+    '@cogeotiff/core',
+    'proj4',
+    'wkt-parser'
+  ]
 }
 ```
 
-This inserts a macrotask boundary (~1-4ms) between tiles, letting the browser
-paint frames and process user input (zoom, pan) between decompressions.
+All v0.3 packages and their transitive deps must be pre-bundled by Vite's optimizer. Without this, module resolution fails at runtime with import errors for internal ESM modules.
 
-**Tradeoff:** No parallel decompression across workers. If this becomes a bottleneck, investigate:
-- Building geotiff v3 workers with Vite's worker bundling
-- Using `navigator.hardwareConcurrency` with `OffscreenCanvas` workers
-- Checking if geotiff v3 Pool works correctly in production (non-dev) builds
+### `resolve.dedupe`
 
-### Redundant work in monkey-patch
-
-`parseCOGTileMatrixSet` is called **twice** for custom pipeline COGs:
-1. Inside `_origParse` (library code, result lost when it throws)
-2. In our catch handler (to reconstruct state)
-
-Each call iterates all image IFDs via HTTP range requests. However, geotiff.js caches images after first access, so the second call is fast (~50ms total from cached data). Not worth optimizing unless profiling shows otherwise.
-
-### HFP COG (360802x176500) -- still hangs
-
-Despite removing the Pool, the HFP Mollweide COG (360802x176500, ZSTD, UInt16) may still cause browser issues. Possible remaining causes:
-
-1. **RasterLayer adaptive mesh for Mollweide:** The reprojection mesh for Mollweide has extreme distortion at the edges. The adaptive mesh refinement in RasterLayer may create very fine meshes (thousands of vertices) for edge tiles, overwhelming the GPU.
-
-2. **ZSTD WASM initialization:** First-time ZSTD decompression requires loading and compiling a WASM module. This may block the main thread briefly during compilation.
-
-3. **Many concurrent range requests:** Even at the coarsest zoom, the tile traversal may try to prefetch tiles at multiple zoom levels, creating many concurrent HTTP requests.
-
-4. **GPU texture memory:** Each tile creates a 512x512 RGBA texture (1MB). At fine zoom levels with many visible tiles, GPU memory could be exhausted.
-
-### Performance optimization ideas (not yet implemented)
-
-- Check compression at pre-flight; only use v3 for ZSTD/WebP/LERC; use v2 images (with library pool) for LZW/Deflate/JPEG — this gives worker-based parallel decompression for common codecs
-- COGLayer does NOT forward TileLayer props (`maxRequests`, `maxZoom`, etc.) — would need library patch or custom TileLayer creation
-- Profile with Chrome DevTools Performance tab to identify exact split between WASM decode and adaptive mesh proj4 calls
-
----
-
-## Tile Matrix Oversized Overview Fix
-
-### Problem
-
-When an overview image is smaller than the tile size (e.g., 1x1 pixel overview with 1024x1024 tiles), `parseCOGTileMatrixSet` computes tile bounds that span the entire globe:
-
-```
-cellSize = baseTransform[0] * (fullWidth / overviewWidth)
-// For fullWidth=8192, overviewWidth=1, cellSize = 8192 * 100m = 819,200m
-// Tile bounds = cellSize * tileWidth = 819,200 * 1024 = 838,860,800m (way beyond Earth)
-```
-
-When these extreme bounds are projected to EPSG:3857, they produce NaN.
-
-### Fix
-
-Skip overviews where image dimensions < tile dimensions:
-
-```javascript
-// tileMatrices[0]=coarsest, images[0]=finest (reverse mapping)
-let firstValidZ = 0;
-for (let z = 0; z < metadata.tileMatrices.length; z++) {
-  const img = images[images.length - 1 - z];
-  const tm = metadata.tileMatrices[z];
-  if (img.getWidth() >= tm.tileWidth && img.getHeight() >= tm.tileHeight) {
-    firstValidZ = z;
-    break;
-  }
-}
-if (firstValidZ > 0) {
-  metadata.tileMatrices = metadata.tileMatrices.slice(firstValidZ);
-  images = images.slice(0, images.length - firstValidZ);
+```js
+resolve: {
+  dedupe: ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/geo-layers', '@luma.gl/core', 'proj4']
 }
 ```
 
-### Example: 64-band COG (8192x8192, tileWidth=1024)
-
-14 overviews down to 1x1. After fix, skip overviews smaller than 1024x1024:
-- Skipped: 1x1, 2x2, 4x4, 8x8, 16x16, 32x32, 64x64, 128x128, 256x256, 512x512
-- First valid: 1024x1024 (or next larger)
+Ensures a single instance of shared libraries. `proj4` deduplication is critical — the library's internal `proj4` must be the same instance as ours to share projection caches.
 
 ---
 
-## UI Layout
+## History (v0.2 → v0.3)
 
-### Smooth fly animation
+The v0.2 CogViewer was **1345 lines** with ~700 lines of workarounds:
 
-`fitBounds` uses `speed: 1.2, maxDuration: 2000` for a smooth fly-to effect when
-navigating to the COG extent, instead of the jarring instant pan (`animate: false`).
+| Workaround | Lines | Eliminated by |
+|---|---|---|
+| `COGLayer._parseGeoTIFF` monkey-patch | ~70 | v0.3 native Gray/PI support |
+| `reconstructLayerState()` | ~130 | No monkey-patch needed |
+| `patchMetadataBounds()` (Mollweide/global CRS) | ~45 | v0.3 handles reprojection internally |
+| `geoKeysParser()` + `PROJ_CT_FALLBACK` + `ESRI_PROJ_MAP` | ~110 | v0.3 `epsgResolver` + `wkt-parser` |
+| `buildCustomCogLayer()` (custom TileLayer) | ~190 | Custom `getTileData`/`renderTile` API |
+| Custom bitmap preview (tiled Gray/Float) | ~110 | v0.3 custom pipeline callbacks |
+| Dual geotiff v2/v3 library hack | ~40 | Single `@developmentseed/geotiff` |
 
-### Overlay stacking (fixed in this rewrite)
+**Dependencies removed:**
+- `geotiff@^3.0.5` — replaced by `@developmentseed/geotiff` (wraps `@cogeotiff/core`)
+- `geotiff-geokeys-to-proj4@^2024.4.13` — replaced by `@developmentseed/epsg` + `wkt-parser`
 
-Before: error div and cogInfo div both at `absolute left-2 top-2` -- overlapped when both visible.
-
-After: wrapped in a flex column container:
-
-```svelte
-<div class="pointer-events-none absolute left-2 top-2 flex flex-col gap-1.5">
-  {#if loading} ... {/if}
-  {#if cogInfo} ... {/if}
-  {#if error}
-    <div class="pointer-events-auto ...">  <!-- interactive for error text selection -->
-      {error}
-    </div>
-  {/if}
-</div>
-```
-
----
-
-## Test COGs & Their Characteristics
-
-### NLCD (works with default pipeline)
-
-- URL: `s3://ds-deck.gl-raster-public/cog/Annual_NLCD_LndCov_2024_CU_C1V1.tif`
-- CRS: Albers Equal Area
-- 1 band, Byte (UInt8), PI=3 (Palette), LZW
-- 6 overviews, NoData=250
-- **Route:** Default pipeline (uint + PI >= 2)
-
-### HFP 2017/2019 (Mollweide, custom pipeline, HANGS)
-
-- URL: `s3://us-west-2.opendata.source.coop/vizzuality/hfp-100/hfp_2017_100m_v1-2_cog.tif`
-- CRS: Mollweide (custom, no EPSG code)
-- 360802x176500, 1 band, UInt16, PI=1 (Gray), ZSTD, NoData=65535
-- 10 overviews (down to 352x172)
-- **Route:** Custom pipeline (PI=1)
-- **Issues:** Mollweide corner reprojection NaN, ZSTD needs v3, browser hang
-
-### Deforestation Carbon (EPSG:4326, Float32)
-
-- URL: `s3://us-west-2.opendata.source.coop/vizzuality/lg-land-carbon-data/deforest_carbon_by_human_lu_50km_1000m_cog.tif`
-- CRS: EPSG:4326
-- 40076x20038, 1 band, Float32, PI=1 (Gray), LZW
-- 7 overviews (down to 313x156)
-- **Route:** Custom pipeline (SF=3 float)
-- **Issues:** Bounds at +/-90.002 deg, inferRenderPipeline throws for SF=3
-
-### Deforestation 100m (global, Float32, LZW)
-
-- URL: `s3://us-west-2.opendata.source.coop/vizzuality/lg-land-carbon-data/deforest_100m_cog.tif`
-- CRS: EPSG:4326
-- 400752x200376, 1 band, Float32, PI=1 (Gray), LZW
-- Many overviews, large tile count at coarsest level
-- **Route:** Custom pipeline (SF=3 float)
-- **Issues:** Coarsest overview still has ~91 tiles → UI freeze from LZW decode
-
-### rcmap_tree_2009 (works perfectly)
-
-- URL: `s3://us-west-2.opendata.source.coop/berkeley-dse/mrcl/rcmap_tree_2009.tif`
-- Moderate size, uint, Gray
-- **Route:** Custom pipeline (PI=1)
-- **Status:** Works correctly, good reference for testing
-
-### 64-band COG (UTM, ZSTD, Int8)
-
-- URL: `s3://us-west-2.opendata.source.coop/tge-labs/aef/v1/annual/2021/10N/x06839lqyyiw2qz7y-0000008192-0000008192.tiff`
-- CRS: UTM zone 10N (EPSG:32610)
-- 8192x8192, 64 bands, Int8, PI=1, ZSTD, tileWidth=1024
-- 14 overviews (down to 1x1)
-- **Route:** Custom pipeline (PI=1, SF=2 int)
-- **Issues:** Oversized tile matrices for tiny overviews, ZSTD needs v3
-- **Status:** Works — renders band 0 as grayscale, bbox slightly north (edge sampling fix applied)
-
----
-
-## Open Issues & Future Work
-
-### Browser responsiveness with large COGs
-Multiple mitigations applied: event loop yielding between tiles, tile matrix cap at 12 levels,
-sign-based edge clamping, v3 tiff fallback for monkey-patch. The HFP Mollweide COG (360k×176k,
-ZSTD) and deforestation COG (400k×200k, LZW) remain challenging due to:
-- ZSTD/LZW decompression is **synchronous** on main thread (WASM `zstddec`)
-- RasterLayer adaptive mesh calls `forwardReproject` per vertex (Mollweide = Newton-Raphson)
-- COGLayer doesn't forward `maxRequests` to TileLayer (default 6 concurrent)
-Needs Chrome DevTools Performance profiling to identify the exact bottleneck split.
-
-### Band selector UI / RGB channel assignment
-For multi-band COGs (e.g., 64-band), a band-to-RGB channel assignment dropdown UI would be
-useful. Currently only band 0 is rendered as grayscale. See titiler's approach for reference
-(https://github.com/developmentseed/titiler).
-
-### Color ramps
-Single-band COGs are rendered as grayscale (linear stretch from min to max). Scientific COGs
-often need specific color ramps (viridis, magma, terrain, etc.). titiler maintains a
-comprehensive list of colormaps that could be referenced.
-
-### NoData handling for default pipeline
-The default pipeline doesn't handle NoData for Palette COGs -- NoData pixels render with whatever palette color they map to instead of being transparent.
-
-### Library upstream fixes
-The following issues exist in `@developmentseed/deck.gl-geotiff` itself:
-- `inferRenderPipeline` should handle Gray/float COGs
-- `computeWgs84BoundingBox` should sample edge midpoints, not just corners
-- `parseCOGTileMatrixSet` should skip overviews smaller than tile size
-- Bundled geotiff v2 doesn't support ZSTD/WebP/LERC
-
----
-
-## Key File Locations
-
-| File | Purpose |
-|------|---------|
-| `src/lib/components/viewers/CogViewer.svelte` | Main viewer component |
-| `src/lib/components/viewers/map/MapContainer.svelte` | Shared MapLibre container |
-| `src/lib/utils/url.ts` | URL builders (HTTPS, S3, DuckDB) |
-| `node_modules/@developmentseed/deck.gl-geotiff/dist/cog-layer.js` | COGLayer source |
-| `node_modules/@developmentseed/deck.gl-geotiff/dist/geotiff/render-pipeline.js` | inferRenderPipeline |
-| `node_modules/@developmentseed/deck.gl-geotiff/dist/cog-tile-matrix-set.js` | parseCOGTileMatrixSet |
-| `node_modules/@developmentseed/deck.gl-geotiff/dist/geotiff/geotiff.js` | fetchGeoTIFF, getGeographicBounds |
-| `node_modules/@developmentseed/deck.gl-geotiff/dist/geotiff-reprojection.js` | extractGeotiffReprojectors |
-| `node_modules/.pnpm/.../deck.gl-raster/dist/raster-tileset/raster-tile-traversal.js` | Tile frustum culling |
-| `node_modules/.pnpm/.../deck.gl-raster/dist/raster-layer.js` | RasterLayer (GPU textures) |
-| `node_modules/geotiff/dist-node/compression/index.js` | v3 supported compressions |
-| `node_modules/geotiff/dist-node/pool.js` | v3 Pool (Web Workers) |
+**New workarounds added in v0.3** (~80 lines total):
+- Oversized overview filter (5 lines) — upstream bug in `generateTileMatrixSet`
+- CRS validation in pre-flight (10 lines) — upstream limitation in `crsFromGeoKeys`
+- EPSG:4326 polar bbox clamp (8 lines) — upstream missing NaN guard
+- `COGLayer.prototype.setState` NaN projection patch (20 lines) — upstream missing NaN guard
+- Custom pipeline for non-uint (import + 5 lines in CogViewer, ~100 lines in cog.ts) — upstream WIP
+- Workerless DecoderPool (3 lines) — Vite dev mode issue

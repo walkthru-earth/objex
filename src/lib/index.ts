@@ -59,6 +59,9 @@ export type { Connection, ConnectionConfig, FileEntry, Tab, Theme, WriteResult }
 export { copyToClipboard, wireCodeCopyButtons } from './utils/clipboard.js';
 // Cloud URL resolution
 export { getNativeScheme, resolveCloudUrl, safeDecodeURIComponent } from './utils/cloud-url.js';
+// COG utilities
+export type { CogInfo, GeoBounds } from './utils/cog.js';
+export { buildDataTypeLabel, clampBounds, SF_LABELS, safeClamp } from './utils/cog.js';
 export type { TypeCategory } from './utils/column-types.js';
 export { classifyType, typeBadgeClass, typeColor, typeLabel } from './utils/column-types.js';
 // Error handling

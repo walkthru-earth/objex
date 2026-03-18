@@ -33,6 +33,8 @@ Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diag
 - `__APP_VERSION__` — package version string
 - `__DUCKDB_WASM_VERSION__` — DuckDB-WASM version
 - `__THIRD_PARTY_LICENSES__` — `{ license, packages: { name, url }[] }[]` auto-scanned from production `node_modules` by `collectThirdPartyLicenses()` (consumed by AboutSheet)
+- `worker.format: 'es'` — required for `@developmentseed/geotiff` DecoderPool ESM workers
+- `optimizeDeps.include` — pre-bundles all `@developmentseed/*` packages + `@cogeotiff/core`, `proj4`, `wkt-parser`
 
 ## Code Quality
 
@@ -87,18 +89,21 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 
 ## Edge Cases
 
-- **geotiff v2 vs v3**: `@developmentseed/deck.gl-geotiff` bundles geotiff v2 internally. Project uses v3. NEVER pass v3 objects to library functions. See `docs/cog-viewer-architecture.md`
-- **geotiff v3 Pool**: hangs in Vite dev (ESM worker import issue) -- use poolless `readRasters()`
-- **COG monkey-patch**: `COGLayer.prototype._parseGeoTIFF` is patched for Gray/Float COGs. The patch catches throws on unsupported PI/SF and reconstructs state
-- **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions
-- **Mollweide/global CRS**: `patchMetadataBounds()` fixes NaN from proj4 edge-sampled bounds
+- **COG v0.3 workarounds**: See `docs/cog-viewer-architecture.md` for full details. Key issues:
+  - `COGLayer.prototype.setState` is patched to wrap projection functions with NaN guards (polar singularity at ±90° lat)
+  - Oversized overviews (image < tile size) are filtered in pre-flight to prevent out-of-domain proj4 NaN
+  - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (v0.3 `inferRenderPipeline` only supports uint)
+  - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet`
+  - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error -- not supported by `@developmentseed/geotiff` v0.3
+  - DecoderPool workers fail in Vite dev mode -- using main-thread `DecoderPool()` (no workers)
+- **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions (now in `utils/cog.ts`)
 - **DuckDB `enable_geoparquet_conversion = false`**: prevents rejection of legacy GeoParquet (missing `"version"` field). All geometry columns read as BLOB
 - **hyparquet vs DuckDB type mismatch**: hyparquet may report `GEOMETRY` (Parquet logical type) while DuckDB reports `BLOB`. Use DuckDB type for SQL, hyparquet type for display only
 - **`ST_Transform` axis swap**: always use `always_xy := true` to fix EPSG authority lat/lon order
 - **Legacy GeoParquet**: `schema_version` without `version` field (geopandas <0.12). The conversion bypass handles this
 - **GeometryCollections (WKB type 7)**: skipped in `parseWKB` (returns Unknown), not rendered on map
 - **DuckDB-WASM single worker**: all queries share one worker. Long queries block everything -- use `queryCancellable()` and cancel in cleanup
-- **Large COG (360802x176500, ZSTD)**: known to hang browser -- ZSTD decompression is synchronous on main thread
+- **Large COG (360802x176500, ZSTD, Mollweide)**: unsupported CRS (model type 32767) -- shows error message. ZSTD decoded on main thread (DecoderPool workers disabled)
 - **`$derived` memory leak**: module-level runes referenced in component `$derived` may not clean up on unmount (Svelte #11817)
 - **Tree rendering**: guard expanded children with `{#if node.expanded}` -- unguarded renders all nodes on mount
 - **Zarr numcodecs-wrapped codecs**: Zarr v3 stores from Python zarr-python use `numcodecs.` prefix (e.g. `numcodecs.shuffle`, `numcodecs.zlib`). zarrita only registers bare names. `ensureCodecsRegistered()` in `zarr.ts` adds aliases + byte shuffle implementation. Must be awaited before creating `ZarrLayer`
@@ -181,7 +186,7 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 ## Reference Docs
 
 - `RELEASE.md` -- Release checklist, version bumping, dry-run, rollback procedures
-- `docs/cog-viewer-architecture.md` -- COG dual-pipeline, monkey-patch, projection edge cases
+- `docs/cog-viewer-architecture.md` -- COG viewer v0.3 architecture, workarounds, upstream issues to track
 - `docs/duckdb-v1.5-geometry-upgrade.md` -- Parameterized GEOMETRY type, migration path
 - `docs/arrow-table-grid-research.md` -- TableGrid rewrite, quak analysis, append-on-scroll
 - `docs/svelte5-performance-guide.md` -- Reactivity patterns, $state.raw, $effect cleanup

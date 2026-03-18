@@ -28,11 +28,12 @@ Re-exports from `src/lib/`:
 - **utils/export**: `serializeToCsv()`, `serializeToJson()`, `escapeCsvField()`
 - **utils/local-storage**: `loadFromStorage()`, `persistToStorage()`
 - **utils/markdown-sql**: `ParsedMarkdownDocument` (type), `SqlBlock` (type), `parseMarkdownDocument()`, `interpolateTemplates()`, `markSqlBlocks()`
+- **utils/cog**: `CogInfo` (type), `GeoBounds` (type), `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`
 - **utils/error**: `handleLoadError()`
 
 **Important**: All re-exported source files must use **relative imports** (not `$lib/`). The `$lib` alias is SvelteKit-only and breaks the tsup build.
 
-- External (not bundled): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`
+- External (not bundled): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`, `@developmentseed/geotiff`, `maplibre-gl`, `proj4`
 - `tsconfig.json` has `rootDir: "../.."` to allow DTS generation across monorepo
 
 ```bash

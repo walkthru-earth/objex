@@ -20,6 +20,7 @@ graph TD
         EXP[export.ts<br/>serializeToCsv, serializeToJson]
         LS[local-storage.ts<br/>loadFromStorage, persistToStorage]
         MSQL[markdown-sql.ts<br/>parseMarkdownDocument]
+        COG[cog.ts<br/>safeClamp, clampBounds, renderNonTiledBitmap]
     end
     subgraph "Internal only"
         DECK[deck.ts<br/>createDeckOverlay, createGeoArrowOverlay]
@@ -70,4 +71,5 @@ graph TD
 | `host-detection.ts` | `detectHostBucket()` | stores/connections, Sidebar |
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
 | `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
+| `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo` (type), `GeoBounds` (type) | CogViewer, lib/index.ts |
 | `error.ts` | `handleLoadError()` | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer, lib/index.ts |
