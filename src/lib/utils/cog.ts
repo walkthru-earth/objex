@@ -437,10 +437,15 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 		globalMax = globalMax * (gdalScale ?? 1) + (gdalOffset ?? 0);
 	}
 
-	const useAdaptive = globalMin === null || globalMax === null;
 	const bandCount = geotiff.count;
 	const sf = tags.sampleFormat?.[0] ?? 1;
 	const isSingleBand = bandCount === 1;
+
+	// Shared range across all tiles — when no GDAL stats exist, the first
+	// tile's scan seeds the range and subsequent tiles widen it. This
+	// eliminates visible seams between tiles caused by per-tile normalization.
+	let sharedMin = globalMin;
+	let sharedMax = globalMax;
 
 	return async (
 		image: GeoTIFFType | Overview,
@@ -461,13 +466,10 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 		const scale = gdalScale ?? 1;
 		const offset = gdalOffset ?? 0;
 
-		// Determine min/max for this tile
-		let tMin: number;
-		let tMax: number;
-		if (useAdaptive) {
-			// Per-tile adaptive stretch: scan actual values
-			tMin = Infinity;
-			tMax = -Infinity;
+		// When no global stats, scan this tile and widen the shared range
+		if (sharedMin === null || sharedMax === null) {
+			let tMin = Infinity;
+			let tMax = -Infinity;
 			for (let i = 0; i < pixelCount; i++) {
 				const raw = bandData[i];
 				if (nodata !== null && raw === nodata) continue;
@@ -476,15 +478,17 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 				if (v < tMin) tMin = v;
 				if (v > tMax) tMax = v;
 			}
-			if (!Number.isFinite(tMin)) {
-				tMin = 0;
-				tMax = 1;
+			if (Number.isFinite(tMin)) {
+				sharedMin = tMin;
+				sharedMax = tMax;
+			} else {
+				sharedMin = 0;
+				sharedMax = 1;
 			}
-		} else {
-			tMin = globalMin!;
-			tMax = globalMax!;
 		}
-		const range = tMax - tMin || 1;
+		const rangeMin = sharedMin!;
+		const rangeMax = sharedMax!;
+		const range = rangeMax - rangeMin || 1;
 
 		// Render to RGBA
 		const rgba = new Uint8ClampedArray(pixelCount * 4);
@@ -500,7 +504,7 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 				continue;
 			}
 			const v = hasScaleOffset ? raw * scale + offset : raw;
-			const t = Math.max(0, Math.min(1, (v - tMin) / range));
+			const t = Math.max(0, Math.min(1, (v - rangeMin) / range));
 			if (isSingleBand && (sf === 2 || sf === 3)) {
 				// Terrain color ramp for single-band int/float (likely elevation/DEM)
 				const [r, g, b] = terrainColor(t);
