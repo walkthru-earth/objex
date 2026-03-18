@@ -136,29 +136,34 @@ async function loadCog(map: maplibregl.Map) {
 		const cogInput = preflightGeotiff ?? url;
 
 		if (preflightGeotiff) {
-			// Fix 1: Strip oversized overviews where the image is smaller than one
+			// Strip oversized overviews where the image is smaller than one
 			// tile. These produce tile bounds far beyond the valid CRS domain.
+			// Note: do NOT filter more aggressively — the TMS tile matrices must
+			// stay in sync with the overviews array (z=0 uses the last overview).
 			const validOverviews = preflightGeotiff.overviews.filter(
 				(ov) => ov.width >= ov.tileWidth && ov.height >= ov.tileHeight
 			);
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(preflightGeotiff as any).overviews = validOverviews;
 
-			// Fix 2: Clamp EPSG:4326 bbox away from poles. proj4 returns NaN
-			// when projecting lat ±90° to EPSG:3857 (Mercator singularity).
-			// Global COGs like GEBCO have bbox [-180,-90,180,90] — the TMS
-			// boundingBox must be clamped to the Web Mercator valid range.
+			// Clamp EPSG:4326 bbox to the valid Web Mercator domain:
+			// - Longitude ±180°: even 0.001° beyond causes proj4 to wrap the
+			//   easting sign (e.g. fwd3857(-180.001) → +20037369 instead of
+			//   -20037647), displacing tiles to the opposite side of the world.
+			// - Latitude ±85.051129°: Mercator singularity at ±90° produces NaN.
 			if (preflightGeotiff.crs === 4326) {
 				const [x0, y0, x1, y1] = preflightGeotiff.bbox;
 				const WM_LAT_LIMIT = 85.051129;
-				if (y0 <= -WM_LAT_LIMIT || y1 >= WM_LAT_LIMIT) {
+				const clamped = [
+					Math.max(x0, -180),
+					Math.max(y0, -WM_LAT_LIMIT),
+					Math.min(x1, 180),
+					Math.min(y1, WM_LAT_LIMIT)
+				] as [number, number, number, number];
+				if (clamped[0] !== x0 || clamped[1] !== y0 || clamped[2] !== x1 || clamped[3] !== y1) {
+					console.log('[COG] bbox clamped:', [x0, y0, x1, y1], '→', clamped);
 					Object.defineProperty(preflightGeotiff, 'bbox', {
-						value: [x0, Math.max(y0, -WM_LAT_LIMIT), x1, Math.min(y1, WM_LAT_LIMIT)] as [
-							number,
-							number,
-							number,
-							number
-						],
+						value: clamped,
 						writable: false,
 						configurable: true
 					});

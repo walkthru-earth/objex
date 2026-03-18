@@ -23,7 +23,7 @@ index fe0c33a2c2fe047dcbbf05fb2d7b0870a46b56b7..b7df81305bf4cad1324a5688d19e4bf3
  }
  export {};
 diff --git a/dist/cog-layer.js b/dist/cog-layer.js
-index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619eee3992ae 100644
+index ed424a226d3280c4ae2ba21a51ffb67e886441c5..f8920c28631d8b268f20adbd31418a16776e1bbd 100644
 --- a/dist/cog-layer.js
 +++ b/dist/cog-layer.js
 @@ -1,4 +1,4 @@
@@ -76,7 +76,7 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619e
              this.clearState();
              this._parseGeoTIFF();
          }
-@@ -42,199 +57,190 @@ export class COGLayer extends CompositeLayer {
+@@ -42,199 +57,228 @@ export class COGLayer extends CompositeLayer {
              forwardTo4326: undefined,
              inverseFrom4326: undefined,
              forwardTo3857: undefined,
@@ -109,12 +109,25 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619e
 -        // @ts-expect-error - proj4 typings are incomplete and don't support
 -        // wkt-parser input
 +        const forwardTo4326 = dbgProj((x, y) => converter4326.forward([x, y], false), 'fwd4326');
-+        const inverseFrom4326 = dbgProj((x, y) => converter4326.inverse([x, y], false), 'inv4326');
++        const inverseFrom4326 = dbgProj((x, y) => {
++            const r = converter4326.inverse([x, y], false);
++            // Normalize longitude to [-180, 180) — proj4 can return +180° for
++            // coords at the antimeridian, causing a 360° round-trip error
++            if (r[0] >= 180) r[0] -= 360;
++            else if (r[0] < -180) r[0] += 360;
++            return r;
++        }, 'inv4326');
 +        // @ts-expect-error
          const converter3857 = proj4(sourceProjection, "EPSG:3857");
 -        const forwardTo3857 = (x, y) => converter3857.forward([x, y], false);
 +        const forwardTo3857 = dbgProj((x, y) => converter3857.forward([x, y], false), 'fwd3857');
-+        const inverseFrom3857 = dbgProj((x, y) => converter3857.inverse([x, y], false), 'inv3857');
++        const inverseFrom3857 = dbgProj((x, y) => {
++            const r = converter3857.inverse([x, y], false);
++            // Normalize longitude to [-180, 180)
++            if (r[0] >= 180) r[0] -= 360;
++            else if (r[0] < -180) r[0] += 360;
++            return r;
++        }, 'inv3857');
          if (this.props.onGeoTIFFLoad) {
              const geographicBounds = getGeographicBounds(geotiff, converter4326);
 +            console.log('[DBG] onGeoTIFFLoad geographicBounds:', geographicBounds);
@@ -201,6 +214,20 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619e
 -        }
 +        if (!props.data) return null;
          const { data, forwardTransform, inverseTransform } = props.data;
++        // Skip partial edge tiles where actual data covers <25% of the tile
++        // matrix slot. These tiles have forwardTransform mapping UV [0,1] to CRS
++        // coordinates far beyond the data bbox (e.g. lat=-177° for a 295px slice
++        // of a 2048px tile), producing distorted meshes from NaN-clamped vertices.
++        if (data && tile) {
++            const tm = tms.tileMatrices[tile.index?.z];
++            if (tm) {
++                const hRatio = data.height / tm.tileHeight;
++                const wRatio = data.width / tm.tileWidth;
++                if (hRatio < 0.25 || wRatio < 0.25) {
++                    return null;
++                }
++            }
++        }
          const layers = [];
          if (data) {
              const { height, width } = data;
@@ -241,10 +268,21 @@ index ed424a226d3280c4ae2ba21a51ffb67e886441c5..8755410123e92697c384440ecd6e619e
 +                };
 +                rasterLayerProps = {};
 +            } else {
++                // Create tile-aware inverse that normalizes longitude relative to
++                // this tile's CRS center. Fixes antimeridian round-trip where
++                // inverseFrom3857 returns +180° instead of -180° for tiles at the
++                // left edge (proj4 floating-point ambiguity at ±π).
++                const tileCrsCenter = forwardTransform(0.5, 0.5);
++                const tileInverse3857 = (x, y) => {
++                    const r = inverseFrom3857(x, y);
++                    while (r[0] - tileCrsCenter[0] > 180) r[0] -= 360;
++                    while (r[0] - tileCrsCenter[0] < -180) r[0] += 360;
++                    return r;
++                };
 +                reprojectionFns = {
 +                    forwardTransform, inverseTransform,
 +                    forwardReproject: forwardTo3857,
-+                    inverseReproject: inverseFrom3857,
++                    inverseReproject: tileInverse3857,
 +                };
 +                rasterLayerProps = {
 +                    coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
