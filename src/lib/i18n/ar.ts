@@ -405,6 +405,14 @@ export const ar: Record<string, string> = {
 	'mapInfo.size': 'الحجم',
 	'mapInfo.bands': 'النطاقات',
 
+	// COG Controls
+	'cog.style': 'النمط',
+	'cog.band': 'النطاق',
+	'cog.singleBand': 'نطاق واحد',
+	'cog.colorRamp': 'تدرج الألوان',
+	'cog.pixelValue': 'قيمة البكسل',
+	'cog.reading': 'قراءة البكسل...',
+
 	// PMTiles Viewer
 	'pmtiles.mapView': 'خريطة',
 	'pmtiles.archiveView': 'الأرشيف',

@@ -27,21 +27,23 @@ The CogViewer renders Cloud-Optimized GeoTIFF (COG) files on a MapLibre map usin
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  CogViewer.svelte (~315 lines)                       │
+│  CogViewer.svelte + CogControls.svelte               │
 │  ├─ Pre-flight: GeoTIFF.fromUrl() → CRS + tiling check│
 │  ├─ Route: tiled-uint → COGLayer (default pipeline)  │
 │  ├─ Route: tiled-int/float → COGLayer (custom pipeline)│
-│  └─ Route: non-tiled → bitmap fallback               │
+│  ├─ Route: non-tiled → bitmap fallback               │
+│  ├─ Band/color controls → rebuild layer on change    │
+│  └─ Pixel inspector → click → read tile → show values│
 └──────────────────────────────────────────────────────┘
          ↓                           ↓
-┌──────────────────────┐  ┌────────────────────────────┐
-│ COGLayer (v0.3)      │  │ utils/cog.ts (~440 lines)  │
-│ ├─ RasterLayer (GPU) │  │ ├─ renderNonTiledBitmap()  │
-│ ├─ TileMatrixSet     │  │ ├─ createCustomGetTileData()│
-│ └─ inferRenderPipeline│  │ ├─ customRenderTile()     │
-└──────────────────────┘  │ ├─ safeClamp, clampBounds  │
-         ↓                │ └─ fitCogBounds             │
-┌──────────────────────┐  └────────────────────────────┘
+┌──────────────────────┐  ┌────────────────────────────────┐
+│ COGLayer (v0.4)      │  │ utils/cog.ts                   │
+│ ├─ RasterLayer (GPU) │  │ ├─ renderNonTiledBitmap()      │
+│ ├─ TileMatrixSet     │  │ ├─ createConfigurableGetTileData│
+│ └─ inferRenderPipeline│  │ ├─ readPixelAtLngLat()        │
+└──────────────────────┘  │ ├─ COLOR_RAMP_STOPS, BandConfig│
+         ↓                │ └─ safeClamp, clampBounds      │
+┌──────────────────────┐  └────────────────────────────────┘
 │ @developmentseed/    │
 │   geotiff (cogeotiff)│
 │ ├─ DecoderPool       │
@@ -411,9 +413,31 @@ This means non-tiled GeoTIFFs cannot use the library's built-in layer and must b
 | Export | Type | Description |
 |--------|------|-------------|
 | `needsCustomPipeline()` | fn | Check if GeoTIFF needs custom pipeline (non-uint SampleFormat) |
-| `createCustomGetTileData()` | fn | Create `getTileData` callback that normalizes band 0 to grayscale |
+| `needsCustomPipelineForConfig()` | fn | Check if custom pipeline needed given a `BandConfig` (non-uint, single-band mode, or non-default band order) |
+| `createCustomGetTileData()` | fn | Create `getTileData` callback that normalizes band 0 to grayscale/terrain |
+| `createConfigurableGetTileData()` | fn | Create `getTileData` that respects `BandConfig` — RGB multi-band or single-band with color ramp |
 | `customRenderTile()` | fn | Create `renderTile` callback that returns ImageData |
 | `CustomTileData` | interface | Return type from custom getTileData (`{imageData, width, height}`) |
+
+### Band Configuration & Color Ramps
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `BandConfig` | interface | Band mapping config: mode (rgb/single), per-channel band indices, color ramp |
+| `ColorRampId` | type | `'grayscale' \| 'terrain' \| 'viridis' \| 'magma' \| 'turbo' \| 'spectral'` |
+| `COLOR_RAMP_STOPS` | const | RGB stop arrays for each color ramp |
+| `interpolateRamp()` | fn | Interpolate normalized 0..1 value into a color ramp |
+| `rampToGradientCss()` | fn | Generate CSS `linear-gradient` string for a ramp |
+| `defaultBandConfig()` | fn | Create sensible default config based on band count and sample format |
+| `isDefaultBandConfig()` | fn | Check if config matches the default (no user changes) |
+
+### Pixel Inspection
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `PixelValue` | interface | Click result: lng, lat, band values, pixel row/col |
+| `resolveProj4Def()` | fn | Resolve proj4 string for CRS code (returns null for EPSG:4326) |
+| `readPixelAtLngLat()` | fn | Convert lnglat → source CRS → pixel coords, fetch tile, read all band values |
 
 ---
 

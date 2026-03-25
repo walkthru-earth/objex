@@ -71,5 +71,5 @@ graph TD
 | `host-detection.ts` | `detectHostBucket()` | stores/connections, Sidebar |
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
 | `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
-| `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo` (type), `GeoBounds` (type) | CogViewer, lib/index.ts |
+| `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo`, `GeoBounds`, `BandConfig`, `PixelValue`, `ColorRampId`, `COLOR_RAMP_STOPS`, `interpolateRamp()`, `rampToGradientCss()`, `defaultBandConfig()`, `isDefaultBandConfig()`, `needsCustomPipelineForConfig()`, `createConfigurableGetTileData()`, `readPixelAtLngLat()`, `resolveProj4Def()` | CogViewer, CogControls, lib/index.ts |
 | `error.ts` | `handleLoadError()` | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer, lib/index.ts |

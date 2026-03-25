@@ -15,6 +15,164 @@ export const SF_LABELS: Record<number, string> = {
 	6: 'complex float'
 };
 
+// ─── Color ramps ─────────────────────────────────────────────────
+
+export type ColorRampId = 'grayscale' | 'terrain' | 'viridis' | 'magma' | 'turbo' | 'spectral';
+
+export const COLOR_RAMP_STOPS: Record<ColorRampId, [number, number, number][]> = {
+	grayscale: [
+		[0, 0, 0],
+		[255, 255, 255]
+	],
+	terrain: [
+		[0, 0, 128],
+		[0, 100, 200],
+		[0, 154, 80],
+		[120, 180, 50],
+		[200, 170, 60],
+		[180, 120, 50],
+		[140, 90, 40],
+		[200, 200, 200],
+		[255, 255, 255]
+	],
+	viridis: [
+		[68, 1, 84],
+		[72, 36, 117],
+		[64, 67, 135],
+		[52, 94, 141],
+		[33, 145, 140],
+		[43, 176, 127],
+		[95, 201, 97],
+		[186, 222, 39],
+		[253, 231, 37]
+	],
+	magma: [
+		[0, 0, 4],
+		[22, 11, 57],
+		[67, 15, 98],
+		[114, 24, 114],
+		[161, 48, 104],
+		[206, 82, 83],
+		[237, 132, 62],
+		[251, 192, 75],
+		[252, 253, 191]
+	],
+	turbo: [
+		[48, 18, 59],
+		[31, 82, 188],
+		[23, 158, 227],
+		[47, 212, 161],
+		[121, 238, 104],
+		[193, 241, 57],
+		[245, 206, 27],
+		[253, 141, 31],
+		[213, 47, 24]
+	],
+	spectral: [
+		[158, 1, 66],
+		[213, 62, 79],
+		[244, 109, 67],
+		[253, 174, 97],
+		[254, 224, 139],
+		[255, 255, 191],
+		[230, 245, 152],
+		[171, 221, 164],
+		[94, 79, 162]
+	]
+};
+
+/** Interpolate a normalized value (0..1) into an RGB color from a ramp. */
+export function interpolateRamp(
+	stops: [number, number, number][],
+	t: number
+): [number, number, number] {
+	const n = stops.length - 1;
+	const idx = Math.max(0, Math.min(n, t * n));
+	const lo = Math.floor(idx);
+	const hi = Math.min(lo + 1, n);
+	const f = idx - lo;
+	return [
+		Math.round(stops[lo][0] + f * (stops[hi][0] - stops[lo][0])),
+		Math.round(stops[lo][1] + f * (stops[hi][1] - stops[lo][1])),
+		Math.round(stops[lo][2] + f * (stops[hi][2] - stops[lo][2]))
+	];
+}
+
+/** Generate a CSS linear-gradient string for a color ramp. */
+export function rampToGradientCss(id: ColorRampId): string {
+	const stops = COLOR_RAMP_STOPS[id];
+	const colors = stops.map(
+		(s, i) => `rgb(${s[0]},${s[1]},${s[2]}) ${((i / (stops.length - 1)) * 100).toFixed(0)}%`
+	);
+	return `linear-gradient(to right, ${colors.join(', ')})`;
+}
+
+// ─── Band configuration ─────────────────────────────────────────
+
+export interface BandConfig {
+	mode: 'rgb' | 'single';
+	/** 0-indexed band indices for RGB channels */
+	rBand: number;
+	gBand: number;
+	bBand: number;
+	/** 0-indexed band index for single-band mode */
+	band: number;
+	colorRamp: ColorRampId;
+}
+
+/** Create a sensible default band config based on COG metadata. */
+export function defaultBandConfig(bandCount: number, sampleFormat: number): BandConfig {
+	if (bandCount >= 3) {
+		return {
+			mode: 'rgb',
+			rBand: 0,
+			gBand: 1,
+			bBand: 2,
+			band: 0,
+			colorRamp: 'viridis'
+		};
+	}
+	return {
+		mode: 'single',
+		rBand: 0,
+		gBand: 0,
+		bBand: 0,
+		band: 0,
+		colorRamp: sampleFormat === 2 || sampleFormat === 3 ? 'terrain' : 'viridis'
+	};
+}
+
+/** Check if the config matches the default for this COG (no user changes). */
+export function isDefaultBandConfig(
+	config: BandConfig,
+	bandCount: number,
+	sampleFormat: number
+): boolean {
+	const def = defaultBandConfig(bandCount, sampleFormat);
+	return (
+		config.mode === def.mode &&
+		config.rBand === def.rBand &&
+		config.gBand === def.gBand &&
+		config.bBand === def.bBand &&
+		config.band === def.band &&
+		config.colorRamp === def.colorRamp
+	);
+}
+
+/**
+ * Check if a given band config requires a custom pipeline (vs library default).
+ * Library default only works for uint with standard RGB band order.
+ */
+export function needsCustomPipelineForConfig(geotiff: GeoTIFFType, config: BandConfig): boolean {
+	const tags = geotiff.cachedTags;
+	const sf = tags.sampleFormat;
+	const isUint = sf !== null && sf[0] === 1;
+	if (!isUint) return true;
+	if (config.mode === 'single') return true;
+	if (config.rBand !== 0 || config.gBand !== 1 || config.bBand !== 2) return true;
+	return false;
+}
+
 const BITMAP_SOURCE = 'geotiff-bitmap-src';
 const BITMAP_LAYER = 'geotiff-bitmap-layer';
 
@@ -535,4 +693,269 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
  */
 export function customRenderTile(data: CustomTileData): ImageData {
 	return data.imageData;
+}
+
+// ─── Configurable custom pipeline ────────────────────────────────
+
+/**
+ * Extract band data arrays from a raster tile.
+ * Returns an array of typed arrays, one per band.
+ */
+function extractBands(
+	arr: {
+		layout: string;
+		bands?: ArrayLike<number>[];
+		data?: ArrayLike<number>;
+		count: number;
+		width: number;
+		height: number;
+	},
+	bandCount: number,
+	pixelCount: number
+): ArrayLike<number>[] {
+	if (arr.layout === 'band-separate' && arr.bands) {
+		return arr.bands as ArrayLike<number>[];
+	}
+	// pixel-interleaved → split into per-band arrays
+	const data = arr.data!;
+	const bands: ArrayLike<number>[] = [];
+	for (let b = 0; b < bandCount; b++) {
+		const band = new Float64Array(pixelCount);
+		for (let i = 0; i < pixelCount; i++) {
+			band[i] = (data as ArrayLike<number>)[i * bandCount + b];
+		}
+		bands.push(band);
+	}
+	return bands;
+}
+
+/**
+ * Compute per-band min/max from an array of band data.
+ * Returns [min[], max[]] for the requested band indices.
+ */
+function computeBandRanges(
+	bands: ArrayLike<number>[],
+	bandIndices: number[],
+	pixelCount: number,
+	nodata: number | null
+): { mins: number[]; maxs: number[] } {
+	const mins: number[] = [];
+	const maxs: number[] = [];
+	for (const bi of bandIndices) {
+		const band = bands[bi];
+		if (!band) {
+			mins.push(0);
+			maxs.push(1);
+			continue;
+		}
+		let bMin = Infinity;
+		let bMax = -Infinity;
+		for (let i = 0; i < pixelCount; i++) {
+			const v = band[i];
+			if (nodata !== null && v === nodata) continue;
+			if (!Number.isFinite(v)) continue;
+			if (v < bMin) bMin = v;
+			if (v > bMax) bMax = v;
+		}
+		mins.push(Number.isFinite(bMin) ? bMin : 0);
+		maxs.push(Number.isFinite(bMax) ? bMax : 1);
+	}
+	return { mins, maxs };
+}
+
+/**
+ * Create a configurable getTileData that respects BandConfig.
+ * Supports both RGB mode (multi-band → R,G,B) and single-band mode (color ramp).
+ */
+export function createConfigurableGetTileData(geotiff: GeoTIFFType, config: BandConfig) {
+	const bandCount = geotiff.count;
+
+	// Shared per-band ranges across tiles (seeded on first tile, widened by subsequent)
+	const sharedMins = new Map<number, number>();
+	const sharedMaxs = new Map<number, number>();
+
+	return async (
+		image: GeoTIFFType | Overview,
+		options: { x: number; y: number; pool: unknown; signal?: AbortSignal }
+	): Promise<CustomTileData> => {
+		const tile = await image.fetchTile(options.x, options.y, {
+			boundless: false,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			pool: options.pool as any,
+			signal: options.signal
+		});
+
+		const arr = tile.array;
+		const { width, height, nodata } = arr;
+		const pixelCount = width * height;
+		const bands = extractBands(arr, bandCount, pixelCount);
+
+		const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+		if (config.mode === 'rgb') {
+			// RGB mode: map 3 bands to R, G, B
+			const indices = [config.rBand, config.gBand, config.bBand];
+			// Compute ranges for the 3 selected bands
+			for (const bi of indices) {
+				if (!sharedMins.has(bi)) {
+					const { mins, maxs } = computeBandRanges(bands, [bi], pixelCount, nodata);
+					sharedMins.set(bi, mins[0]);
+					sharedMaxs.set(bi, maxs[0]);
+				}
+			}
+
+			const rBand = bands[config.rBand];
+			const gBand = bands[config.gBand];
+			const bBand = bands[config.bBand];
+			const rMin = sharedMins.get(config.rBand)!;
+			const rMax = sharedMaxs.get(config.rBand)!;
+			const gMin = sharedMins.get(config.gBand)!;
+			const gMax = sharedMaxs.get(config.gBand)!;
+			const bMin = sharedMins.get(config.bBand)!;
+			const bMax = sharedMaxs.get(config.bBand)!;
+			const rRange = rMax - rMin || 1;
+			const gRange = gMax - gMin || 1;
+			const bRange = bMax - bMin || 1;
+
+			for (let i = 0; i < pixelCount; i++) {
+				const rv = rBand?.[i] ?? 0;
+				const gv = gBand?.[i] ?? 0;
+				const bv = bBand?.[i] ?? 0;
+				const isND =
+					(nodata !== null && (rv === nodata || gv === nodata || bv === nodata)) ||
+					!Number.isFinite(rv);
+				const idx = i * 4;
+				if (isND) {
+					rgba[idx] = 0;
+					rgba[idx + 1] = 0;
+					rgba[idx + 2] = 0;
+					rgba[idx + 3] = 0;
+				} else {
+					rgba[idx] = Math.round(Math.max(0, Math.min(1, (rv - rMin) / rRange)) * 255);
+					rgba[idx + 1] = Math.round(Math.max(0, Math.min(1, (gv - gMin) / gRange)) * 255);
+					rgba[idx + 2] = Math.round(Math.max(0, Math.min(1, (bv - bMin) / bRange)) * 255);
+					rgba[idx + 3] = 255;
+				}
+			}
+		} else {
+			// Single-band mode: normalize + color ramp
+			const bi = config.band;
+			const bandData = bands[bi];
+			if (!sharedMins.has(bi) && bandData) {
+				const { mins, maxs } = computeBandRanges(bands, [bi], pixelCount, nodata);
+				sharedMins.set(bi, mins[0]);
+				sharedMaxs.set(bi, maxs[0]);
+			}
+			const rangeMin = sharedMins.get(bi) ?? 0;
+			const rangeMax = sharedMaxs.get(bi) ?? 1;
+			const range = rangeMax - rangeMin || 1;
+			const rampStops = COLOR_RAMP_STOPS[config.colorRamp];
+
+			for (let i = 0; i < pixelCount; i++) {
+				const raw = bandData?.[i] ?? 0;
+				const isND = (nodata !== null && raw === nodata) || !Number.isFinite(raw);
+				const idx = i * 4;
+				if (isND) {
+					rgba[idx] = 0;
+					rgba[idx + 1] = 0;
+					rgba[idx + 2] = 0;
+					rgba[idx + 3] = 0;
+				} else {
+					const t = Math.max(0, Math.min(1, (raw - rangeMin) / range));
+					const [r, g, b] = interpolateRamp(rampStops, t);
+					rgba[idx] = r;
+					rgba[idx + 1] = g;
+					rgba[idx + 2] = b;
+					rgba[idx + 3] = 255;
+				}
+			}
+		}
+
+		return { imageData: new ImageData(rgba, width, height), width, height };
+	};
+}
+
+// ─── Pixel inspection ────────────────────────────────────────────
+
+export interface PixelValue {
+	lng: number;
+	lat: number;
+	values: number[];
+	row: number;
+	col: number;
+}
+
+/**
+ * Resolve a proj4 definition string for a CRS code.
+ * Returns null for EPSG:4326 (no conversion needed).
+ */
+export async function resolveProj4Def(
+	crs: number | unknown,
+	signal: AbortSignal
+): Promise<string | null> {
+	if (crs === 4326) return null;
+	if (typeof crs === 'number') {
+		const resp = await fetch(`https://epsg.io/${crs}.proj4`, { signal });
+		if (!resp.ok) return null;
+		return (await resp.text()).trim();
+	}
+	// ProjJSON — stringify for proj4
+	return JSON.stringify(crs);
+}
+
+/**
+ * Read pixel values at a given lng/lat from a GeoTIFF.
+ * Converts WGS84 → source CRS → pixel coords, fetches the tile, reads all bands.
+ */
+export async function readPixelAtLngLat(
+	geotiff: GeoTIFFType,
+	lng: number,
+	lat: number,
+	proj4Def: string | null,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	pool: any,
+	signal?: AbortSignal
+): Promise<PixelValue | null> {
+	// Convert WGS84 to source CRS
+	let srcX = lng;
+	let srcY = lat;
+	if (proj4Def) {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const conv = proj4Lib(proj4Def, 'EPSG:4326') as any;
+			[srcX, srcY] = conv.inverse([lng, lat]);
+		} catch {
+			return null;
+		}
+	}
+
+	// Get pixel indices (row, col)
+	const [row, col] = geotiff.index(srcX, srcY);
+	if (row < 0 || row >= geotiff.height || col < 0 || col >= geotiff.width) return null;
+
+	// Compute tile indices
+	const tileX = Math.floor(col / geotiff.tileWidth);
+	const tileY = Math.floor(row / geotiff.tileHeight);
+
+	// Fetch tile
+	const tile = await geotiff.fetchTile(tileX, tileY, { pool, signal });
+	const arr = tile.array;
+
+	// Read all band values at this pixel
+	const localCol = col - tileX * arr.width;
+	const localRow = row - tileY * arr.height;
+	const pixelIndex = localRow * arr.width + localCol;
+
+	const values: number[] = [];
+	if (arr.layout === 'band-separate') {
+		for (let b = 0; b < arr.count; b++) {
+			values.push((arr as { bands: ArrayLike<number>[] }).bands[b][pixelIndex]);
+		}
+	} else {
+		for (let b = 0; b < arr.count; b++) {
+			values.push((arr as { data: ArrayLike<number> }).data[pixelIndex * arr.count + b]);
+		}
+	}
+
+	return { lng, lat, values, row, col };
 }

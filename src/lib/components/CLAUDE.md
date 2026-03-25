@@ -20,7 +20,7 @@ graph TD
     end
     subgraph viewers["viewers/ (18+)"]
         VR[ViewerRouter] -->|by ext| TV[TableViewer]
-        VR --> CV[CogViewer]
+        VR --> CV[CogViewer] --> CC[CogControls]
         VR --> PV[PmtilesViewer]
         VR --> MORE[...]
     end
@@ -35,7 +35,7 @@ graph TD
 
 | Directory | Files | Role | Used by |
 |-----------|-------|------|---------|
-| `viewers/` | 34 | Per-format viewers (16 routed + sub-components) | ViewerRouter → +page.svelte |
+| `viewers/` | 35 | Per-format viewers (16 routed + sub-components) | ViewerRouter → +page.svelte |
 | `browser/` | 10 | File tree, search, upload, dialogs | FileTreeSidebar → Sidebar → +page.svelte |
 | `layout/` | 8 | Sidebar, tabs, status bar, toggles, about sheet | +page.svelte, +layout.svelte |
 | `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |

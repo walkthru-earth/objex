@@ -43,7 +43,7 @@ graph TD
 |--------|-----------|---------------|
 | TableViewer | DuckDB-WASM, Arrow | query/index, utils/wkb, utils/geoarrow, utils/parquet-metadata, utils/url, utils/url-state, file-icons |
 | GeoParquetMapViewer | deck.gl, @geoarrow/deck.gl-layers | query/engine, utils/wkb, utils/geoarrow, utils/deck, map/MapContainer |
-| CogViewer | @developmentseed/deck.gl-geotiff v0.3, @developmentseed/geotiff | utils/cog, utils/url |
+| CogViewer | @developmentseed/deck.gl-geotiff v0.4, @developmentseed/geotiff | utils/cog, utils/url, CogControls |
 | PmtilesViewer | pmtiles, MapLibre | utils/pmtiles, utils/url-state, pmtiles/* sub-components |
 | FlatGeobufViewer | flatgeobuf, deck.gl | utils/deck, utils/url |
 | ZarrViewer | zarrita, @carbonplan/zarr-layer | utils/zarr (ZarrNode, ZarrHierarchy, fetchHierarchy, ensureCodecsRegistered, findNodeByPath, formatCodecs, formatChunkKeys, computeChunkCount/Size/Uncompressed, inferDims, DIM_LIKE_NAMES), utils/url-state. Tree view with detail panel for hierarchical Zarr stores. Map mode only for flat stores with root-level coordinate arrays. Registers numcodecs-wrapped codecs (shuffle, zlib) via ensureCodecsRegistered() before creating ZarrLayer |

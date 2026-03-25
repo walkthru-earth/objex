@@ -91,7 +91,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 
 - **COG v0.4 workarounds**: See `docs/cog-viewer-architecture.md` for full details. v0.4 natively handles polar NaN (via `makeClampedForwardTo3857`), mesh iteration cap, and Web Mercator CARTESIAN rendering. Remaining workarounds:
   - Oversized overviews (image < tile size) are filtered in pre-flight to prevent out-of-domain proj4 NaN
-  - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (library still only auto-renders uint)
+  - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (library still only auto-renders uint). User band/color changes also trigger custom pipeline via `createConfigurableGetTileData`
   - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet` (safety net)
   - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error -- not supported by `@developmentseed/geotiff`
   - DecoderPool workers fail in Vite dev mode -- using main-thread `DecoderPool()` (no workers)
