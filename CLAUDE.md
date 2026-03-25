@@ -89,13 +89,13 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 
 ## Edge Cases
 
-- **COG v0.3 workarounds**: See `docs/cog-viewer-architecture.md` for full details. Key issues:
-  - `COGLayer.prototype.setState` is patched to wrap projection functions with NaN guards (polar singularity at ±90° lat)
+- **COG v0.4 workarounds**: See `docs/cog-viewer-architecture.md` for full details. v0.4 natively handles polar NaN (via `makeClampedForwardTo3857`), mesh iteration cap, and Web Mercator CARTESIAN rendering. Remaining workarounds:
   - Oversized overviews (image < tile size) are filtered in pre-flight to prevent out-of-domain proj4 NaN
-  - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (v0.3 `inferRenderPipeline` only supports uint)
-  - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet`
-  - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error -- not supported by `@developmentseed/geotiff` v0.3
+  - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (library still only auto-renders uint)
+  - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet` (safety net)
+  - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error -- not supported by `@developmentseed/geotiff`
   - DecoderPool workers fail in Vite dev mode -- using main-thread `DecoderPool()` (no workers)
+  - Antimeridian longitude wrapping -- pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366))
 - **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions (now in `utils/cog.ts`)
 - **DuckDB `enable_geoparquet_conversion = false`**: prevents rejection of legacy GeoParquet (missing `"version"` field). All geometry columns read as BLOB
 - **hyparquet vs DuckDB type mismatch**: hyparquet may report `GEOMETRY` (Parquet logical type) while DuckDB reports `BLOB`. Use DuckDB type for SQL, hyparquet type for display only
@@ -186,7 +186,7 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 ## Reference Docs
 
 - `RELEASE.md` -- Release checklist, version bumping, dry-run, rollback procedures
-- `docs/cog-viewer-architecture.md` -- COG viewer v0.3 architecture, workarounds, upstream issues to track
+- `docs/cog-viewer-architecture.md` -- COG viewer v0.4 architecture, workarounds, upstream issues to track
 - `docs/duckdb-v1.5-geometry-upgrade.md` -- Parameterized GEOMETRY type, migration path
 - `docs/arrow-table-grid-research.md` -- TableGrid rewrite, quak analysis, append-on-scroll
 - `docs/svelte5-performance-guide.md` -- Reactivity patterns, $state.raw, $effect cleanup

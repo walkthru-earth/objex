@@ -1,0 +1,23 @@
+diff --git a/dist/cog-layer.js b/dist/cog-layer.js
+index c7bff1b2fc7bc1a254d82982fc74a4b2b744b3c2..8e305ffacb2b2bd00759d5e1992db5a1f6cdb5a3 100644
+--- a/dist/cog-layer.js
++++ b/dist/cog-layer.js
+@@ -72,12 +72,16 @@ export class COGLayer extends CompositeLayer {
+         const tms = generateTileMatrixSet(geotiff, sourceProjection);
+         // @ts-expect-error - proj4 typings are incomplete and don't support
+         // wkt-parser input
+-        const converter4326 = proj4(sourceProjection, "EPSG:4326");
++        // objex patch: +over disables proj4 adjust_lon to fix antimeridian
++        // wrapping. Without it, forward(-180.001°) wraps to positive easting,
++        // causing 360° round-trip errors and unconvergeable mesh refinement.
++        // See https://github.com/developmentseed/deck.gl-raster/issues/366
++        const converter4326 = proj4(sourceProjection, "+proj=longlat +datum=WGS84 +over");
+         const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
+         const inverseFrom4326 = (x, y) => converter4326.inverse([x, y], false);
+         // @ts-expect-error - proj4 typings are incomplete and don't support
+         // wkt-parser input
+-        const converter3857 = proj4(sourceProjection, "EPSG:3857");
++        const converter3857 = proj4(sourceProjection, "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +over");
+         const forwardTo3857 = makeClampedForwardTo3857((x, y) => converter3857.forward([x, y], false), forwardTo4326);
+         const inverseFrom3857 = (x, y) => converter3857.inverse([x, y], false);
+         if (this.props.onGeoTIFFLoad) {

@@ -1,7 +1,7 @@
 # COG Viewer Architecture & Known Issues
 
-> Reference for CogViewer.svelte using `@developmentseed/deck.gl-geotiff` v0.3.
-> Last updated: 2026-03-18
+> Reference for CogViewer.svelte using `@developmentseed/deck.gl-geotiff` v0.4.
+> Last updated: 2026-03-26
 
 ---
 
@@ -54,8 +54,8 @@ The CogViewer renders Cloud-Optimized GeoTIFF (COG) files on a MapLibre map usin
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `@developmentseed/deck.gl-geotiff` | ^0.3.0 | COGLayer, GPU render pipeline, epsgResolver |
-| `@developmentseed/geotiff` | ^0.3.0 | GeoTIFF reader (wraps `@cogeotiff/core`), DecoderPool |
+| `@developmentseed/deck.gl-geotiff` | ^0.4.0 | COGLayer, GPU render pipeline, epsgResolver |
+| `@developmentseed/geotiff` | ^0.4.0 | GeoTIFF reader (wraps `@cogeotiff/core`), DecoderPool |
 | `@deck.gl/mapbox` | ^9.2.11 | MapboxOverlay for deck.gl ↔ MapLibre integration |
 | `maplibre-gl` | ^5.20.1 | Base map + native image source (non-tiled fallback) |
 | `proj4` | ^2.20.4 | CRS reprojection (non-tiled bitmap bounds only) |
@@ -424,9 +424,10 @@ All issues are in the **[developmentseed/deck.gl-raster](https://github.com/deve
 | Issue | Package | File | Severity | Description |
 |-------|---------|------|----------|-------------|
 | Model type 32767 | `@developmentseed/geotiff` | `src/crs.ts` | High | `crsFromGeoKeys` doesn't handle user-defined model type |
-| Non-uint render pipeline | `@developmentseed/deck.gl-geotiff` | `src/geotiff/render-pipeline.ts` | High | `inferRenderPipeline` only supports uint SampleFormat |
+| Non-uint render pipeline | `@developmentseed/deck.gl-geotiff` | `src/geotiff/render-pipeline.ts` | High | `inferRenderPipeline` only supports uint SampleFormat (v0.4 skips it when custom `getTileData`/`renderTile` provided — [PR #307](https://github.com/developmentseed/deck.gl-raster/pull/307)) |
 | Oversized overviews | `@developmentseed/geotiff` | `src/tile-matrix-set.ts` | High | `generateTileMatrixSet` includes overviews smaller than tile size |
-| ~~Polar NaN projection~~ | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | ~~High~~ Fixed | Fixed in [PR #349](https://github.com/developmentseed/deck.gl-raster/pull/349) — Web Mercator rendering via CARTESIAN coordinate system + model matrix. Applied via `pnpm patch` until next npm release. Our `wrapProjection` NaN guard remains as safety net. |
+| ~~Polar NaN projection~~ | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | ~~High~~ Fixed in v0.4 | Native `makeClampedForwardTo3857` clamps polar NaN via 4326→clamp→analytical 3857 fallback. `RasterReprojector.run()` has native `maxIterations` (10000) safety cap. |
+| Antimeridian wrapping | `@developmentseed/deck.gl-geotiff` | `src/cog-layer.ts` | Medium | proj4 `adjust_lon` wraps ±180° longitude — [#366](https://github.com/developmentseed/deck.gl-raster/issues/366), [PR #374](https://github.com/developmentseed/deck.gl-raster/pull/374) open. Patched via `+over` flag in our pnpm patch. |
 | Worker dev mode | `@developmentseed/geotiff` | `src/pool/pool.ts` | Medium | DecoderPool workers fail in Vite dev server |
 | GeoTIFFLayer WIP | `@developmentseed/deck.gl-geotiff` | `src/geotiff-layer.ts` | Low | Non-tiled layer not yet implemented |
 | Missing projections | `@developmentseed/geotiff` | `src/crs.ts` | Low | Mollweide, Eckert, Robinson not in CT table |
@@ -530,3 +531,37 @@ The v0.2 CogViewer was **1345 lines** with ~700 lines of workarounds:
 - `pnpm patch` for `@developmentseed/deck.gl-geotiff` — backports [PR #349](https://github.com/developmentseed/deck.gl-raster/pull/349) (Web Mercator CARTESIAN rendering). Remove patch when next npm release includes the fix.
 - Custom pipeline for non-uint (import + 5 lines in CogViewer, ~100 lines in cog.ts) — upstream WIP
 - Workerless DecoderPool (3 lines) — Vite dev mode issue
+
+---
+
+## History (v0.3 → v0.4)
+
+Upgraded from `@developmentseed/deck.gl-geotiff@0.3.0` to `@0.4.0` on 2026-03-26.
+
+**v0.4.0 natively fixed** (patches removed):
+- Polar NaN projection — `makeClampedForwardTo3857` clamps via 4326→clamp→analytical 3857 fallback ([PR #349](https://github.com/developmentseed/deck.gl-raster/pull/349))
+- Web Mercator rendering — CARTESIAN coordinate system + model matrix (same PR #349)
+- `inferRenderPipeline` crash with custom callbacks — skipped when user provides `getTileData`/`renderTile` ([PR #307](https://github.com/developmentseed/deck.gl-raster/pull/307))
+- `RasterReprojector` infinite loop — native `maxIterations` cap (default 10000)
+- NaN in `sampleReferencePointsInEPSG3857` — uses `makeClampedForwardTo3857` internally
+- Latitude clamping — [PR #182](https://github.com/developmentseed/deck.gl-raster/pull/182) clamps to Web Mercator bounds
+- proj4 bump — fixes EPSG:3857 projection ([PR #346](https://github.com/developmentseed/deck.gl-raster/pull/346))
+- TileLayer prop passthrough — `maxRequests`, `maxCacheSize`, `maxCacheByteSize`, `debounceTime`, `refinementStrategy`
+
+**Patches reduced**: 3 patches (400+ lines) → 1 patch (24 lines):
+- `@developmentseed/deck.gl-geotiff@0.4.0` — proj4 `+over` flag on 4326/3857 targets to fix antimeridian longitude wrapping ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366), [PR #374](https://github.com/developmentseed/deck.gl-raster/pull/374) pending)
+
+**Workarounds still needed** (unchanged in CogViewer.svelte):
+- Oversized overview filter (5 lines)
+- EPSG:4326 bbox clamp to ±85.051° (safety net — v0.4 handles most cases natively)
+- CRS validation for model type 32767 (10 lines)
+- Custom pipeline for non-uint COGs (~100 lines in cog.ts)
+- Workerless DecoderPool (3 lines)
+- Non-tiled bitmap fallback (~150 lines in cog.ts)
+
+**Workarounds removed**:
+- `COGLayer.prototype.setState` NaN guard — replaced by native `makeClampedForwardTo3857`
+- NaN clamping in `sampleReferencePointsInEPSG3857` — native
+- `RasterReprojector` iteration cap — native (10000 default)
+- Partial tile skip (<25% coverage) — removed with PR #349's CARTESIAN rendering
+- All debug `console.log`/`console.warn` from patches

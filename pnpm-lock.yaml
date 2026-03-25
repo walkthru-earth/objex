@@ -5,15 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@developmentseed/deck.gl-geotiff':
-    hash: 27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0
-    path: patches/@developmentseed__deck.gl-geotiff.patch
-  '@developmentseed/deck.gl-raster@0.3.0':
-    hash: 97e89d62617ff157cb1cc720a261edbd2ca037390a3456c27da5be8af8dc457c
-    path: patches/@developmentseed__deck.gl-raster@0.3.0.patch
-  '@developmentseed/raster-reproject@0.3.0':
-    hash: 9feee124371b8b810d779042574456574c47d2e58af634735fb6b910db40a4d4
-    path: patches/@developmentseed__raster-reproject@0.3.0.patch
+  '@developmentseed/deck.gl-geotiff@0.4.0':
+    hash: 1d8b7b394e68820bac83b8ba14f5e75d3e4e4f1cf5f1b00accc448d41cc2aba2
+    path: patches/@developmentseed__deck.gl-geotiff@0.4.0.patch
 
 importers:
 
@@ -65,11 +59,11 @@ importers:
         specifier: ^9.2.11
         version: 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))
       '@developmentseed/deck.gl-geotiff':
-        specifier: ^0.3.0
-        version: 0.3.0(patch_hash=27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0)(57c667b0f66ce60d98aa9e692e6cf175)
+        specifier: ^0.4.0
+        version: 0.4.0(patch_hash=1d8b7b394e68820bac83b8ba14f5e75d3e4e4f1cf5f1b00accc448d41cc2aba2)(57c667b0f66ce60d98aa9e692e6cf175)
       '@developmentseed/geotiff':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.4.0
+        version: 0.4.0
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev34.0
         version: 1.33.1-dev34.0
@@ -604,11 +598,11 @@ packages:
       '@deck.gl/core': ~9.2.0
       '@luma.gl/core': ~9.2.6
 
-  '@developmentseed/affine@0.3.0':
-    resolution: {integrity: sha512-dhKPIhpVB2CTyq8SsK0ocHzOVzcYfLDZqSZEQEKVDI7G0fXdmVW6v0F7RfUfWdff85u8OZzcx7WtVOZYoDmZfA==}
+  '@developmentseed/affine@0.4.0':
+    resolution: {integrity: sha512-KwsgHIH5vsWG3ehZqIcOKtgd8XbDOpD8hS5u8waLeHITWJmZX2kuwhZz3Won6pR0QXRC9dS4ucbxBLKX/XhLbw==}
 
-  '@developmentseed/deck.gl-geotiff@0.3.0':
-    resolution: {integrity: sha512-nn54R2iiBc9KdfJO+wCzxFBVMbron11mN6N2oxEqBgh/uT+KmW2UqefrPy0an+Jm61zkIXZ2HrCbQCnadvApAg==}
+  '@developmentseed/deck.gl-geotiff@0.4.0':
+    resolution: {integrity: sha512-bFE6LeNHqZTYrUe+V9DjG4WDlvrOmSaJN2YX2LCPYIgAhvc7JELdAmU1H1+g02+P1/4lPyADnKSFx8SU4tI4jw==}
     peerDependencies:
       '@deck.gl/core': ^9.2.7
       '@deck.gl/geo-layers': ^9.2.7
@@ -616,8 +610,8 @@ packages:
       '@deck.gl/mesh-layers': ^9.2.7
       '@luma.gl/core': ^9.2.6
 
-  '@developmentseed/deck.gl-raster@0.3.0':
-    resolution: {integrity: sha512-urGcGL/rg3zeO3dyQFofyHJBw1WR3KVu5i+4PwQJ+yGp3KVtTbQiEpYbBtakEzUcPjJz5ySzR2MI40qWEWis/A==}
+  '@developmentseed/deck.gl-raster@0.4.0':
+    resolution: {integrity: sha512-0iUFGjnY3hw6Egz+bWEKrum+OC0dKnt7riNfAd7m6YvnU1AnRaVngGYbq4k91iwIUWaUgE4VXEmHZPdhkUrLfg==}
     peerDependencies:
       '@deck.gl/core': ^9.2.7
       '@deck.gl/geo-layers': ^9.2.7
@@ -626,20 +620,23 @@ packages:
       '@luma.gl/core': ^9.2.6
       '@luma.gl/shadertools': ^9.2.6
 
-  '@developmentseed/geotiff@0.3.0':
-    resolution: {integrity: sha512-Z1KQ3w6arglw475oaaxkpraWSm4zT19fCzHwbwYHjZDhASTxcJYhQUDCsyCdiATxUkohkzaT6IJPnk7YWwXPhQ==}
+  '@developmentseed/geotiff@0.4.0':
+    resolution: {integrity: sha512-UddNtUbQSWnGQR7WmaHnCbK8t4I3zyzYroAV+/GNJ3EL6B9B0QRJ4ZS0ypKMEJJp+0xoxmEu3+soRtUV93HUMA==}
 
   '@developmentseed/lzw-tiff-decoder@0.2.2':
     resolution: {integrity: sha512-bsBIdV1LyqcrtnYtIYu3C/297X2wxeYkmmhHzR02OOX823sGxT8GLGdenTmwoXvNWkozk3b+ptXtJeSUmNPaTA==}
 
-  '@developmentseed/morecantile@0.3.0':
-    resolution: {integrity: sha512-W3wqKRGDOoZf/nfLqqlYgRcbEvvwFftBeotJy3okw1vEXP4femP6cWAJqQgy8EOuB89RRp2WxZfaqWkcwRhMuA==}
+  '@developmentseed/morecantile@0.4.0':
+    resolution: {integrity: sha512-djGBiIetYcwMgOctX1SmQkTULMc2udeb2Llp4cVT36TpypODciILh9xquZkFQWGOqjImy3Nt+nqvG7hvxiHIew==}
+
+  '@developmentseed/proj@0.4.0':
+    resolution: {integrity: sha512-KWGkVCBcmp/s0gTI3H3ag4EXb3KRzAxu3u/N39in4qCbxyp9QiW+PKjk/lFiB71Zx8eiUsOden3/LEz9Gp1dUQ==}
 
   '@developmentseed/raster-reproject@0.1.0':
     resolution: {integrity: sha512-ARk8IM6VPzL3ltAZNenZCAm9NkzqOnrxjEvf8m2t91bmkmloDPBkRCMxMzKrMJE79/XxcZyXDDvLOI1UKlYSBQ==}
 
-  '@developmentseed/raster-reproject@0.3.0':
-    resolution: {integrity: sha512-PKWn8j/ra477IWqcH2OmtfHq7PS2mf4RPP7zT4bsMX57eWsf5s7zs/x1Bw8g+wtRlLPb04K9lBg+qySo9xphFQ==}
+  '@developmentseed/raster-reproject@0.4.0':
+    resolution: {integrity: sha512-UiPM0jC4J0cMbi7IPRDinnYWNyvUbDuNKhhOQ5rEytiGmx6w997lJ6Anu/RU8QoTe0pKYOXk7xfO94b0XOXJ+w==}
 
   '@duckdb/duckdb-wasm@1.33.1-dev34.0':
     resolution: {integrity: sha512-kjObZ5w4YHuYykFvE8LbuQHUZTTH5SrheGN4SmeY99jfmgsLzOAL+ya+KNEhBuOSN/relUaJnFUJ0pe3/MaELA==}
@@ -5090,20 +5087,20 @@ snapshots:
       '@luma.gl/core': 9.2.6
       preact: 10.29.0
 
-  '@developmentseed/affine@0.3.0': {}
+  '@developmentseed/affine@0.4.0': {}
 
-  '@developmentseed/deck.gl-geotiff@0.3.0(patch_hash=27adcfc901c87f52704f1d6692d5460f686c6f0e8af7c37028fe6bb7f1db31e0)(57c667b0f66ce60d98aa9e692e6cf175)':
+  '@developmentseed/deck.gl-geotiff@0.4.0(patch_hash=1d8b7b394e68820bac83b8ba14f5e75d3e4e4f1cf5f1b00accc448d41cc2aba2)(57c667b0f66ce60d98aa9e692e6cf175)':
     dependencies:
       '@cogeotiff/core': 9.4.0
       '@deck.gl/core': 9.2.11
       '@deck.gl/geo-layers': 9.2.11(@deck.gl/core@9.2.11)(@deck.gl/extensions@9.2.11(@deck.gl/core@9.2.11)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))))(@deck.gl/layers@9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))))(@deck.gl/mesh-layers@9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@loaders.gl/core@4.3.4)(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))
       '@deck.gl/layers': 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))
       '@deck.gl/mesh-layers': 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))
-      '@developmentseed/affine': 0.3.0
-      '@developmentseed/deck.gl-raster': 0.3.0(patch_hash=97e89d62617ff157cb1cc720a261edbd2ca037390a3456c27da5be8af8dc457c)(57c667b0f66ce60d98aa9e692e6cf175)
-      '@developmentseed/geotiff': 0.3.0
-      '@developmentseed/morecantile': 0.3.0
-      '@developmentseed/raster-reproject': 0.3.0(patch_hash=9feee124371b8b810d779042574456574c47d2e58af634735fb6b910db40a4d4)
+      '@developmentseed/affine': 0.4.0
+      '@developmentseed/deck.gl-raster': 0.4.0(57c667b0f66ce60d98aa9e692e6cf175)
+      '@developmentseed/geotiff': 0.4.0
+      '@developmentseed/morecantile': 0.4.0
+      '@developmentseed/raster-reproject': 0.4.0
       '@luma.gl/core': 9.2.6
       flatbush: 4.5.1
       proj4: 2.20.4
@@ -5111,43 +5108,46 @@ snapshots:
     transitivePeerDependencies:
       - '@luma.gl/shadertools'
 
-  '@developmentseed/deck.gl-raster@0.3.0(patch_hash=97e89d62617ff157cb1cc720a261edbd2ca037390a3456c27da5be8af8dc457c)(57c667b0f66ce60d98aa9e692e6cf175)':
+  '@developmentseed/deck.gl-raster@0.4.0(57c667b0f66ce60d98aa9e692e6cf175)':
     dependencies:
       '@deck.gl/core': 9.2.11
       '@deck.gl/geo-layers': 9.2.11(@deck.gl/core@9.2.11)(@deck.gl/extensions@9.2.11(@deck.gl/core@9.2.11)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))))(@deck.gl/layers@9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))))(@deck.gl/mesh-layers@9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@loaders.gl/core@4.3.4)(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))
       '@deck.gl/layers': 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))
       '@deck.gl/mesh-layers': 9.2.11(@deck.gl/core@9.2.11)(@loaders.gl/core@4.3.4)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/gltf@9.2.6(@luma.gl/constants@9.2.6)(@luma.gl/core@9.2.6)(@luma.gl/engine@9.2.6(@luma.gl/core@9.2.6)(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6)))(@luma.gl/shadertools@9.2.6(@luma.gl/core@9.2.6))
-      '@developmentseed/affine': 0.3.0
-      '@developmentseed/morecantile': 0.3.0
-      '@developmentseed/raster-reproject': 0.3.0(patch_hash=9feee124371b8b810d779042574456574c47d2e58af634735fb6b910db40a4d4)
+      '@developmentseed/affine': 0.4.0
+      '@developmentseed/morecantile': 0.4.0
+      '@developmentseed/proj': 0.4.0
+      '@developmentseed/raster-reproject': 0.4.0
       '@luma.gl/core': 9.2.6
       '@luma.gl/shadertools': 9.2.6(@luma.gl/core@9.2.6)
       '@math.gl/core': 4.1.0
       '@math.gl/culling': 4.1.0
       '@math.gl/web-mercator': 4.1.0
 
-  '@developmentseed/geotiff@0.3.0':
+  '@developmentseed/geotiff@0.4.0':
     dependencies:
       '@chunkd/middleware': 11.2.0
       '@chunkd/source': 11.2.0
       '@chunkd/source-http': 11.2.0
       '@chunkd/source-memory': 11.0.3
       '@cogeotiff/core': 9.4.0
-      '@developmentseed/affine': 0.3.0
+      '@developmentseed/affine': 0.4.0
       '@developmentseed/lzw-tiff-decoder': 0.2.2
-      '@developmentseed/morecantile': 0.3.0
+      '@developmentseed/morecantile': 0.4.0
       fzstd: 0.1.1
       uuid: 13.0.0
 
   '@developmentseed/lzw-tiff-decoder@0.2.2': {}
 
-  '@developmentseed/morecantile@0.3.0':
+  '@developmentseed/morecantile@0.4.0':
     dependencies:
-      '@developmentseed/affine': 0.3.0
+      '@developmentseed/affine': 0.4.0
+
+  '@developmentseed/proj@0.4.0': {}
 
   '@developmentseed/raster-reproject@0.1.0': {}
 
-  '@developmentseed/raster-reproject@0.3.0(patch_hash=9feee124371b8b810d779042574456574c47d2e58af634735fb6b910db40a4d4)': {}
+  '@developmentseed/raster-reproject@0.4.0': {}
 
   '@duckdb/duckdb-wasm@1.33.1-dev34.0':
     dependencies:
