@@ -1,7 +1,7 @@
 # DuckDB v1.5 (Variegata) — GEOMETRY & CRS Upgrade Guide
 
-> **Purpose**: Reference for upgrading objex when DuckDB v1.5 + spatial v1.5 ship.
-> **Last updated**: 2026-02-23
+> **Purpose**: Reference for DuckDB v1.5 GEOMETRY & CRS changes and how objex handles them.
+> **Last updated**: 2026-03-26
 
 ---
 
@@ -195,53 +195,31 @@ DuckDB v1.5 already writes files that are **both valid GeoParquet and valid nati
 
 ---
 
-## 8. What to Change in objex When Upgrading
+## 8. How objex Handles v1.5 Changes
 
-### CRS detection (`wasm.ts: detectCrs`)
+### CRS detection (`wasm.ts: detectCrsWithConn`)
 
-**Current**: Parse `parquet_kv_metadata` for GeoParquet "geo" key, then parse `parquet_schema()` for `logical_type` string.
+**Strategy 0 (new)**: `DESCRIBE SELECT *` → extract CRS from column type string (`GEOMETRY('EPSG:XXXX')`).
 
-**After v1.5**: Can simplify to:
-```sql
-SELECT ST_CRS(geom_col) FROM table LIMIT 1;
-```
-Or just check the column type — it will be `GEOMETRY('EPSG:XXXX')` directly.
-
-Keep the old path as fallback for pre-v1.5 files.
+**Strategy 1-2 (fallback)**: Parse `parquet_kv_metadata` for GeoParquet "geo" key, then `parquet_schema()` for `logical_type` string.
 
 ### ST_Transform (`wasm.ts: queryForMap`, `TableViewer.svelte: buildDefaultSql`)
 
-**Current**:
-```sql
-ST_Transform(geom, 'EPSG:XXXX', 'EPSG:4326', always_xy := true)
-```
-
-**After v1.5**: If the geometry column has a typed CRS, can use the 2-arg form:
-```sql
-ST_Transform(geom, 'EPSG:4326')
-```
-
-Or set globally:
-```sql
-SET geometry_always_xy = true;
-```
+- `geometry_always_xy = true` set globally at DB init — no per-call `always_xy := true`
+- 2-arg `ST_Transform(geom, 'EPSG:4326')` when column type has CRS (e.g., `GEOMETRY('EPSG:...')`)
+- 3-arg `ST_Transform(geom, source, target)` for untyped geometry or BLOB columns
 
 ### Geometry column type detection
 
-**Current**: Check for `GEOMETRY`, `WKB_BLOB`, `BLOB`, `BINARY`, etc.
-
-**After v1.5**: The type string will be `GEOMETRY(epsg:4326)` — update type checks to handle the parameterized form (e.g., `upper.startsWith('GEOMETRY')`).
+`isSpatialColumnType()` uses `upper.startsWith('GEOMETRY')` to handle parameterized `GEOMETRY('EPSG:...')` form.
 
 ### GeoArrow conversion
 
-**After v1.5**: DuckDB outputs GeoArrow by default when converting to Arrow. Could potentially skip our manual `buildGeoArrowTables` pipeline and consume the Arrow table directly from DuckDB-WASM. Needs testing — the DuckDB-WASM Arrow output may already match what `@geoarrow/deck.gl-layers` expects.
+DuckDB v1.5 outputs GeoArrow by default in Arrow export, but DuckDB-WASM throws `Unsupported type: GEOMETRY` ([duckdb/duckdb-wasm#2187](https://github.com/duckdb/duckdb-wasm/issues/2187)). Also, Arrow version mismatch (DuckDB bundles v17, project uses v21) blocks native GeoArrow consumption ([duckdb/duckdb-wasm#2008](https://github.com/duckdb/duckdb-wasm/issues/2008)). Manual WKB→GeoArrow pipeline in `geoarrow.ts` remains in use.
 
 ### Spatial filter pushdown
 
-**After v1.5**: Native `&&` operator with bbox stats enables spatial filtering at the Parquet row-group level. For large files, add viewport-based spatial filtering:
-```sql
-SELECT * FROM table WHERE geom && ST_MakeEnvelope(xmin, ymin, xmax, ymax)
-```
+Not yet implemented. DuckDB v1.5 supports `WHERE geom && ST_MakeEnvelope(...)` with row-group pruning. Future optimization for large files.
 
 ---
 
