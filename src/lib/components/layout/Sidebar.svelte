@@ -85,27 +85,36 @@ async function handleAutoDetection() {
 			const prefixParam = parsed.prefix;
 
 			if (prefixParam && !prefixParam.endsWith('/')) {
-				// It's a file — browse to its parent folder and open it
-				const parentPrefix = prefixParam.includes('/') ? prefixParam.replace(/\/[^/]*$/, '/') : '';
-				browser.browse(conn, parentPrefix || undefined);
 				const fileName = prefixParam.split('/').pop() || prefixParam;
 				const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
-				const tabId = `${conn.id}:${prefixParam}`;
-				tabs.open({
-					id: tabId,
-					name: fileName,
-					path: prefixParam,
-					source: 'remote',
-					connectionId: conn.id,
-					extension: ext
-				});
-				// Fire-and-forget: fetch file size via HEAD request
-				fetch(url.searchParams.get('url')!, { method: 'HEAD' })
-					.then((res) => {
-						const cl = res.headers.get('content-length');
-						if (cl) tabs.update(tabId, { size: Number(cl) });
-					})
-					.catch(() => {});
+				if (ext) {
+					// It's a file — browse to its parent folder and open it
+					const parentPrefix = prefixParam.includes('/')
+						? prefixParam.replace(/\/[^/]*$/, '/')
+						: '';
+					browser.browse(conn, parentPrefix || undefined);
+					const tabId = `${conn.id}:${prefixParam}`;
+					tabs.open({
+						id: tabId,
+						name: fileName,
+						path: prefixParam,
+						source: 'remote',
+						connectionId: conn.id,
+						extension: ext
+					});
+					// Fire-and-forget: fetch file size via HEAD request
+					fetch(url.searchParams.get('url')!, { method: 'HEAD' })
+						.then((res) => {
+							const cl = res.headers.get('content-length');
+							if (cl) tabs.update(tabId, { size: Number(cl) });
+						})
+						.catch(() => {});
+				} else {
+					// No extension — likely a directory (e.g. Zarr store without .zarr suffix).
+					// Browse into it and let FileBrowser's auto-detection handle Zarr/etc.
+					const dirPrefix = `${prefixParam}/`;
+					browser.browse(conn, dirPrefix);
+				}
 			} else if (prefixParam) {
 				// It's a directory prefix
 				browser.browse(conn, prefixParam);

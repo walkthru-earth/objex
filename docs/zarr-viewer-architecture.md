@@ -36,23 +36,29 @@ Zarr stores are detected through multiple paths depending on how the user opens 
 URL with marker suffix          → extractZarrStoreUrl() strips suffix → Zarr viewer
   e.g. .../store/zarr.json
 
+URL with marker filename        → ZARR_MARKER_FILES.has(fileName) → opens parent as Zarr
+  (handles query params)
+
 URL with .zarr/.zr3 extension   → getFileTypeInfo('zarr') → Zarr viewer
   e.g. .../data.zarr
 
 URL without extension            → probeUrlForZarr() HEAD requests → Zarr viewer
-  e.g. .../aef-mosaic/            probes {url}/zarr.json, {url}/.zmetadata
+  e.g. .../aef-mosaic             probes {url}/zarr.json, {url}/.zmetadata
+                                  Sidebar browses into dir → FileBrowser auto-detects
 
 Directory with .zarr suffix      → storage adapter sets extension: 'zarr'
   (in tree sidebar)               → isViewerDir() → opens viewer on click
 
 Directory without .zarr suffix   → handleNodeClick() loads children
-  (in tree sidebar)               → detectZarrMarkers() on child names → opens viewer
+  (in tree sidebar)               → detectZarrMarkers() → opens viewer AND expands folder
+                                   → icon changes to purple Layers via detectedZarrPaths
 
 Directory in file browser        → $effect auto-detects via detectZarrMarkers()
-                                   → auto-opens Zarr viewer
+                                   → auto-opens Zarr viewer (tracked in Set to avoid re-trigger)
 
-Clicking zarr.json/.zmetadata    → ZARR_MARKER_FILES check → opens parent as Zarr
-  (in tree or file browser)
+Clicking zarr.json/.zmetadata    → opens in CodeViewer (JSON syntax highlighting)
+  (in tree or file browser)        → detectJsonKind() shows "Zarr v2/v3" badge
+                                   → "Open as Zarr" button opens parent as Zarr store
 ```
 
 ### Marker Files
@@ -131,11 +137,13 @@ Clicking zarr.json/.zmetadata    → ZARR_MARKER_FILES check → opens parent as
 | File | Role |
 |------|------|
 | `src/lib/utils/zarr.ts` | Metadata parsing, tree building, marker detection, S3 listing |
+| `src/lib/utils/zarr-tab.ts` | `openZarrTab()` — centralized Zarr tab creation helper |
 | `src/lib/components/viewers/ZarrViewer.svelte` | Inspector: tree view + detail panel, map/inspect toggle |
 | `src/lib/components/viewers/ZarrMapViewer.svelte` | Map: MapLibre + @carbonplan/zarr-layer, dim selectors |
-| `src/lib/components/browser/FileBrowser.svelte` | Auto-detect Zarr in directory listings |
-| `src/lib/components/browser/FileTreeSidebar.svelte` | Detect Zarr on folder click, marker file interception |
-| `src/lib/components/browser/FileRow.svelte` | Marker file click → open parent as Zarr |
+| `src/lib/components/viewers/CodeViewer.svelte` | `detectJsonKind()` shows Zarr v2/v3 badge + "Open as Zarr" button |
+| `src/lib/components/browser/FileBrowser.svelte` | Auto-detect Zarr in directory listings, banner + auto-open |
+| `src/lib/components/browser/FileTreeSidebar.svelte` | Detect Zarr on folder click, icon update via `detectedZarrPaths` |
+| `src/lib/components/layout/Sidebar.svelte` | URL `?url=` auto-connect — browses into extensionless dirs |
 | `src/routes/+page.svelte` | URL-based Zarr detection (`extractZarrStoreUrl`, `probeUrlForZarr`) |
 | `src/lib/constants.ts` | `VIEWER_DIR_EXTENSIONS` |
 | `src/lib/file-icons/index.ts` | `.zarr`/`.zr3` → viewer mapping |
