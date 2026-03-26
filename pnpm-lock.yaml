@@ -20,8 +20,8 @@ importers:
         specifier: ^8.55.3
         version: 8.55.3(@babylonjs/core@8.55.3)(babylonjs-gltf2interface@8.52.0)
       '@carbonplan/zarr-layer':
-        specifier: ^0.3.1
-        version: 0.3.1(maplibre-gl@5.20.2)
+        specifier: ^0.4.2
+        version: 0.4.2(maplibre-gl@5.20.2)
       '@codemirror/autocomplete':
         specifier: ^6.20.1
         version: 6.20.1
@@ -366,8 +366,8 @@ packages:
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
 
-  '@carbonplan/zarr-layer@0.3.1':
-    resolution: {integrity: sha512-lXca1C+s+/lmB81uoPxj0uf72A0lavU/k28lpTskdt5SPWH0ALjy3qzsWR0F/eGP0Me/wgMdPto9B7YuJl1fEg==}
+  '@carbonplan/zarr-layer@0.4.2':
+    resolution: {integrity: sha512-SR+VtYeHBHcTF81mjUxBrN59ovk8pVJrUqKRWoXpwcd5dzVj9+DG0vDKKdjE3/K9JdY0h8ngmnaQQUrQ0/KMeA==}
     peerDependencies:
       mapbox-gl: '*'
       maplibre-gl: '*'
@@ -4515,9 +4515,6 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zarrita@0.5.4:
-    resolution: {integrity: sha512-i88iN2+HqIQ+uiCEWLfhjbYNXAJD7IrM4h3lFwFclfqEOOhxp10amRWtqmgN5jbuy3+h0LwdyLVVzk4y9rTLgg==}
-
   zarrita@0.6.1:
     resolution: {integrity: sha512-YOMTW8FT55Rz+vadTIZeOFZ/F2h4svKizyldvPtMYSxPgSNcRkOzkxCsWpIWlWzB1I/LmISmi0bEekOhLlI+Zw==}
 
@@ -4652,12 +4649,12 @@ snapshots:
 
   '@braintree/sanitize-url@7.1.2': {}
 
-  '@carbonplan/zarr-layer@0.3.1(maplibre-gl@5.20.2)':
+  '@carbonplan/zarr-layer@0.4.2(maplibre-gl@5.20.2)':
     dependencies:
       '@developmentseed/raster-reproject': 0.1.0
       delaunator: 5.0.1
       proj4: 2.20.4
-      zarrita: 0.5.4
+      zarrita: 0.6.1
     optionalDependencies:
       maplibre-gl: 5.20.2
 
@@ -9497,11 +9494,6 @@ snapshots:
       cssfilter: 0.0.10
 
   yaml@2.8.2: {}
-
-  zarrita@0.5.4:
-    dependencies:
-      '@zarrita/storage': 0.1.4
-      numcodecs: 0.3.2
 
   zarrita@0.6.1:
     dependencies:

@@ -13,6 +13,7 @@ import { handleLoadError } from '$lib/utils/error.js';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
+import { openZarrTab } from '$lib/utils/zarr-tab.js';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -49,6 +50,8 @@ type JsonKind =
 	| 'stac-collection'
 	| 'stac-item'
 	| 'kepler'
+	| 'zarr-v2'
+	| 'zarr-v3'
 	| null;
 
 /** Detect if a .py file is a marimo notebook (first 512 bytes contain both markers) */
@@ -74,6 +77,8 @@ function detectJsonKind(code: string): JsonKind {
 			if (obj.type === 'Collection' && obj.stac_version) return 'stac-collection';
 			if (obj.type === 'Feature' && obj.stac_version) return 'stac-item';
 			if (obj.info?.app === 'kepler.gl' && obj.config) return 'kepler';
+			if (obj.zarr_format === 3) return 'zarr-v3';
+			if (obj.zarr_format === 2) return 'zarr-v2';
 		}
 	} catch {
 		// not valid JSON
@@ -352,6 +357,24 @@ async function copyCode() {
 					onclick={() => setViewMode('kepler')}
 				>
 					{viewMode === 'kepler' ? t('code.code') : t('code.openKepler')}
+				</Button>
+			{:else if jsonKind === 'zarr-v3' || jsonKind === 'zarr-v2'}
+				<Badge variant="outline" class="hidden border-purple-200 text-purple-600 sm:inline-flex dark:border-purple-800 dark:text-purple-300">
+					{jsonKind === 'zarr-v3' ? 'Zarr v3' : 'Zarr v2'}
+				</Badge>
+				<Button
+					variant="outline"
+					size="sm"
+					class="h-7 gap-1 px-2 text-xs border-purple-300 text-purple-600 hover:bg-purple-50 hover:text-purple-700 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950"
+					onclick={() => {
+						const parentPath = tab.path.replace(/[^/]+$/, '');
+						openZarrTab(parentPath, {
+							source: tab.source as 'remote' | 'url',
+							connectionId: tab.connectionId
+						});
+					}}
+				>
+					{t('fileBrowser.openAsZarr')}
 				</Button>
 			{/if}
 

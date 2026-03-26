@@ -19,6 +19,8 @@ import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection, FileEntry } from '$lib/types.js';
 import { getNativeScheme } from '$lib/utils/cloud-url.js';
 import { syncUrlParam } from '$lib/utils/url-state.js';
+import { detectZarrMarkers } from '$lib/utils/zarr.js';
+import { openZarrTab } from '$lib/utils/zarr-tab.js';
 
 let {
 	connection,
@@ -48,6 +50,8 @@ let rootContinuationToken = $state<string | undefined>();
 let rootHasMore = $state(false);
 let filterQuery = $state('');
 let scrollEl = $state<HTMLElement>();
+/** Paths of directories detected as Zarr stores (by marker files in children). */
+let detectedZarrPaths = $state(new Set<string>());
 
 const filteredNodes = $derived(
 	filterQuery ? filterTree(rootNodes, filterQuery.toLowerCase()) : rootNodes
@@ -156,6 +160,16 @@ async function toggleFolder(node: TreeNode) {
 	node.expanded = !node.expanded;
 }
 
+function openAsZarr(dirPath: string) {
+	const path = dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+	openZarrTab(path, {
+		source: 'remote',
+		connectionId: connection.id,
+		bucketFallback: connection.bucket
+	});
+	syncUrlParam(connection, path);
+}
+
 function openFile(entry: FileEntry) {
 	tabs.open({
 		id: `${connection.id}:${entry.path}`,
@@ -175,12 +189,27 @@ function isViewerDir(entry: FileEntry): boolean {
 	return entry.is_dir && VIEWER_DIR_EXTENSIONS.has(entry.extension);
 }
 
-function handleNodeClick(node: TreeNode) {
+/** Whether a directory should render with the Zarr icon (either by extension or marker detection). */
+function isZarrDir(entry: FileEntry): boolean {
+	return isViewerDir(entry) || detectedZarrPaths.has(entry.path);
+}
+
+async function handleNodeClick(node: TreeNode) {
 	if (isViewerDir(node.entry)) {
-		// .zarr directories open in the viewer (clicking chevron expands)
-		openFile(node.entry);
+		// .zarr / .zr3 directories open in the viewer (clicking chevron expands)
+		openAsZarr(node.entry.path);
 	} else if (node.entry.is_dir) {
-		toggleFolder(node);
+		// Load children if needed, then check for zarr markers
+		if (node.children.length === 0) {
+			await loadChildren(node);
+		}
+		const zarrCheck = detectZarrMarkers(node.children.map((c) => c.entry.name));
+		if (zarrCheck.detected) {
+			detectedZarrPaths.add(node.entry.path);
+			openAsZarr(node.entry.path);
+		}
+		// Always expand so user can also browse contents
+		node.expanded = !node.expanded;
 	} else {
 		openFile(node.entry);
 	}
@@ -349,6 +378,7 @@ async function loadRoot() {
 	rootLoading = true;
 	rootContinuationToken = undefined;
 	rootHasMore = false;
+	detectedZarrPaths = new Set();
 	try {
 		const adapter = getAdapter('remote', connection.id);
 		const prefix = connection.rootPrefix ?? '';
@@ -488,8 +518,8 @@ async function loadMoreRoot() {
 					onclick={() => handleNodeClick(node)}
 				>
 					<FileTypeIcon
-						extension={entry.extension}
-						isDir={entry.is_dir && !isViewerDir(entry)}
+						extension={isZarrDir(entry) ? 'zarr' : entry.extension}
+						isDir={entry.is_dir && !isZarrDir(entry)}
 						isOpen={node.expanded}
 						class="size-3.5 shrink-0"
 					/>
@@ -508,6 +538,12 @@ async function loadMoreRoot() {
 				<ContextMenu.Item onclick={() => openFile(entry)}>
 					<ExternalLinkIcon class="me-2 size-3.5" />
 					{t('fileTree.open')}
+				</ContextMenu.Item>
+				<ContextMenu.Separator />
+			{:else if detectedZarrPaths.has(entry.path)}
+				<ContextMenu.Item onclick={() => openAsZarr(entry.path)}>
+					<ExternalLinkIcon class="me-2 size-3.5" />
+					{t('fileBrowser.openAsZarr')}
 				</ContextMenu.Item>
 				<ContextMenu.Separator />
 			{/if}

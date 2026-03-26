@@ -31,7 +31,8 @@ import {
 	syncUrlParam,
 	updateUrlView
 } from '$lib/utils/url-state.js';
-import { extractZarrStoreUrl } from '$lib/utils/zarr.js';
+import { extractZarrStoreUrl, ZARR_MARKER_FILES } from '$lib/utils/zarr.js';
+import { openZarrTab } from '$lib/utils/zarr-tab.js';
 
 const initialFilePath = getUrlPrefix();
 
@@ -43,21 +44,29 @@ function openUrlTab(rawUrl: string) {
 	// Check if URL points to a Zarr marker file — open parent as Zarr store
 	const zarrStore = extractZarrStoreUrl(url);
 	if (zarrStore) {
-		const storeName = zarrStore.split('/').pop()?.split('?')[0] || 'zarr';
-		const tabId = `url:${zarrStore}`;
-		tabs.open({
-			id: tabId,
-			name: storeName,
-			path: zarrStore,
-			source: 'url',
-			extension: 'zarr'
-		});
+		openZarrTab(zarrStore, { source: 'url' });
 		return;
 	}
 
 	const fileName = url.split('/').pop()?.split('?')[0] || '';
+
+	// If the filename itself is a Zarr marker (e.g. zarr.json with query params that
+	// prevented extractZarrStoreUrl from matching), open the parent path as Zarr
+	if (ZARR_MARKER_FILES.has(fileName)) {
+		const storePath = url.slice(0, url.lastIndexOf('/'));
+		openZarrTab(storePath, { source: 'url' });
+		return;
+	}
+
 	const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
-	if (!ext) return;
+
+	// No extension — might be a directory-style URL (e.g. Zarr store without .zarr suffix).
+	// Probe for zarr.json to detect Zarr stores.
+	if (!ext) {
+		probeUrlForZarr(url);
+		return;
+	}
+
 	const info = getFileTypeInfo(ext);
 	if (info.viewer === 'raw') return;
 	const tabId = `url:${url}`;
@@ -74,6 +83,28 @@ function openUrlTab(rawUrl: string) {
 			if (cl) tabs.update(tabId, { size: Number(cl) });
 		})
 		.catch(() => {});
+}
+
+/** Probe a directory-like URL for Zarr marker files (v3 zarr.json, then v2 .zmetadata). */
+async function probeUrlForZarr(url: string) {
+	try {
+		const res = await fetch(`${url}/zarr.json`, { method: 'HEAD' });
+		if (res.ok) {
+			openZarrTab(url, { source: 'url' });
+			return;
+		}
+	} catch {
+		/* ignore */
+	}
+	try {
+		const res = await fetch(`${url}/.zmetadata`, { method: 'HEAD' });
+		if (res.ok) {
+			openZarrTab(url, { source: 'url' });
+			return;
+		}
+	} catch {
+		/* ignore */
+	}
 }
 
 // Open direct file URL tab eagerly — must run before layout renders

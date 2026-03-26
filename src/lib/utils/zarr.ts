@@ -529,35 +529,14 @@ async function discoverV3Children(
 		}
 	}
 
+	// If no candidates from conventions, discover via S3 XML listing
+	if (candidates.size === 0) {
+		const discovered = await listS3Children(storeUrl, signal);
+		for (const name of discovered) candidates.add(name);
+	}
+
 	// Probe each candidate path for zarr.json
-	const probes = [...candidates].map(async (name) => {
-		try {
-			const res = await fetch(`${storeUrl}/${name}/zarr.json`, { signal });
-			if (!res.ok) return null;
-			const data = await res.json();
-			if (data.node_type === 'array' && data.shape) {
-				const node = makeNode(`/${name}`, 'array', data.attributes ?? {});
-				node.shape = data.shape;
-				node.dtype = data.data_type ?? 'unknown';
-				node.dims = data.dimension_names ?? inferDims(name, data.shape);
-				node.chunks = data.chunk_grid?.configuration?.chunk_shape ?? [];
-				node.fillValue = data.fill_value;
-				node.codecs = data.codecs ?? [];
-				const cke = data.chunk_key_encoding;
-				if (cke) {
-					const sep = cke.configuration?.separator ?? '/';
-					node.chunkKeyEncoding = `${cke.name ?? 'default'} (sep: "${sep}")`;
-				}
-				return node;
-			}
-			if (data.node_type === 'group') {
-				return makeNode(`/${name}`, 'group', data.attributes ?? {});
-			}
-			return null;
-		} catch {
-			return null;
-		}
-	});
+	const probes = [...candidates].map((name) => probeV3Child(storeUrl, name, signal));
 
 	const results = await Promise.all(probes);
 	for (const node of results) {
@@ -576,6 +555,74 @@ async function discoverV3Children(
 		storeAttrs: rootAttrs,
 		spatialRefAttrs: null
 	};
+}
+
+/** Probe a single v3 child path and return a ZarrNode or null. */
+async function probeV3Child(
+	storeUrl: string,
+	name: string,
+	signal?: AbortSignal
+): Promise<ZarrNode | null> {
+	try {
+		const res = await fetch(`${storeUrl}/${name}/zarr.json`, { signal });
+		if (!res.ok) return null;
+		const data = await res.json();
+		if (data.node_type === 'array' && data.shape) {
+			const node = makeNode(`/${name}`, 'array', data.attributes ?? {});
+			node.shape = data.shape;
+			node.dtype = data.data_type ?? 'unknown';
+			node.dims = data.dimension_names ?? inferDims(name, data.shape);
+			node.chunks = data.chunk_grid?.configuration?.chunk_shape ?? [];
+			node.fillValue = data.fill_value;
+			node.codecs = data.codecs ?? [];
+			const cke = data.chunk_key_encoding;
+			if (cke) {
+				const sep = cke.configuration?.separator ?? '/';
+				node.chunkKeyEncoding = `${cke.name ?? 'default'} (sep: "${sep}")`;
+			}
+			return node;
+		}
+		if (data.node_type === 'group') {
+			return makeNode(`/${name}`, 'group', data.attributes ?? {});
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Discover child directory names via S3 XML listing.
+ * Parses the HTTPS store URL to extract bucket and prefix, then issues
+ * a `list-type=2&delimiter=/` request to find sub-prefixes.
+ * Returns directory names (without trailing slash) that are NOT hidden (no leading dot).
+ */
+async function listS3Children(storeUrl: string, signal?: AbortSignal): Promise<string[]> {
+	try {
+		const url = new URL(storeUrl);
+		// S3-style: bucket is first path segment, rest is prefix
+		const pathParts = url.pathname.replace(/^\//, '').split('/');
+		const bucket = pathParts[0];
+		const prefix = `${pathParts.slice(1).join('/').replace(/\/$/, '')}/`;
+		const listUrl = `${url.origin}/${bucket}/?list-type=2&prefix=${encodeURIComponent(prefix)}&delimiter=/`;
+		const res = await fetch(listUrl, { signal });
+		if (!res.ok) return [];
+		const xml = await res.text();
+		const names: string[] = [];
+		// Parse <CommonPrefixes><Prefix>...</Prefix></CommonPrefixes>
+		const prefixRegex = /<Prefix>([^<]+)<\/Prefix>/g;
+		for (let match = prefixRegex.exec(xml); match; match = prefixRegex.exec(xml)) {
+			const fullPrefix = match[1];
+			// Strip parent prefix and trailing slash to get child name
+			const child = fullPrefix.slice(prefix.length).replace(/\/$/, '');
+			if (child && !child.startsWith('.')) {
+				names.push(child);
+			}
+		}
+		return names;
+	} catch {
+		return [];
+	}
 }
 
 /**

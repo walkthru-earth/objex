@@ -352,6 +352,8 @@ export const ar: Record<string, string> = {
 	'map.loadingFgb': 'جارٍ تحميل FlatGeobuf...',
 	'map.loadingCog': 'جارٍ تحميل COG...',
 	'map.loadingZarr': 'جارٍ تحميل بيانات Zarr...',
+	'map.zarrTooLarge':
+		'المصفوفة كبيرة جداً لعرض الخريطة ({shape}، ~{tiles} بلاطة). يحتاج هذا المجموعة إلى هرم متعدد المقاييس للعرض المبلط.',
 	'map.features': 'معالم',
 	'map.limit': '(الحد)',
 	'map.of': 'من',

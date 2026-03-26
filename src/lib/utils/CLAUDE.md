@@ -32,6 +32,7 @@ graph TD
         SHIKI[shiki.ts<br/>highlightCode]
         NB[notebook.ts<br/>renderNotebook]
         ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl]
+        ZTAB[zarr-tab.ts<br/>openZarrTab]
     end
     WKB --> GA
     PM --> GA
@@ -62,7 +63,8 @@ graph TD
 | `pmtiles-tile.ts` | `decodeMvtTile()`, `tileToImageUrl()`, `tileMimeType()`, `layerHue()`, `DecodedTile`, `DecodedLayer`, `DecodedFeature` | PmtilesTileInspector |
 | `shiki.ts` | `highlightCode()`, `highlightCodeReversed()`, `extensionToShikiLang()`, `getTheme()`, `getReversedTheme()` | PmtilesArchiveView, NotebookViewer, CodeViewer, MarkdownViewer |
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
-| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `ensureCodecsRegistered()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `discoverV3Children()` (internal), `listS3Children()` (internal), `ensureCodecsRegistered()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `zarr-tab.ts` | `openZarrTab()` | FileBrowser, FileTreeSidebar, +page.svelte |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `pdf.ts` | `loadPdfDocument()` | PdfViewer |
 | `model3d.ts` | `createModelScene()`, `loadModel()` | ModelViewer |

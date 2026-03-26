@@ -352,6 +352,8 @@ export const en: Record<string, string> = {
 	'map.loadingFgb': 'Loading FlatGeobuf...',
 	'map.loadingCog': 'Loading COG...',
 	'map.loadingZarr': 'Loading Zarr data...',
+	'map.zarrTooLarge':
+		'Array too large for map view ({shape}, ~{tiles} tiles). This dataset needs a multiscale pyramid for tiled rendering.',
 	'map.features': 'features',
 	'map.limit': '(limit)',
 	'map.of': 'of',

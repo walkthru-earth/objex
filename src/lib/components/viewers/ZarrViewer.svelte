@@ -49,7 +49,6 @@ let showingStoreAttrs = $state(false);
  */
 const mapArrays = $derived.by(() => {
 	if (!hierarchy) return [];
-	// Collect root-level array names (coordinate arrays that zarr-layer can find)
 	const rootArrayNames = new Set(
 		hierarchy.root.children.filter((c) => c.kind === 'array').map((c) => c.name)
 	);
@@ -58,7 +57,6 @@ const mapArrays = $derived.by(() => {
 	function walk(n: ZarrNode) {
 		if (n.kind === 'array' && n.shape && n.shape.length >= 2) {
 			const dims = n.dims?.length ? n.dims : inferDims(n.name, n.shape);
-			// Must have at least one spatial dim pair
 			let hasLat = false;
 			let hasLon = false;
 			for (const d of dims) {
@@ -67,7 +65,6 @@ const mapArrays = $derived.by(() => {
 				if (lower === 'x' || lower === 'lon' || lower === 'longitude') hasLon = true;
 			}
 			if (hasLat && hasLon) {
-				// Non-spatial dims must have root-level coordinate arrays
 				const nonSpatialResolvable = dims.every(
 					(d) => spatialNames.has(d.toLowerCase()) || rootArrayNames.has(d)
 				);
@@ -454,7 +451,7 @@ function selectStoreAttrs() {
 					>
 						{t('zarr.map')}
 					</Button>
-				{/if}
+			{/if}
 			</div>
 		</div>
 	</div>

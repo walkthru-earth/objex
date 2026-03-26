@@ -415,6 +415,35 @@ async function addZarrLayer(map: maplibregl.Map) {
 			opts.spatialDimensions = spatial;
 		}
 
+		// Safety: warn if the array is extremely large without multiscale support.
+		// A global-extent array at full resolution can trigger thousands of chunk
+		// requests simultaneously, hanging the browser.
+		const meta = selectedMeta;
+		if (meta?.shape) {
+			const dims = meta.dims?.length ? meta.dims : inferDims(meta.name, meta.shape);
+			const yIdx = dims.findIndex((d) => ['y', 'lat', 'latitude'].includes(d.toLowerCase()));
+			const xIdx = dims.findIndex((d) => ['x', 'lon', 'longitude'].includes(d.toLowerCase()));
+			if (yIdx >= 0 && xIdx >= 0) {
+				const ySize = meta.shape[yIdx];
+				const xSize = meta.shape[xIdx];
+				const yChunk = meta.chunks?.[yIdx] ?? ySize;
+				const xChunk = meta.chunks?.[xIdx] ?? xSize;
+				const yTiles = Math.ceil(ySize / yChunk);
+				const xTiles = Math.ceil(xSize / xChunk);
+				const totalTiles = yTiles * xTiles;
+				// If more than 10 000 tiles at base resolution and no multiscale,
+				// the layer will flood the browser with requests at global zoom.
+				if (totalTiles > 10_000) {
+					error = t('map.zarrTooLarge', {
+						tiles: totalTiles.toLocaleString(),
+						shape: `${ySize.toLocaleString()} × ${xSize.toLocaleString()}`
+					});
+					loading = false;
+					return;
+				}
+			}
+		}
+
 		zarrLayer = new ZarrLayer(opts);
 		map.addLayer(zarrLayer);
 	} catch (err) {

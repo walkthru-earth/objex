@@ -15,6 +15,7 @@ import {
 	toggleSortField
 } from '$lib/utils/file-sort.js';
 import { detectZarrMarkers } from '$lib/utils/zarr.js';
+import { openZarrTab } from '$lib/utils/zarr-tab.js';
 import Breadcrumb from './Breadcrumb.svelte';
 import CreateFolderDialog from './CreateFolderDialog.svelte';
 import DeleteConfirmDialog from './DeleteConfirmDialog.svelte';
@@ -37,19 +38,22 @@ let showWriteActions = $derived(browser.canWrite && !safeLock.locked);
 
 const zarrDetection = $derived(detectZarrMarkers(browser.entries.map((e: FileEntry) => e.name)));
 
-function openAsZarr() {
-	if (!browser.activeConnection) return;
-	const prefix = browser.currentPrefix.replace(/\/+$/, '');
-	const name = prefix.split('/').pop() || browser.activeConnection.bucket;
-	tabs.open({
-		id: `${browser.activeConnection.id}:${prefix}/`,
-		name,
-		path: `${prefix}/`,
-		source: 'remote',
-		connectionId: browser.activeConnection.id,
-		extension: 'zarr'
-	});
-}
+// Auto-open Zarr viewer when markers are detected in the current directory.
+// Uses a Set to prevent re-triggering when navigating back to a previously opened store.
+const autoOpenedPrefixes = new Set<string>();
+$effect(() => {
+	if (zarrDetection.detected && browser.activeConnection) {
+		const prefix = browser.currentPrefix;
+		if (!autoOpenedPrefixes.has(prefix)) {
+			autoOpenedPrefixes.add(prefix);
+			openZarrTab(prefix, {
+				source: 'remote',
+				connectionId: browser.activeConnection.id,
+				bucketFallback: browser.activeConnection.bucket
+			});
+		}
+	}
+});
 
 const sortedAndFilteredEntries = $derived.by(() => {
 	let result = browser.entries;
@@ -177,7 +181,14 @@ function handleRename(entry: FileEntry) {
 				variant="outline"
 				size="sm"
 				class="h-6 gap-1 px-2 text-[11px]"
-				onclick={openAsZarr}
+				onclick={() => {
+					if (!browser.activeConnection) return;
+					openZarrTab(browser.currentPrefix, {
+						source: 'remote',
+						connectionId: browser.activeConnection.id,
+						bucketFallback: browser.activeConnection.bucket
+					});
+				}}
 			>
 				{t('fileBrowser.openAsZarr')}
 			</Button>

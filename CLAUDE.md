@@ -107,7 +107,11 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - **`$derived` memory leak**: module-level runes referenced in component `$derived` may not clean up on unmount (Svelte #11817)
 - **Tree rendering**: guard expanded children with `{#if node.expanded}` -- unguarded renders all nodes on mount
 - **Zarr numcodecs-wrapped codecs**: Zarr v3 stores from Python zarr-python use `numcodecs.` prefix (e.g. `numcodecs.shuffle`, `numcodecs.zlib`). zarrita only registers bare names. `ensureCodecsRegistered()` in `zarr.ts` adds aliases + byte shuffle implementation. Must be awaited before creating `ZarrLayer`
-- **Zarr non-consolidated v3**: stores without `consolidated_metadata` in zarr.json (e.g. TCI.zarr) use `discoverV3Children()` which parses multiscales convention to discover child arrays. Stores with no root metadata at all (e.g. landcovernet.zr3) require S3 XML listing (not yet implemented)
+- **Zarr non-consolidated v3**: stores without `consolidated_metadata` in zarr.json (e.g. TCI.zarr) use `discoverV3Children()` which parses multiscales convention to discover child arrays. When no convention matches, falls back to S3 XML listing (`listS3Children()`) to discover subdirectories
+- **Zarr directory detection**: directories without `.zarr`/`.zr3` suffix (e.g. `aef-mosaic/`) are detected via marker files (`zarr.json`, `.zmetadata`, etc.). FileTreeSidebar checks children on click; FileBrowser auto-opens via `$effect`; URL handler probes `{url}/zarr.json` for extensionless paths
+- **Zarr string dtype**: zarrita 0.6.1+ supports `data_type: "string"` (PR manzt/zarrita.js#329). `@carbonplan/zarr-layer` v0.4.2 uses zarrita externally (not bundled). Must clear Vite cache (`rm -rf node_modules/.vite`) after upgrading
+- **Zarr sharding_indexed**: zarrita supports sharding via range requests (`getRange` with `suffixLength`). But arrays without multiscale pyramids hang the browser at global zoom — `ZarrMapViewer` guards against >10k tiles
+- **Zarr large arrays without pyramids**: e.g. `tge-labs/aef-mosaic` embeddings `[9,64,1859584,4009984]` with `sharding_indexed` codec. ZarrMapViewer shows error instead of flooding the browser with chunk requests. GDAL 3.12 also can't read this (`Unsupported codec: sharding_indexed`)
 - **Cloud protocol URLs**: `resolveCloudUrl()` in `url.ts` converts `s3://` → HTTPS with AWS region auto-detection from bucket name. Called once in `openUrlTab()` (+page.svelte) as single entry point -- never duplicate in individual viewers
 
 ## npm Publishing Rules
@@ -199,3 +203,4 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 - `docs/ipynb-viewer-research.md` -- Jupyter notebook viewer research
 - `docs/notebook-viewer-research.md` -- Notebook viewer implementation research
 - `docs/ui-ux-improvement-plan.md` -- UI/UX improvement plan
+- `docs/zarr-viewer-architecture.md` -- Zarr viewer architecture, detection, library versions, upstream issues
