@@ -106,19 +106,15 @@ async function getDB() {
 				INIT_TIMEOUT_MS,
 				'extension install (httpfs + spatial)'
 			);
-			// Disable auto-conversion of GeoParquet metadata → GEOMETRY type.
-			// Some files use legacy GeoParquet metadata (schema_version 0.x without
-			// "version" field) which causes DuckDB's spatial extension to throw
-			// "Geoparquet metadata does not have a version". We handle geometry
-			// detection, CRS, and WKB conversion ourselves via hyparquet metadata
-			// and explicit ST_GeomFromWKB() calls, so auto-conversion is not needed.
+			// DuckDB v1.5: GEOMETRY is a core type with optional CRS parameter.
+			// SET geometry_always_xy = true forces lon/lat (x/y) axis order globally,
+			// matching GeoJSON/GeoParquet convention. Without this, DuckDB v1.5 emits
+			// warnings on ST_Transform and other coordinate-sensitive functions.
 			// SET GLOBAL applies to all future connections (no per-connection overhead).
 			try {
-				await conn.query('SET GLOBAL enable_geoparquet_conversion = false');
-				geoConversionGlobal = true;
+				await conn.query('SET GLOBAL geometry_always_xy = true');
 			} catch {
-				// SET GLOBAL not supported — fall back to per-connection SET
-				await conn.query('SET enable_geoparquet_conversion = false');
+				logWarn('geometry_always_xy not available — ST_Transform calls may warn');
 			}
 			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
@@ -137,21 +133,43 @@ async function getDB() {
 	return dbPromise;
 }
 
-let geoConversionGlobal = false;
+// ─── Geometry type helpers ────────────────────────────────────────────
 
 /**
- * Ensure GeoParquet auto-conversion is disabled on this connection.
- * If SET GLOBAL succeeded during init, this is a no-op.
- * Otherwise falls back to per-connection SET.
+ * Check if a DuckDB column type string is a spatial type that ST_AsWKB accepts directly.
+ * Handles DuckDB v1.5 parameterized types like GEOMETRY('EPSG:4326').
  */
-async function ensureGeoConversionDisabled(conn: any): Promise<void> {
-	if (geoConversionGlobal) return;
-	await conn.query('SET enable_geoparquet_conversion = false');
+function isSpatialColumnType(typeUpper: string): boolean {
+	return (
+		typeUpper.startsWith('GEOMETRY') ||
+		typeUpper.startsWith('GEOGRAPHY') ||
+		typeUpper === 'WKB_BLOB' ||
+		typeUpper.includes('POINT') ||
+		typeUpper.includes('LINESTRING') ||
+		typeUpper.includes('POLYGON') ||
+		typeUpper.includes('BINARY') // Arrow serialization of DuckDB GEOMETRY
+	);
 }
 
 // ─── CRS detection helpers ───────────────────────────────────────────
 
 // WGS84_CODES imported from constants.ts
+
+/**
+ * Extract CRS from DuckDB v1.5 parameterized GEOMETRY type string.
+ * e.g., "GEOMETRY('EPSG:4326')" → { found: true, crs: null } (WGS84)
+ * e.g., "GEOMETRY('EPSG:27700')" → { found: true, crs: 'EPSG:27700' }
+ * e.g., "GEOMETRY" → { found: false, crs: null } (no CRS in type)
+ */
+function extractCrsFromTypeString(typeStr: string): { found: boolean; crs: string | null } {
+	const match = typeStr.match(/^GEOMETRY\('([^']+)'\)/i);
+	if (!match) return { found: false, crs: null };
+	const crs = match[1];
+	if (crs === 'EPSG:4326' || crs === 'OGC:CRS84') return { found: true, crs: null };
+	const epsgMatch = crs.match(/^EPSG:(\d+)$/);
+	if (epsgMatch && WGS84_CODES.has(Number(epsgMatch[1]))) return { found: true, crs: null };
+	return { found: true, crs };
+}
 
 /** Extract EPSG code from a PROJJSON object. Returns null for WGS84/CRS84. */
 function extractEpsgFromProjjson(crs: any): string | null {
@@ -319,7 +337,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
+
 		const tConn = performance.now();
 		log(`query → connected in ${elapsed(t0)}`);
 
@@ -380,7 +398,6 @@ export class WasmQueryEngine implements QueryEngine {
 		log(`queryForMap → geomCol: ${geomCol}, type: ${geomColType}, crs: ${sourceCrs ?? 'WGS84'}`);
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -388,24 +405,12 @@ export class WasmQueryEngine implements QueryEngine {
 			}
 
 			// Build geometry expression based on column type:
-			// - Native spatial types (GEOMETRY, WKB_BLOB, POINT, etc.) → use directly
-			// - BLOB/BINARY → DuckDB implicitly casts BLOB→GEOMETRY, use directly
+			// - Native spatial types (GEOMETRY, GEOMETRY('EPSG:...'), WKB_BLOB, etc.) → use directly
+			// - BLOB/BINARY → need explicit ST_GeomFromWKB
 			// - Everything else (VARCHAR, JSON, STRUCT, ...) → GeoJSON text
 			const quoted = `"${geomCol}"`;
 			const upper = geomColType.toUpperCase();
-			// Spatial types that ST_AsWKB accepts directly (GEOMETRY, WKB_BLOB, etc.).
-			// Includes Arrow "Binary"/"LargeBinary" — DuckDB GEOMETRY columns from
-			// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
-			const isSpatialType =
-				upper === 'GEOMETRY' ||
-				upper === 'GEOGRAPHY' ||
-				upper === 'WKB_BLOB' ||
-				upper.includes('POINT') ||
-				upper.includes('LINESTRING') ||
-				upper.includes('POLYGON') ||
-				upper.includes('BINARY'); // Arrow serialization of DuckDB GEOMETRY
-			// Actual WKB BLOB columns (e.g. GeoParquet) need explicit ST_GeomFromWKB
-			// because DuckDB has no implicit BLOB→GEOMETRY cast.
+			const spatialType = isSpatialColumnType(upper);
 			const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 			let wkbExpr: string;
@@ -413,22 +418,25 @@ export class WasmQueryEngine implements QueryEngine {
 
 			if (isWkbBlob && !sourceCrs) {
 				// Already WKB — use directly, no spatial function calls needed.
-				// Avoids ST_GeomFromWKB which can fail if DuckDB auto-converted
-				// the column to GEOMETRY despite enable_geoparquet_conversion=false.
 				wkbExpr = quoted;
 				geomExpr = null; // geometry type detected client-side from WKB headers
 			} else {
-				geomExpr = isSpatialType
+				geomExpr = spatialType
 					? quoted
 					: isWkbBlob
 						? `ST_GeomFromWKB(${quoted})`
 						: `ST_GeomFromGeoJSON(${quoted})`;
 
 				// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84.
-				// always_xy := true forces lon/lat (x/y) axis order for both source and
-				// target, matching the GeoParquet convention regardless of CRS authority.
+				// geometry_always_xy is set globally at DB init, so no per-call always_xy needed.
 				if (sourceCrs) {
-					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}', always_xy := true)`;
+					// DuckDB v1.5: if GEOMETRY type carries CRS, use 2-arg ST_Transform
+					const hasCrsInType = /^GEOMETRY\('/i.test(geomColType);
+					if (hasCrsInType) {
+						geomExpr = `ST_Transform(${geomExpr}, '${DEFAULT_TARGET_CRS}')`;
+					} else {
+						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}')`;
+					}
 				}
 
 				// ST_AsWKB needed — DuckDB GEOMETRY columns (from ST_ReadSHP, ST_Read)
@@ -494,7 +502,6 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getSchema →', path);
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -525,7 +532,6 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getRowCount →', path);
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -576,7 +582,6 @@ export class WasmQueryEngine implements QueryEngine {
 		log('getSchemaAndCrs →', path);
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
 
 		try {
 			if (connId) {
@@ -679,7 +684,7 @@ export class WasmQueryEngine implements QueryEngine {
 		log(`detectCrs → standalone call for "${geomCol}"`, path);
 		const db = await getDB();
 		const conn = await db.connect();
-		await ensureGeoConversionDisabled(conn);
+
 		try {
 			if (connId) {
 				await this.configureStorage(conn, connId);
@@ -701,6 +706,31 @@ export class WasmQueryEngine implements QueryEngine {
 		path: string,
 		geomCol: string
 	): Promise<string | null> {
+		// Strategy 0: DuckDB v1.5 — CRS embedded in GEOMETRY column type
+		// e.g., GEOMETRY('EPSG:4326') → extract CRS directly from type string
+		try {
+			const t0 = performance.now();
+			const source = buildDuckDbSource(path, path);
+			const descResult = await conn.query(
+				`SELECT column_type FROM (DESCRIBE SELECT * FROM ${source}) WHERE column_name = '${geomCol}'`
+			);
+			const descRows = descResult.toArray();
+			log(`detectCrs strategy 0 (column type) → ${descRows.length} rows in ${elapsed(t0)}`);
+			if (descRows.length > 0) {
+				const colType = String(descRows[0].column_type);
+				log(`detectCrs strategy 0 → type: "${colType}"`);
+				const result = extractCrsFromTypeString(colType);
+				if (result.found) {
+					log(
+						`detectCrs strategy 0 → authoritative: ${result.crs ?? 'WGS84/null'} (skipping strategies 1-2)`
+					);
+					return result.crs;
+				}
+			}
+		} catch (err) {
+			log('detectCrs strategy 0 → skipped:', (err as Error)?.message ?? err);
+		}
+
 		// Strategy 1: GeoParquet file-level metadata (geo key in KV metadata)
 		try {
 			const t1 = performance.now();
@@ -770,7 +800,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			const db = await getDB();
 			conn = await db.connect();
-			await ensureGeoConversionDisabled(conn);
+
 			log(`queryCancellable → connected in ${elapsed(t0)}`);
 
 			try {
@@ -861,7 +891,6 @@ export class WasmQueryEngine implements QueryEngine {
 
 			const db = await getDB();
 			conn = await db.connect();
-			await ensureGeoConversionDisabled(conn);
 
 			try {
 				if (connId) {
@@ -871,31 +900,28 @@ export class WasmQueryEngine implements QueryEngine {
 				// Build geometry expression (same logic as queryForMap)
 				const quoted = `"${geomCol}"`;
 				const upper = geomColType.toUpperCase();
-				const isSpatialType =
-					upper === 'GEOMETRY' ||
-					upper === 'GEOGRAPHY' ||
-					upper === 'WKB_BLOB' ||
-					upper.includes('POINT') ||
-					upper.includes('LINESTRING') ||
-					upper.includes('POLYGON') ||
-					upper.includes('BINARY');
+				const spatialType = isSpatialColumnType(upper);
 				const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 				let wkbExpr: string;
 				let geomExpr: string | null;
 
 				if (isWkbBlob && !sourceCrs) {
-					// Already WKB — use directly, no spatial function calls needed.
 					wkbExpr = quoted;
-					geomExpr = null; // geometry type detected client-side from WKB headers
+					geomExpr = null;
 				} else {
-					geomExpr = isSpatialType
+					geomExpr = spatialType
 						? quoted
 						: isWkbBlob
 							? `ST_GeomFromWKB(${quoted})`
 							: `ST_GeomFromGeoJSON(${quoted})`;
 					if (sourceCrs) {
-						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}', always_xy := true)`;
+						const hasCrsInType = /^GEOMETRY\('/i.test(geomColType);
+						if (hasCrsInType) {
+							geomExpr = `ST_Transform(${geomExpr}, '${DEFAULT_TARGET_CRS}')`;
+						} else {
+							geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}')`;
+						}
 					}
 					wkbExpr = `ST_AsWKB(${geomExpr})`;
 				}
@@ -1005,7 +1031,6 @@ export class WasmQueryEngine implements QueryEngine {
 			logWarn('forceCancel → terminate error:', err);
 		} finally {
 			dbPromise = null;
-			geoConversionGlobal = false;
 			log('forceCancel → done, next getDB() will reinitialize');
 		}
 	}

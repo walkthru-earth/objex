@@ -245,26 +245,29 @@ SELECT * FROM table WHERE geom && ST_MakeEnvelope(xmin, ymin, xmax, ymax)
 
 ---
 
-## 9. Current objex Workarounds (pre-v1.5)
+## 9. Migration Completed (DuckDB-WASM 1.33.1-dev40.0 / DuckDB 1.5.x)
 
-These workarounds are in place until we upgrade to DuckDB v1.5:
+> **Migrated**: 2026-03-26
 
-### `always_xy := true` on ST_Transform
+### What changed
 
-We manually pass `always_xy := true` to every `ST_Transform` call because the current DuckDB spatial respects the CRS authority axis order by default, which swaps lon/lat for most EPSG codes:
+- **`enable_geoparquet_conversion`**: No longer disabled globally. GeoParquet columns now read as `GEOMETRY('EPSG:...')` instead of BLOB. Legacy GeoParquet (missing `"version"`) detected by hyparquet → per-connection `SET enable_geoparquet_conversion = false` fallback.
+- **`geometry_always_xy = true`**: Set globally at DB init. Removes need for per-call `always_xy := true` on `ST_Transform`.
+- **CRS detection**: New Strategy 0 extracts CRS from column type string (`GEOMETRY('EPSG:XXXX')`). Falls through to existing metadata strategies (GeoParquet "geo" key, parquet_schema logical_type).
+- **`isSpatialType`**: Updated from `=== 'GEOMETRY'` to `startsWith('GEOMETRY')` to handle parameterized type. Extracted to shared `isSpatialColumnType()` helper.
+- **`ST_Transform`**: Uses 2-arg form `ST_Transform(geom, target_crs)` when GEOMETRY type carries CRS. Falls back to 3-arg form for untyped geometry or BLOB columns.
+- **TableViewer**: DuckDB schema fetched after boot to get actual `GEOMETRY('EPSG:...')` type (hyparquet only knows physical BLOB type).
 
-```typescript
-// wasm.ts:278 and TableViewer.svelte:100
-geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
-```
+### Remaining workarounds
 
-### Manual CRS detection from Parquet metadata
+- **Manual WKB → GeoArrow conversion**: Still parsing WKB and building GeoArrow tables manually in `geoarrow.ts`. DuckDB v1.5 outputs GeoArrow by default in Arrow export, but Arrow version mismatch (DuckDB bundles v17, project uses v21) prevents using native output. Can be revisited when versions align.
+- **Spatial filter pushdown**: Not yet implemented. DuckDB v1.5 supports `WHERE geom && ST_MakeEnvelope(...)` with row-group pruning. Future optimization for large files.
 
-We detect CRS by parsing `parquet_kv_metadata` (GeoParquet "geo" key) and `parquet_schema()` (native Parquet 2.11 `logical_type` string), since the current DuckDB doesn't expose CRS on the column type.
+### Known DuckDB-WASM bugs (as of 1.33.1-dev40.0)
 
-### Manual WKB → GeoArrow conversion
-
-We parse WKB binaries and build GeoArrow Arrow tables manually in `geoarrow.ts` because current DuckDB-WASM doesn't output GeoArrow natively.
+- **`stoi: no conversion` on GeoParquet** ([duckdb/duckdb-wasm#2199](https://github.com/duckdb/duckdb-wasm/issues/2199), tracked in [walkthru-earth/objex#5](https://github.com/walkthru-earth/objex/issues/5)): `read_parquet()` crashes on GeoParquet files with CRS metadata. Even `DESCRIBE` fails. DuckDB CLI v1.5.1 reads the same files fine. Our fallback retries with `enable_geoparquet_conversion = false` but the crash is at the Parquet parsing level so it doesn't help for affected files.
+- **GEOMETRY Arrow export not supported** ([duckdb/duckdb-wasm#2187](https://github.com/duckdb/duckdb-wasm/issues/2187)): The WASM Arrow conversion layer throws `Unsupported type: GEOMETRY`. Our `ST_AsWKB()` wrapper converts to WKB_BLOB before Arrow serialization as a workaround.
+- **Arrow v17 dependency** ([duckdb/duckdb-wasm#2008](https://github.com/duckdb/duckdb-wasm/issues/2008)): DuckDB-WASM still bundles apache-arrow v17. Cross-version `tableToIPC`/`tableFromIPC` with v21 loses data ([duckdb/duckdb-wasm#2097](https://github.com/duckdb/duckdb-wasm/issues/2097)). Blocks native GeoArrow consumption.
 
 ---
 
@@ -275,6 +278,7 @@ We parse WKB binaries and build GeoArrow Arrow tables manually in `geoarrow.ts` 
 - [Parquet Format 2.11 Geospatial spec](https://github.com/apache/parquet-format/blob/master/Geospatial.md)
 - [Parquet LogicalTypes — Geometry](https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#geometry)
 - [GeoParquet spec](https://geoparquet.org/releases/v1.1.0/)
+- [Apache Parquet geospatial test files](https://github.com/apache/parquet-testing/tree/master/data/geospatial) (also mirrored at `s3://us-west-2.opendata.source.coop/severo/apache-parquet-testing/data/geospatial/`)
 - [duckdb-spatial issue #441 — Parameterize types with CRS](https://github.com/duckdb/duckdb-spatial/issues/441)
 - [duckdb-spatial issue #474 — Axis mapping management](https://github.com/duckdb/duckdb-spatial/issues/474)
 - [duckdb-spatial issue #16 — Axis order explanation](https://github.com/duckdb/duckdb-spatial/issues/16)

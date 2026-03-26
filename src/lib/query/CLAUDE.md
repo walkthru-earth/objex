@@ -19,4 +19,6 @@ graph TD
 
 - `conn.send()` for data queries (non-blocking, cancellable)
 - `conn.query()` only for fast metadata queries
-- `enable_geoparquet_conversion = false` set at DB init
+- `geometry_always_xy = true` set at DB init (DuckDB v1.5+ lon/lat axis order)
+- GeoParquet auto-conversion enabled (default) — columns read as `GEOMETRY('EPSG:...')`
+- Legacy GeoParquet fallback: `enable_geoparquet_conversion = false` set per-connection when detected

@@ -98,19 +98,16 @@ function buildDefaultSql(offset = 0): string {
 	if (geoCol) {
 		const quoted = `"${geoCol}"`;
 		const upper = geoColType.toUpperCase();
-		// Spatial types that ST_AsWKB accepts directly (GEOMETRY, WKB_BLOB, etc.).
-		// Includes Arrow "Binary"/"LargeBinary" — DuckDB GEOMETRY columns from
-		// ST_ReadSHP/ST_Read appear as Arrow Binary but are NOT WKB blobs.
-		const isSpatialType =
-			upper === 'GEOMETRY' ||
-			upper === 'GEOGRAPHY' ||
+		// Spatial types that ST_AsWKB accepts directly: GEOMETRY, GEOMETRY('EPSG:...'),
+		// GEOGRAPHY, WKB_BLOB, POINT, LINESTRING, POLYGON, Binary (Arrow serialization).
+		const spatialType =
+			upper.startsWith('GEOMETRY') ||
+			upper.startsWith('GEOGRAPHY') ||
 			upper === 'WKB_BLOB' ||
 			upper.includes('POINT') ||
 			upper.includes('LINESTRING') ||
 			upper.includes('POLYGON') ||
-			upper.includes('BINARY'); // Arrow serialization of DuckDB GEOMETRY
-		// Actual WKB BLOB columns (e.g. GeoParquet) need explicit ST_GeomFromWKB
-		// because DuckDB has no implicit BLOB→GEOMETRY cast.
+			upper.includes('BINARY');
 		const isWkbBlob = upper === 'BLOB' || upper === 'BYTEA';
 
 		let wkbExpr: string;
@@ -118,13 +115,20 @@ function buildDefaultSql(offset = 0): string {
 			// Already WKB — use directly, no conversion needed
 			wkbExpr = `${quoted} AS __wkb`;
 		} else {
-			let geomExpr = isSpatialType
+			let geomExpr = spatialType
 				? quoted
 				: isWkbBlob
 					? `ST_GeomFromWKB(${quoted})`
 					: `ST_GeomFromGeoJSON(${quoted})`;
 			if (sourceCrs) {
-				geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', always_xy := true)`;
+				// DuckDB v1.5: if GEOMETRY type carries CRS, use 2-arg ST_Transform.
+				// geometry_always_xy is set globally at DB init, so no per-call always_xy.
+				const hasCrsInType = /^GEOMETRY\('/i.test(geoColType);
+				if (hasCrsInType) {
+					geomExpr = `ST_Transform(${geomExpr}, 'EPSG:4326')`;
+				} else {
+					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
+				}
 			}
 			wkbExpr = `ST_AsWKB(${geomExpr}) AS __wkb`;
 		}
@@ -297,6 +301,7 @@ async function loadTable() {
 		// ── Fast metadata via hyparquet (runs concurrently with DuckDB boot) ──
 		let metaFromHyparquet = false;
 		let needsDuckDbCrs = false;
+		let isLegacyGeoParquet = false;
 		if (cloudNative && isParquet && streamable) {
 			try {
 				loadStage = t('table.readingMetadata');
@@ -357,11 +362,9 @@ async function loadTable() {
 
 				if (meta.geo) {
 					geoCol = meta.geo.primaryColumn;
-					// With enable_geoparquet_conversion=false, DuckDB reads ALL
-					// GeoParquet geometry columns as BLOB regardless of Parquet
-					// logical type. Native Parquet GEOMETRY (Format 2.11+) is a
-					// DuckDB v1.5 feature not yet in WASM (v1.33).
-					geoColType = 'BLOB';
+					// DuckDB v1.5 reads GeoParquet columns as GEOMETRY('EPSG:...').
+					// Set GEOMETRY here as placeholder — DuckDB schema will refine.
+					geoColType = 'GEOMETRY';
 					sourceCrs = extractEpsgFromGeoMeta(meta.geo);
 					const geomTypes = extractGeometryTypes(meta.geo);
 					if (geomTypes.length === 1) knownGeomType = geomTypes[0];
@@ -401,9 +404,8 @@ async function loadTable() {
 					const detectedGeoCol = findGeoColumn(schema);
 					if (detectedGeoCol) {
 						geoCol = detectedGeoCol;
-						// DuckDB WASM v1.33 doesn't support native Parquet GEOMETRY —
-						// columns are always BLOB with enable_geoparquet_conversion=false.
-						geoColType = 'BLOB';
+						// DuckDB v1.5 reads native Parquet GEOMETRY natively.
+						geoColType = 'GEOMETRY';
 						needsDuckDbCrs = true;
 						loadProgress = [
 							...loadProgress,
@@ -420,6 +422,7 @@ async function loadTable() {
 						{ label: t('progress.format'), value: t('progress.stacDetected') }
 					];
 				}
+				isLegacyGeoParquet = meta.legacyGeoParquet;
 				metaFromHyparquet = true;
 			} catch {
 				// hyparquet failed (CORS, auth, format) — fall back to DuckDB
@@ -430,6 +433,49 @@ async function loadTable() {
 		loadStage = metaFromHyparquet ? t('table.bootingEngine') : t('table.initEngine');
 		const engine = await enginePromise;
 		if (thisGen !== loadGeneration) return;
+
+		// Legacy GeoParquet (geopandas <0.12) — files with schema_version but no
+		// "version" field. DuckDB v1.5 may reject these with auto-conversion enabled.
+		// Disable conversion for this connection and fall back to BLOB handling.
+		if (metaFromHyparquet && isLegacyGeoParquet && geoCol) {
+			try {
+				await engine.query(connId, 'SET enable_geoparquet_conversion = false');
+				geoColType = 'BLOB';
+			} catch {
+				// Setting failed — DuckDB may still handle it gracefully
+			}
+		}
+
+		// DuckDB v1.5: refresh geoColType from DuckDB's actual schema.
+		// hyparquet reports BLOB for the physical Parquet type, but DuckDB v1.5
+		// reads GeoParquet as GEOMETRY('EPSG:...') with CRS embedded in the type.
+		if (metaFromHyparquet && geoCol && !isLegacyGeoParquet) {
+			try {
+				const duckSchema = await engine.getSchema(connId, fileUrl);
+				if (thisGen !== loadGeneration) return;
+				const duckGeoField = duckSchema.find((f: { name: string }) => f.name === geoCol);
+				if (duckGeoField) {
+					geoColType = duckGeoField.type;
+					// Extract CRS from type string — may override hyparquet CRS detection
+					const typeStr = duckGeoField.type.toUpperCase();
+					const crsMatch = duckGeoField.type.match(/^GEOMETRY\('([^']+)'\)/i);
+					if (crsMatch) {
+						const crsVal = crsMatch[1];
+						const isWgs84 =
+							crsVal === 'EPSG:4326' ||
+							crsVal === 'OGC:CRS84' ||
+							(crsVal.startsWith('EPSG:') && [4326, 4979].includes(Number(crsVal.split(':')[1])));
+						sourceCrs = isWgs84 ? null : crsVal;
+						needsDuckDbCrs = false;
+					} else if (typeStr.startsWith('GEOMETRY')) {
+						// GEOMETRY without CRS param — still need CRS from metadata
+						needsDuckDbCrs = !sourceCrs;
+					}
+				}
+			} catch {
+				// Schema refresh failed — continue with hyparquet-detected type
+			}
+		}
 
 		// If hyparquet detected a geo column but couldn't determine CRS
 		// (native Parquet GEOMETRY without "geo" KV metadata), use DuckDB
@@ -530,8 +576,26 @@ async function loadTable() {
 
 		loadStage = t('table.runningQuery');
 		const start = performance.now();
-		const result = await executeQuery(sqlQuery);
+		let result = await executeQuery(sqlQuery);
 		if (thisGen !== loadGeneration) return;
+
+		// If query failed and this is a GeoParquet file, the error may be from
+		// auto-conversion of CRS metadata (e.g. "stoi: no conversion").
+		// Retry with enable_geoparquet_conversion=false and BLOB handling.
+		if (!result && error && isParquet && geoCol && !isLegacyGeoParquet) {
+			try {
+				await engine.query(connId, 'SET enable_geoparquet_conversion = false');
+				geoColType = 'BLOB';
+				sqlQuery = buildDefaultSql(0);
+				customSql = sqlQuery;
+				error = null;
+				result = await executeQuery(sqlQuery);
+				if (thisGen !== loadGeneration) return;
+			} catch {
+				// Retry also failed — original error stands
+			}
+		}
+
 		executionTimeMs = Math.round(performance.now() - start);
 
 		if (!cloudNative && result) {

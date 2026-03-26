@@ -97,10 +97,10 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
   - DecoderPool workers fail in Vite dev mode -- using main-thread `DecoderPool()` (no workers)
   - Antimeridian longitude wrapping -- pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366))
 - **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions (now in `utils/cog.ts`)
-- **DuckDB `enable_geoparquet_conversion = false`**: prevents rejection of legacy GeoParquet (missing `"version"` field). All geometry columns read as BLOB
-- **hyparquet vs DuckDB type mismatch**: hyparquet may report `GEOMETRY` (Parquet logical type) while DuckDB reports `BLOB`. Use DuckDB type for SQL, hyparquet type for display only
-- **`ST_Transform` axis swap**: always use `always_xy := true` to fix EPSG authority lat/lon order
-- **Legacy GeoParquet**: `schema_version` without `version` field (geopandas <0.12). The conversion bypass handles this
+- **DuckDB v1.5 GEOMETRY type**: GeoParquet columns read as `GEOMETRY('EPSG:...')` with CRS in type. `geometry_always_xy = true` set globally at DB init. For legacy GeoParquet (missing `"version"` field), `enable_geoparquet_conversion = false` is set per-connection as fallback
+- **hyparquet vs DuckDB type mismatch**: hyparquet reports physical type (BLOB/GEOMETRY), DuckDB v1.5 reports `GEOMETRY('EPSG:...')`. After DuckDB boots, schema is refreshed from DuckDB for accurate type
+- **`ST_Transform` axis order**: `geometry_always_xy = true` set globally at DB init. Use 2-arg `ST_Transform(geom, target_crs)` when CRS is in type, 3-arg `ST_Transform(geom, source, target)` otherwise
+- **Legacy GeoParquet**: `schema_version` without `version` field (geopandas <0.12). Detected by hyparquet; `enable_geoparquet_conversion = false` set per-connection, falls back to BLOB handling
 - **GeometryCollections (WKB type 7)**: skipped in `parseWKB` (returns Unknown), not rendered on map
 - **DuckDB-WASM single worker**: all queries share one worker. Long queries block everything -- use `queryCancellable()` and cancel in cleanup
 - **Large COG (360802x176500, ZSTD, Mollweide)**: unsupported CRS (model type 32767) -- shows error message. ZSTD decoded on main thread (DecoderPool workers disabled)
