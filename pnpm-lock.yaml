@@ -20,8 +20,8 @@ importers:
         specifier: ^8.56.2
         version: 8.56.2(@babylonjs/core@8.56.2)(babylonjs-gltf2interface@8.52.0)
       '@carbonplan/zarr-layer':
-        specifier: ^0.4.2
-        version: 0.4.2(maplibre-gl@5.21.1)
+        specifier: ^0.4.3
+        version: 0.4.3(maplibre-gl@5.21.1)
       '@codemirror/autocomplete':
         specifier: ^6.20.1
         version: 6.20.1
@@ -65,8 +65,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       '@duckdb/duckdb-wasm':
-        specifier: 1.33.1-dev40.0
-        version: 1.33.1-dev40.0
+        specifier: 1.33.1-dev41.0
+        version: 1.33.1-dev41.0
       '@geoarrow/deck.gl-layers':
         specifier: ^0.3.1
         version: 0.3.1(34ae092dc0c3a9116be4167f056775b2)
@@ -189,8 +189,8 @@ importers:
         specifier: ^4.2.2
         version: 4.2.2(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3))
       bits-ui:
-        specifier: ^2.16.3
-        version: 2.16.3(@internationalized/date@3.12.0)(@sveltejs/kit@2.55.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.55.0)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)
+        specifier: ^2.16.4
+        version: 2.16.4(@internationalized/date@3.12.0)(@sveltejs/kit@2.55.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.55.0)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -201,8 +201,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2(svelte@5.55.0)
       posthog-js:
-        specifier: ^1.363.5
-        version: 1.363.5
+        specifier: ^1.364.1
+        version: 1.364.1
       publint:
         specifier: ^0.3.18
         version: 0.3.18
@@ -366,8 +366,8 @@ packages:
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
 
-  '@carbonplan/zarr-layer@0.4.2':
-    resolution: {integrity: sha512-SR+VtYeHBHcTF81mjUxBrN59ovk8pVJrUqKRWoXpwcd5dzVj9+DG0vDKKdjE3/K9JdY0h8ngmnaQQUrQ0/KMeA==}
+  '@carbonplan/zarr-layer@0.4.3':
+    resolution: {integrity: sha512-ywA1rhpnCpxxZGwCm+Wj5rT3p/ys3xZnmIAE2BVpOAf0JL2/CW0ogufNyKdx8MIezUnCiR4E9LTkasa2CJujRQ==}
     peerDependencies:
       mapbox-gl: '*'
       maplibre-gl: '*'
@@ -456,20 +456,20 @@ packages:
   '@chevrotain/utils@11.1.2':
     resolution: {integrity: sha512-4mudFAQ6H+MqBTfqLmU7G1ZwRzCLfJEooL/fsF6rCX5eePMbGhoy5n4g+G4vlh2muDcsCTJtL+uKbOzWxs5LHA==}
 
-  '@chunkd/middleware@11.2.1':
-    resolution: {integrity: sha512-XB+PIr4HwraB190OuAFril8THRawI9v879FLY22UMI+xNrOggrVPGIkG2JI8G/4XJiPBH8JVovn5vZHXC6KI3w==}
+  '@chunkd/middleware@11.3.0':
+    resolution: {integrity: sha512-9AzKHP4zX3DUawwJY4wOCCNSPJTmGQc6y1rABsLmoUQ6F5lN73/1u2FkQB0ihNIzzLYz2j86nwvdJSA6GArrtQ==}
     engines: {node: '>=16.0.0'}
 
-  '@chunkd/source-http@11.3.0':
-    resolution: {integrity: sha512-TROS1kxO53HKz7hWnTAqXtatxrvtOJJoA425EaaMz9YLJpAfq2KahjhZHuL/VWMCP/q8J7uJxDBft+KUNpYBKQ==}
+  '@chunkd/source-http@11.4.0':
+    resolution: {integrity: sha512-ZkekctSU+7m8SNWxvZNBJA4Uw+eOqhaQq9Sy6gYLMeoZCTWDleID21zjWSbh/4tuSoTN/jiA/U1N9uljWjEY/g==}
     engines: {node: '>=18.0.0'}
 
-  '@chunkd/source-memory@11.1.0':
-    resolution: {integrity: sha512-5mr7MNecQpi6IGxHk1WWfHCd+8UvWpfznpsn7ecUMGRlbKnAPAlihRG1iDwRvtuF4NjbmxdEzkXNejLXr/OniQ==}
+  '@chunkd/source-memory@11.2.0':
+    resolution: {integrity: sha512-a+wc2Twk6w+rqp37EPml0frScLT41jOrtsO+21Nm0Nl4r3UAvenl7fsED4V0EWqE7hr7gcF+TEZt+4NNsdrnow==}
     engines: {node: '>=16.0.0'}
 
-  '@chunkd/source@11.3.0':
-    resolution: {integrity: sha512-GaCzC7bfxIxrfnhsGWCBKuWJ6HAtNnwaonHE+igOhME6ObFv+xltrgCAVrHiIlu5m3iKGhKtONd2aoAXqkNbsg==}
+  '@chunkd/source@11.4.0':
+    resolution: {integrity: sha512-UVvihfAoGXYqH8sLJBHL7w3sKphIQpzoldfutZa7Y8UvaMqKxsIxOp8FbmxfCA2gd6EDLwBJaDA6HfkTIu1jmA==}
     engines: {node: '>=16.0.0'}
 
   '@codemirror/autocomplete@6.20.1':
@@ -638,8 +638,8 @@ packages:
   '@developmentseed/raster-reproject@0.4.0':
     resolution: {integrity: sha512-UiPM0jC4J0cMbi7IPRDinnYWNyvUbDuNKhhOQ5rEytiGmx6w997lJ6Anu/RU8QoTe0pKYOXk7xfO94b0XOXJ+w==}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev40.0':
-    resolution: {integrity: sha512-svvMkGbaE214wg6fhc4MEhzDAWLzSGKdjaxxc4zEZw24SmLqHfYJdwSJKn9fTVqDhvyzJblbCP72EU8syEcpOw==}
+  '@duckdb/duckdb-wasm@1.33.1-dev41.0':
+    resolution: {integrity: sha512-W4TjOUhCNaXckwYEHGALFh3T4fBMytE2IJT0gVT6gGQINbK74gqV2/mKmTs/cbJ8DuxyRLVx13pjd+ZALudNgA==}
 
   '@esbuild/aix-ppc64@0.27.3':
     resolution: {integrity: sha512-9fJMTNFTWZMh5qwrBItuziu834eOCUcEqymSH7pY+zoMVEZg3gcPuBNxH1EvfVYe9h0x/Ptw8KBzv7qxb7l8dg==}
@@ -1505,11 +1505,11 @@ packages:
   '@polymer/polymer@3.5.2':
     resolution: {integrity: sha512-fWwImY/UH4bb2534DVSaX+Azs2yKg8slkMBHOyGeU2kKx7Xmxp6Lee0jP8p6B3d7c1gFUPB2Z976dTUtX81pQA==}
 
-  '@posthog/core@1.24.1':
-    resolution: {integrity: sha512-e8AciAnc6MRFws89ux8lJKFAaI03yEon0ASDoUO7yS91FVqbUGXYekObUUR3LHplcg+pmyiJBI0jolY0SFbGRA==}
+  '@posthog/core@1.24.3':
+    resolution: {integrity: sha512-nTyL1R/8V5vfdH37MbjXDYWFnUoxVijb2TnfJSNHz0+RBLtNnq0hNnBDCwWLl5yh1bzeJBYTT8UF+dV7D8y03w==}
 
-  '@posthog/types@1.363.5':
-    resolution: {integrity: sha512-Eu/aVOZRZE3f09ZGG8qyyo8WiBb0+TRhLAsckPpTaertmD1PSQWxmJQ6gY0je4ibotlJqhX26p2wDPhZTOWqyw==}
+  '@posthog/types@1.364.1':
+    resolution: {integrity: sha512-COB9L+EF9gqGTcK06392yCPC1mbPtqStguFLDin57dxekJM6uwygfxciBi6f6XoFiNEkACpykZYIgjgk5FsuaQ==}
 
   '@probe.gl/env@4.1.1':
     resolution: {integrity: sha512-+68seNDMVsEegRB47pFA/Ws1Fjy8agcFYXxzorKToyPcD6zd+gZ5uhwoLd7TzsSw6Ydns//2KEszWn+EnNHTbA==}
@@ -1907,6 +1907,9 @@ packages:
 
   '@swc/helpers@0.5.19':
     resolution: {integrity: sha512-QamiFeIK3txNjgUTNppE6MiG3p7TdninpZu0E0PbqVh1a9FNLT2FRhisaa4NcaX52XVhA5l7Pk58Ft7Sqi/2sA==}
+
+  '@swc/helpers@0.5.20':
+    resolution: {integrity: sha512-2egEBHUMasdypIzrprsu8g+OEVd7Vp2MM3a2eVlM/cyFYto0nGz5BX5BTgh/ShZZI9ed+ozEq+Ngt+rgmUs8tw==}
 
   '@tailwindcss/forms@0.5.11':
     resolution: {integrity: sha512-h9wegbZDPurxG22xZSoWtdzc41/OlNEUQERNqI/0fOwa2aVlWGu7C35E/x6LDyD3lgtztFSSjKZyuVM0hxhbgA==}
@@ -2396,8 +2399,8 @@ packages:
     resolution: {integrity: sha512-pbnl5XzGBdrFU/wT4jqmJVPn2B6UHPBOhzMQkY/SPUPB6QtUXtmBHBIwCbXJol93mOpGMnQyP/+BB19q04xj7g==}
     engines: {node: '>=4'}
 
-  bits-ui@2.16.3:
-    resolution: {integrity: sha512-5hJ5dEhf5yPzkRFcxzgQHScGodeo0gK0MUUXrdLlRHWaBOBGZiacWLG96j/wwFatKwZvouw7q+sn14i0fx3RIg==}
+  bits-ui@2.16.4:
+    resolution: {integrity: sha512-76dKbW0DGplG7qnVM3kljE2CmCXqh9tj9OfVo0DvC/ZGRkZNJ/auU/aQnMKBxDnSqRvsz2mZBccBkUKyF4/SoQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@internationalized/date': ^3.8.1
@@ -3275,8 +3278,8 @@ packages:
   jszip@3.10.1:
     resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
 
-  katex@0.16.42:
-    resolution: {integrity: sha512-sZ4jqyEXfHTLEFK+qsFYToa3UZ0rtFcPGwKpyiRYh2NJn8obPWOQ+/u7ux0F6CAU/y78+Mksh1YkxTPXTh47TQ==}
+  katex@0.16.44:
+    resolution: {integrity: sha512-EkxoDTk8ufHqHlf9QxGwcxeLkWRR3iOuYfRpfORgYfqc8s13bgb+YtRY59NK5ZpRaCwq1kqA6a5lpX8C/eLphQ==}
     hasBin: true
 
   kdbush@4.0.2:
@@ -3920,8 +3923,8 @@ packages:
     resolution: {integrity: sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-js@1.363.5:
-    resolution: {integrity: sha512-LVjp+c2NRtPG0sRgMzH2/NIoRw5mzRH0TngcezZI7WzH06ngBu3apxfhu/IfFBEDsjPU+S59vrkTzSCqceMVzA==}
+  posthog-js@1.364.1:
+    resolution: {integrity: sha512-7nR2lfxKKqv5SeC+OjeWkWXfK/4RbXxRiqmSAW214y+FuDFVS+Li0mPzTBC/V20uHPWtd92ptrctpY/jKj0F7w==}
 
   potpack@2.1.0:
     resolution: {integrity: sha512-pcaShQc1Shq0y+E7GqJqvZj8DTthWV1KeHGdi0Z6IAin2Oi3JnLCOfwnCo84qc+HAp52wT9nK9H7FAJp5a44GQ==}
@@ -4801,7 +4804,7 @@ snapshots:
 
   '@braintree/sanitize-url@7.1.2': {}
 
-  '@carbonplan/zarr-layer@0.4.2(maplibre-gl@5.21.1)':
+  '@carbonplan/zarr-layer@0.4.3(maplibre-gl@5.21.1)':
     dependencies:
       '@developmentseed/raster-reproject': 0.1.0
       delaunator: 5.1.0
@@ -4997,19 +5000,19 @@ snapshots:
 
   '@chevrotain/utils@11.1.2': {}
 
-  '@chunkd/middleware@11.2.1':
+  '@chunkd/middleware@11.3.0':
     dependencies:
-      '@chunkd/source': 11.3.0
+      '@chunkd/source': 11.4.0
 
-  '@chunkd/source-http@11.3.0':
+  '@chunkd/source-http@11.4.0':
     dependencies:
-      '@chunkd/source': 11.3.0
+      '@chunkd/source': 11.4.0
 
-  '@chunkd/source-memory@11.1.0':
+  '@chunkd/source-memory@11.2.0':
     dependencies:
-      '@chunkd/source': 11.3.0
+      '@chunkd/source': 11.4.0
 
-  '@chunkd/source@11.3.0': {}
+  '@chunkd/source@11.4.0': {}
 
   '@codemirror/autocomplete@6.20.1':
     dependencies:
@@ -5275,10 +5278,10 @@ snapshots:
 
   '@developmentseed/geotiff@0.4.0':
     dependencies:
-      '@chunkd/middleware': 11.2.1
-      '@chunkd/source': 11.3.0
-      '@chunkd/source-http': 11.3.0
-      '@chunkd/source-memory': 11.1.0
+      '@chunkd/middleware': 11.3.0
+      '@chunkd/source': 11.4.0
+      '@chunkd/source-http': 11.4.0
+      '@chunkd/source-memory': 11.2.0
       '@cogeotiff/core': 9.5.0
       '@developmentseed/affine': 0.4.0
       '@developmentseed/lzw-tiff-decoder': 0.2.2
@@ -5298,7 +5301,7 @@ snapshots:
 
   '@developmentseed/raster-reproject@0.4.0': {}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev40.0':
+  '@duckdb/duckdb-wasm@1.33.1-dev41.0':
     dependencies:
       apache-arrow: 17.0.0
       qs: 6.15.0
@@ -5565,7 +5568,7 @@ snapshots:
 
   '@internationalized/date@3.12.0':
     dependencies:
-      '@swc/helpers': 0.5.19
+      '@swc/helpers': 0.5.20
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -6316,11 +6319,11 @@ snapshots:
     dependencies:
       '@webcomponents/shadycss': 1.11.2
 
-  '@posthog/core@1.24.1':
+  '@posthog/core@1.24.3':
     dependencies:
       cross-spawn: 7.0.6
 
-  '@posthog/types@1.363.5': {}
+  '@posthog/types@1.364.1': {}
 
   '@probe.gl/env@4.1.1': {}
 
@@ -6600,6 +6603,10 @@ snapshots:
       vitefu: 1.1.2(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3))
 
   '@swc/helpers@0.5.19':
+    dependencies:
+      tslib: 2.8.1
+
+  '@swc/helpers@0.5.20':
     dependencies:
       tslib: 2.8.1
 
@@ -7119,7 +7126,7 @@ snapshots:
 
   apache-arrow@17.0.0:
     dependencies:
-      '@swc/helpers': 0.5.19
+      '@swc/helpers': 0.5.20
       '@types/command-line-args': 5.2.3
       '@types/command-line-usage': 5.0.4
       '@types/node': 20.19.37
@@ -7173,7 +7180,7 @@ snapshots:
     dependencies:
       is-windows: 1.0.2
 
-  bits-ui@2.16.3(@internationalized/date@3.12.0)(@sveltejs/kit@2.55.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.55.0)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0):
+  bits-ui@2.16.4(@internationalized/date@3.12.0)(@sveltejs/kit@2.55.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.55.0)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0)(typescript@5.9.3)(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.3)))(svelte@5.55.0):
     dependencies:
       '@floating-ui/core': 1.7.5
       '@floating-ui/dom': 1.7.6
@@ -8103,7 +8110,7 @@ snapshots:
       readable-stream: 2.3.8
       setimmediate: 1.0.5
 
-  katex@0.16.42:
+  katex@0.16.44:
     dependencies:
       commander: 8.3.0
 
@@ -8456,7 +8463,7 @@ snapshots:
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
       dompurify: 3.3.3
-      katex: 0.16.42
+      katex: 0.16.44
       khroma: 2.1.0
       lodash-es: 4.17.23
       marked: 16.4.2
@@ -8887,15 +8894,15 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-js@1.363.5:
+  posthog-js@1.364.1:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.208.0
       '@opentelemetry/exporter-logs-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.6.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
-      '@posthog/core': 1.24.1
-      '@posthog/types': 1.363.5
+      '@posthog/core': 1.24.3
+      '@posthog/types': 1.364.1
       core-js: 3.49.0
       dompurify: 3.3.3
       fflate: 0.4.8
