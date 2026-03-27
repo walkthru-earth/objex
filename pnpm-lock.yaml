@@ -65,8 +65,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       '@duckdb/duckdb-wasm':
-        specifier: 1.33.1-dev41.0
-        version: 1.33.1-dev41.0
+        specifier: 1.33.1-dev20.0
+        version: 1.33.1-dev20.0
       '@geoarrow/deck.gl-layers':
         specifier: ^0.3.1
         version: 0.3.1(34ae092dc0c3a9116be4167f056775b2)
@@ -638,8 +638,8 @@ packages:
   '@developmentseed/raster-reproject@0.4.0':
     resolution: {integrity: sha512-UiPM0jC4J0cMbi7IPRDinnYWNyvUbDuNKhhOQ5rEytiGmx6w997lJ6Anu/RU8QoTe0pKYOXk7xfO94b0XOXJ+w==}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev41.0':
-    resolution: {integrity: sha512-W4TjOUhCNaXckwYEHGALFh3T4fBMytE2IJT0gVT6gGQINbK74gqV2/mKmTs/cbJ8DuxyRLVx13pjd+ZALudNgA==}
+  '@duckdb/duckdb-wasm@1.33.1-dev20.0':
+    resolution: {integrity: sha512-ual3d/WDZnyZHNZ3tGdFvTZY22IDdg63Bh0icSBA6JPOy1u89rNfVH/3wQhtoJPv3Xn7eWVJ/4gpT3wprrisoA==}
 
   '@esbuild/aix-ppc64@0.27.3':
     resolution: {integrity: sha512-9fJMTNFTWZMh5qwrBItuziu834eOCUcEqymSH7pY+zoMVEZg3gcPuBNxH1EvfVYe9h0x/Ptw8KBzv7qxb7l8dg==}
@@ -5301,7 +5301,7 @@ snapshots:
 
   '@developmentseed/raster-reproject@0.4.0': {}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev41.0':
+  '@duckdb/duckdb-wasm@1.33.1-dev20.0':
     dependencies:
       apache-arrow: 17.0.0
       qs: 6.15.0
