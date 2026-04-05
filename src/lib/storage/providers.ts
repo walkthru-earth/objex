@@ -388,7 +388,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 	},
 	minio: {
 		defaultEnabled: true,
-		docsUrl: 'https://min.io/docs/minio/linux/reference/minio-mc/mc-cors.html',
+		docsUrl: 'https://docs.min.io/enterprise/aistor-object-store/reference/cli/mc-cors/',
 		note: 'MinIO allows all origins by default. For custom rules, use mc cors set.'
 	},
 	storj: {
@@ -410,7 +410,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 	},
 	wasabi: {
 		defaultEnabled: true,
-		docsUrl: 'https://docs.wasabi.com/docs/how-do-i-use-cors-with-wasabi',
+		docsUrl: 'https://docs.wasabi.com/docs/bucket-policy',
 		note: 'Wasabi returns CORS headers by default for all buckets.'
 	},
 	contabo: {
@@ -475,7 +475,7 @@ export const READ_ONLY_HELP: Partial<Record<ProviderId, ReadOnlyHelp>> = {
 	},
 	r2: {
 		note: 'Create an API token with Object Read permissions in the R2 dashboard.',
-		docsUrl: 'https://developers.cloudflare.com/r2/api/s3/tokens/'
+		docsUrl: 'https://developers.cloudflare.com/r2/api/tokens/'
 	},
 	azure: {
 		note: 'Generate a SAS token with Read and List permissions only. Avoid granting Write or Delete.',
@@ -497,8 +497,7 @@ export const READ_ONLY_HELP: Partial<Record<ProviderId, ReadOnlyHelp>> = {
 	},
 	minio: {
 		note: 'Create a read-only policy with mc admin policy, or use the built-in readonly canned policy.',
-		docsUrl:
-			'https://min.io/docs/minio/linux/administration/identity-access-management/policy-based-access-control.html'
+		docsUrl: 'https://docs.min.io/enterprise/aistor-object-store/administration/iam/access/'
 	},
 	digitalocean: {
 		note: 'Spaces keys are project-wide. Use a bucket policy to restrict write actions for a specific key.',
