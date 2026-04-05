@@ -486,13 +486,14 @@ export const READ_ONLY_HELP: Partial<Record<ProviderId, ReadOnlyHelp>> = {
 		docsUrl: 'https://www.backblaze.com/docs/cloud-storage-application-keys'
 	},
 	hetzner: {
-		note: 'Keys have full read/write by default. Use a bucket policy with the correct ARN format to deny write actions.',
+		note: 'Keys have full read/write by default. Use a bucket policy with the correct ARN format to deny write and policy actions. To undo, generate a new admin key from the Hetzner Console.',
 		docsUrl:
 			'https://docs.hetzner.com/storage/object-storage/faq/s3-credentials/#how-do-i-restrict-access-per-key',
 		cliSteps: [
 			'Find your project ID from the Hetzner Console URL:\nhttps://console.hetzner.com/projects/<PROJECT_ID>/servers',
-			'Create a policy.json file:\n{\n  "Version": "2012-10-17",\n  "Statement": [\n    {\n      "Sid": "DenyWrites",\n      "Effect": "Deny",\n      "Principal": {\n        "AWS": "arn:aws:iam:::user/p<PROJECT_ID>:<ACCESS_KEY>"\n      },\n      "Action": [\n        "s3:PutObject",\n        "s3:DeleteObject",\n        "s3:AbortMultipartUpload"\n      ],\n      "Resource": [\n        "arn:aws:s3:::BUCKET",\n        "arn:aws:s3:::BUCKET/*"\n      ]\n    }\n  ]\n}',
-			'aws s3api put-bucket-policy --bucket BUCKET \\\n  --policy file://policy.json \\\n  --endpoint-url https://REGION.your-objectstorage.com \\\n  --region REGION'
+			'Create a policy.json file:\n{\n  "Version": "2012-10-17",\n  "Statement": [\n    {\n      "Sid": "DenyWrites",\n      "Effect": "Deny",\n      "Principal": {\n        "AWS": "arn:aws:iam:::user/p<PROJECT_ID>:<ACCESS_KEY>"\n      },\n      "Action": [\n        "s3:PutObject",\n        "s3:DeleteObject",\n        "s3:AbortMultipartUpload",\n        "s3:PutBucketPolicy",\n        "s3:DeleteBucketPolicy"\n      ],\n      "Resource": [\n        "arn:aws:s3:::BUCKET",\n        "arn:aws:s3:::BUCKET/*"\n      ]\n    }\n  ]\n}',
+			'aws s3api put-bucket-policy --bucket BUCKET \\\n  --policy file://policy.json \\\n  --endpoint-url https://REGION.your-objectstorage.com \\\n  --region REGION',
+			'Note: This key can no longer modify the policy.\nTo restore write access, generate a new key in the\nHetzner Console and use it to delete the policy.'
 		]
 	},
 	minio: {
