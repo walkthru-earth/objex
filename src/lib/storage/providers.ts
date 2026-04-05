@@ -343,6 +343,115 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
 };
 
 // ---------------------------------------------------------------------------
+// CORS help — provider-specific browser access guidance
+// ---------------------------------------------------------------------------
+
+export interface CorsHelp {
+	/** True if the provider returns CORS headers by default. */
+	defaultEnabled: boolean;
+	/** Official CORS configuration docs URL. */
+	docsUrl?: string;
+	/** Brief note shown in the UI. */
+	note?: string;
+	/** CLI steps when no console UI or docs are insufficient. */
+	cliSteps?: string[];
+}
+
+export const CORS_HELP: Record<ProviderId, CorsHelp> = {
+	s3: {
+		defaultEnabled: false,
+		docsUrl: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/enabling-cors-examples.html',
+		note: 'Enable via S3 Console: Bucket > Permissions > CORS, or use the AWS CLI.'
+	},
+	gcs: {
+		defaultEnabled: false,
+		docsUrl: 'https://cloud.google.com/storage/docs/using-cors',
+		note: 'CORS cannot be configured via the Cloud Console. Use the gcloud CLI.',
+		cliSteps: [
+			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": ["Content-Type", "Content-Range"],\n    "maxAgeSeconds": 3600\n  }\n]',
+			'gcloud storage buckets update gs://BUCKET --cors-file=cors.json'
+		]
+	},
+	r2: {
+		defaultEnabled: false,
+		docsUrl: 'https://developers.cloudflare.com/r2/buckets/cors/',
+		note: 'Enable via R2 Dashboard: Bucket > Settings > CORS Policy.'
+	},
+	azure: {
+		defaultEnabled: false,
+		docsUrl:
+			'https://learn.microsoft.com/en-us/rest/api/storageservices/cross-origin-resource-sharing--cors--support-for-the-azure-storage-services',
+		note: 'Enable via Azure Portal: Storage Account > Blob Service > CORS, or use the Azure CLI.',
+		cliSteps: [
+			'az storage cors add --services b --methods GET HEAD \\\n  --origins "*" --allowed-headers "*" \\\n  --exposed-headers "*" --max-age 3600 \\\n  --account-name ACCOUNT'
+		]
+	},
+	minio: {
+		defaultEnabled: true,
+		docsUrl: 'https://min.io/docs/minio/linux/reference/minio-mc/mc-cors.html',
+		note: 'MinIO allows all origins by default. For custom rules, use mc cors set.'
+	},
+	storj: {
+		defaultEnabled: true,
+		note: 'Storj S3 gateway returns CORS headers by default.'
+	},
+	b2: {
+		defaultEnabled: false,
+		docsUrl: 'https://www.backblaze.com/docs/cloud-storage-cross-origin-resource-sharing-rules',
+		note: 'Enable via B2 Console: Bucket Settings > CORS Rules, or use the B2 CLI.',
+		cliSteps: [
+			'b2 bucket update --cors-rules \'[{\n  "corsRuleName": "allow-all",\n  "allowedOrigins": ["*"],\n  "allowedOperations": ["s3_head", "s3_get"],\n  "allowedHeaders": ["*"],\n  "maxAgeSeconds": 3600\n}]\' BUCKET allPublic'
+		]
+	},
+	digitalocean: {
+		defaultEnabled: false,
+		docsUrl: 'https://docs.digitalocean.com/products/spaces/how-to/configure-cors/',
+		note: 'Enable via Control Panel: Space > Settings > CORS Configurations.'
+	},
+	wasabi: {
+		defaultEnabled: true,
+		docsUrl: 'https://docs.wasabi.com/docs/how-do-i-use-cors-with-wasabi',
+		note: 'Wasabi returns CORS headers by default for all buckets.'
+	},
+	contabo: {
+		defaultEnabled: false,
+		note: 'S3-compatible CORS via the AWS CLI.',
+		cliSteps: [
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.contaboobj.com'
+		]
+	},
+	hetzner: {
+		defaultEnabled: false,
+		docsUrl: 'https://docs.hetzner.com/storage/object-storage/howto-protect-objects/cors/',
+		note: 'S3-compatible CORS via the AWS CLI.',
+		cliSteps: [
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.your-objectstorage.com \\\n  --region REGION'
+		]
+	},
+	linode: {
+		defaultEnabled: false,
+		docsUrl: 'https://www.linode.com/docs/guides/working-with-cors-linode-object-storage/',
+		note: 'S3-compatible CORS via the AWS CLI.',
+		cliSteps: [
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.linodeobjects.com'
+		]
+	},
+	ovhcloud: {
+		defaultEnabled: false,
+		docsUrl:
+			'https://help.ovhcloud.com/csm/en-public-cloud-storage-s3-cors?id=kb_article_view&sysparm_article=KB0058291',
+		note: 'S3-compatible CORS via the AWS CLI.',
+		cliSteps: [
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://s3.REGION.io.cloud.ovh.net'
+		]
+	}
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

@@ -35,6 +35,12 @@ export const ar: Record<string, string> = {
 	'connection.secretKey': 'المفتاح السري',
 	'connection.credentialNotice':
 		'يتم تخزين بيانات اعتمادك فقط في مدير كلمات المرور بمتصفحك إذا اخترت حفظها. لا تُرسل أبداً إلى أي خادم خارجي ولا تُخزّن في التخزين المحلي.',
+	'connection.corsTitle': 'إعداد CORS',
+	'connection.corsRequired':
+		'يتطلب الوصول عبر المتصفح تفعيل CORS على الحاوية. بدونه، سيتم حظر الطلبات.',
+	'connection.corsDefault': 'CORS مفعّل افتراضياً. لا حاجة لأي إعداد.',
+	'connection.corsDocs': 'توثيق CORS الرسمي',
+	'connection.corsCliTitle': 'تفعيل CORS عبر سطر الأوامر',
 	'connection.testSuccess': 'الاتصال ناجح',
 	'connection.testFail': 'فشل الاتصال. تحقق من الإعدادات وحاول مرة أخرى.',
 	'connection.testButton': 'اختبار الاتصال',

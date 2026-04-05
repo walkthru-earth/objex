@@ -1,6 +1,9 @@
 <script lang="ts">
 import CheckIcon from '@lucide/svelte/icons/check';
+import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import CloudIcon from '@lucide/svelte/icons/cloud';
+import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+import GlobeIcon from '@lucide/svelte/icons/globe';
 import LinkIcon from '@lucide/svelte/icons/link';
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import LockIcon from '@lucide/svelte/icons/lock';
@@ -20,6 +23,7 @@ import { Switch } from '$lib/components/ui/switch/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import {
 	buildEndpointFromTemplate,
+	CORS_HELP,
 	getProvider,
 	PROVIDER_IDS,
 	PROVIDERS,
@@ -71,6 +75,7 @@ let isAzure = $derived(provider === 'azure');
 let hasRegions = $derived(providerDef.regions.length > 0);
 let needsRegion = $derived(providerDef.needsRegion);
 let bucketLabel = $derived(providerDef.bucketLabel ?? t('connection.bucket'));
+let corsHelp = $derived(CORS_HELP[provider]);
 
 let isEditMode = $derived(editConnection !== null && editConnection !== undefined);
 let title = $derived(isEditMode ? t('connection.editTitle') : t('connection.newTitle'));
@@ -431,6 +436,57 @@ async function handleTestConnection() {
 						<p>{t('connection.credentialNotice')}</p>
 					</div>
 				</form>
+			{/if}
+
+			<!-- CORS Help -->
+			{#if corsHelp}
+				<details class="group rounded-md border border-border">
+					<summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+						<ChevronRightIcon class="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+						<GlobeIcon class="size-3.5 shrink-0" />
+						{t('connection.corsTitle')}
+					</summary>
+					<div class="flex flex-col gap-2.5 border-t border-border px-3 py-2.5">
+						{#if corsHelp.defaultEnabled}
+							<div class="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">
+								<CheckIcon class="size-3 shrink-0" />
+								<span>{t('connection.corsDefault')}</span>
+							</div>
+						{:else}
+							<p class="text-xs text-muted-foreground">{t('connection.corsRequired')}</p>
+						{/if}
+
+						{#if corsHelp.note}
+							<p class="text-xs text-muted-foreground">{corsHelp.note}</p>
+						{/if}
+
+						{#if corsHelp.docsUrl}
+							<a
+								href={corsHelp.docsUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+							>
+								<ExternalLinkIcon class="size-3 shrink-0" />
+								{t('connection.corsDocs')}
+							</a>
+						{/if}
+
+						{#if corsHelp.cliSteps && corsHelp.cliSteps.length > 0}
+							<details class="group/cli">
+								<summary class="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+									<ChevronRightIcon class="size-3 shrink-0 transition-transform group-open/cli:rotate-90" />
+									{t('connection.corsCliTitle')}
+								</summary>
+								<div class="mt-1.5 flex flex-col gap-1.5">
+									{#each corsHelp.cliSteps as step, i}
+										<pre class="overflow-x-auto rounded bg-muted px-2.5 py-2 text-[11px] leading-relaxed">{step}</pre>
+									{/each}
+								</div>
+							</details>
+						{/if}
+					</div>
+				</details>
 			{/if}
 
 			<!-- Test Connection Result -->

@@ -35,6 +35,12 @@ export const en: Record<string, string> = {
 	'connection.secretKey': 'Secret Key',
 	'connection.credentialNotice':
 		"Your credentials are stored only in your browser's password manager if you choose to save them. They are never sent to any external server or stored in local storage.",
+	'connection.corsTitle': 'CORS Configuration',
+	'connection.corsRequired':
+		'Browser access requires CORS to be enabled on your bucket. Without it, requests will be blocked.',
+	'connection.corsDefault': 'CORS is enabled by default. No configuration needed.',
+	'connection.corsDocs': 'Official CORS docs',
+	'connection.corsCliTitle': 'Enable CORS via CLI',
 	'connection.testSuccess': 'Connection successful',
 	'connection.testFail': 'Connection failed. Check your settings and try again.',
 	'connection.testButton': 'Test Connection',
