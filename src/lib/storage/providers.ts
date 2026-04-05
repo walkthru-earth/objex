@@ -368,7 +368,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 		docsUrl: 'https://cloud.google.com/storage/docs/using-cors',
 		note: 'CORS cannot be configured via the Cloud Console. Use the gcloud CLI.',
 		cliSteps: [
-			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": ["Content-Type", "Content-Range"],\n    "maxAgeSeconds": 3600\n  }\n]',
+			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": [\n      "Content-Type",\n      "Content-Length",\n      "Content-Range",\n      "Accept-Ranges",\n      "ETag"\n    ],\n    "maxAgeSeconds": 3600\n  }\n]',
 			'gcloud storage buckets update gs://BUCKET --cors-file=cors.json'
 		]
 	},
@@ -417,7 +417,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 		defaultEnabled: false,
 		note: 'S3-compatible CORS via the AWS CLI.',
 		cliSteps: [
-			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range", "Accept-Ranges"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
 			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.contaboobj.com'
 		]
 	},
@@ -426,7 +426,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 		docsUrl: 'https://docs.hetzner.com/storage/object-storage/howto-protect-objects/cors/',
 		note: 'S3-compatible CORS via the AWS CLI.',
 		cliSteps: [
-			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range", "Accept-Ranges"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
 			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.your-objectstorage.com \\\n  --region REGION'
 		]
 	},
@@ -435,7 +435,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 		docsUrl: 'https://www.linode.com/docs/guides/working-with-cors-linode-object-storage/',
 		note: 'S3-compatible CORS via the AWS CLI.',
 		cliSteps: [
-			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range", "Accept-Ranges"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
 			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://REGION.linodeobjects.com'
 		]
 	},
@@ -445,8 +445,74 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 			'https://help.ovhcloud.com/csm/en-public-cloud-storage-s3-cors?id=kb_article_view&sysparm_article=KB0058291',
 		note: 'S3-compatible CORS via the AWS CLI.',
 		cliSteps: [
-			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
+			'Create a cors.json file:\n{\n  "CORSRules": [{\n    "AllowedOrigins": ["*"],\n    "AllowedMethods": ["GET", "HEAD"],\n    "AllowedHeaders": ["*"],\n    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range", "Accept-Ranges"],\n    "MaxAgeSeconds": 3600\n  }]\n}',
 			'aws s3api put-bucket-cors --bucket BUCKET \\\n  --cors-configuration file://cors.json \\\n  --endpoint-url https://s3.REGION.io.cloud.ovh.net'
+		]
+	}
+};
+
+// ---------------------------------------------------------------------------
+// Read-only access help — provider-specific bucket policy guidance
+// ---------------------------------------------------------------------------
+
+export interface ReadOnlyHelp {
+	/** Brief note shown in the UI. */
+	note: string;
+	/** Official docs URL. */
+	docsUrl?: string;
+	/** CLI steps to apply a read-only bucket policy. */
+	cliSteps?: string[];
+}
+
+export const READ_ONLY_HELP: Partial<Record<ProviderId, ReadOnlyHelp>> = {
+	s3: {
+		note: 'Use IAM policies to create a read-only user, or apply a bucket policy that allows only s3:GetObject and s3:ListBucket.',
+		docsUrl: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-policies-s3.html'
+	},
+	gcs: {
+		note: 'Assign the Storage Object Viewer role (roles/storage.objectViewer) to the service account.',
+		docsUrl: 'https://cloud.google.com/storage/docs/access-control/iam-roles'
+	},
+	r2: {
+		note: 'Create an API token with Object Read permissions in the R2 dashboard.',
+		docsUrl: 'https://developers.cloudflare.com/r2/api/s3/tokens/'
+	},
+	azure: {
+		note: 'Generate a SAS token with Read and List permissions only. Avoid granting Write or Delete.',
+		docsUrl: 'https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview'
+	},
+	b2: {
+		note: 'Create an application key with readFiles and listBuckets capabilities only.',
+		docsUrl: 'https://www.backblaze.com/docs/cloud-storage-application-keys'
+	},
+	hetzner: {
+		note: 'Keys have full read/write by default. Use a bucket policy with the correct ARN format to deny write actions.',
+		docsUrl:
+			'https://docs.hetzner.com/storage/object-storage/faq/s3-credentials/#how-do-i-restrict-access-per-key',
+		cliSteps: [
+			'Find your project ID from the Hetzner Console URL:\nhttps://console.hetzner.com/projects/<PROJECT_ID>/servers',
+			'Create a policy.json file:\n{\n  "Version": "2012-10-17",\n  "Statement": [\n    {\n      "Sid": "DenyWrites",\n      "Effect": "Deny",\n      "Principal": {\n        "AWS": "arn:aws:iam:::user/p<PROJECT_ID>:<ACCESS_KEY>"\n      },\n      "Action": [\n        "s3:PutObject",\n        "s3:DeleteObject",\n        "s3:AbortMultipartUpload"\n      ],\n      "Resource": [\n        "arn:aws:s3:::BUCKET",\n        "arn:aws:s3:::BUCKET/*"\n      ]\n    }\n  ]\n}',
+			'aws s3api put-bucket-policy --bucket BUCKET \\\n  --policy file://policy.json \\\n  --endpoint-url https://REGION.your-objectstorage.com \\\n  --region REGION'
+		]
+	},
+	minio: {
+		note: 'Create a read-only policy with mc admin policy, or use the built-in readonly canned policy.',
+		docsUrl:
+			'https://min.io/docs/minio/linux/administration/identity-access-management/policy-based-access-control.html'
+	},
+	digitalocean: {
+		note: 'Spaces keys are project-wide. Use a bucket policy to restrict write actions for a specific key.',
+		docsUrl: 'https://docs.digitalocean.com/products/spaces/how-to/manage-access/'
+	},
+	wasabi: {
+		note: 'Create a sub-user with a read-only policy in the Wasabi Console.',
+		docsUrl: 'https://docs.wasabi.com/docs/creating-a-user-account-and-access-key'
+	},
+	contabo: {
+		note: 'S3-compatible bucket policies. Use a Deny policy for write actions with the key ARN.',
+		cliSteps: [
+			'Create a policy.json with a Deny statement for s3:PutObject and s3:DeleteObject.',
+			'aws s3api put-bucket-policy --bucket BUCKET \\\n  --policy file://policy.json \\\n  --endpoint-url https://REGION.contaboobj.com'
 		]
 	}
 };

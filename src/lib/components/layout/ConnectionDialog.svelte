@@ -8,6 +8,7 @@ import LinkIcon from '@lucide/svelte/icons/link';
 import Loader2Icon from '@lucide/svelte/icons/loader-2';
 import LockIcon from '@lucide/svelte/icons/lock';
 import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
+import ShieldIcon from '@lucide/svelte/icons/shield';
 import XIcon from '@lucide/svelte/icons/x';
 import { Button } from '$lib/components/ui/button/index.js';
 import { Input } from '$lib/components/ui/input/index.js';
@@ -27,7 +28,8 @@ import {
 	getProvider,
 	PROVIDER_IDS,
 	PROVIDERS,
-	type ProviderId
+	type ProviderId,
+	READ_ONLY_HELP
 } from '$lib/storage/providers.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
@@ -76,6 +78,7 @@ let hasRegions = $derived(providerDef.regions.length > 0);
 let needsRegion = $derived(providerDef.needsRegion);
 let bucketLabel = $derived(providerDef.bucketLabel ?? t('connection.bucket'));
 let corsHelp = $derived(CORS_HELP[provider]);
+let readOnlyHelp = $derived(READ_ONLY_HELP[provider]);
 
 let isEditMode = $derived(editConnection !== null && editConnection !== undefined);
 let title = $derived(isEditMode ? t('connection.editTitle') : t('connection.newTitle'));
@@ -480,6 +483,46 @@ async function handleTestConnection() {
 								</summary>
 								<div class="mt-1.5 flex flex-col gap-1.5">
 									{#each corsHelp.cliSteps as step, i}
+										<pre class="overflow-x-auto rounded bg-muted px-2.5 py-2 text-[11px] leading-relaxed">{step}</pre>
+									{/each}
+								</div>
+							</details>
+						{/if}
+					</div>
+				</details>
+			{/if}
+
+			<!-- Read-Only Access Help -->
+			{#if readOnlyHelp}
+				<details class="group rounded-md border border-border">
+					<summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+						<ChevronRightIcon class="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+						<ShieldIcon class="size-3.5 shrink-0" />
+						{t('connection.readOnlyTitle')}
+					</summary>
+					<div class="flex flex-col gap-2.5 border-t border-border px-3 py-2.5">
+						<p class="text-xs text-muted-foreground">{readOnlyHelp.note}</p>
+
+						{#if readOnlyHelp.docsUrl}
+							<a
+								href={readOnlyHelp.docsUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+							>
+								<ExternalLinkIcon class="size-3 shrink-0" />
+								{t('connection.readOnlyDocs')}
+							</a>
+						{/if}
+
+						{#if readOnlyHelp.cliSteps && readOnlyHelp.cliSteps.length > 0}
+							<details class="group/ro">
+								<summary class="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+									<ChevronRightIcon class="size-3 shrink-0 transition-transform group-open/ro:rotate-90" />
+									{t('connection.readOnlyCliTitle')}
+								</summary>
+								<div class="mt-1.5 flex flex-col gap-1.5">
+									{#each readOnlyHelp.cliSteps as step, i}
 										<pre class="overflow-x-auto rounded bg-muted px-2.5 py-2 text-[11px] leading-relaxed">{step}</pre>
 									{/each}
 								</div>
