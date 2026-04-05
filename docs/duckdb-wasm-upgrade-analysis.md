@@ -4,6 +4,8 @@
 
 Cannot upgrade `@duckdb/duckdb-wasm` past `1.33.1-dev20.0`. The stoi crash (#2199) is the hard blocker. **Tested dev41.0 on 2026-03-29: crash persists.** PR #2200 did NOT fix it. A fix to `duckdb/duckdb` core (`arrow_duck_schema.cpp` lines 191/230) is required.
 
+**Additional impact (2026-04-05)**: This pin also blocks DuckLake support. DuckLake catalogs created with DuckDB 1.5.x use storage format v68, but dev20.0 only supports v64-v67. See `docs/ducklake-wasm-support.md` for the full DuckLake upgrade checklist.
+
 ## Versions
 
 | Package | Installed | Latest | Notes |

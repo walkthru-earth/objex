@@ -52,7 +52,7 @@ graph TD
 | PdfViewer | pdf.js | utils/pdf |
 | ModelViewer | Babylon.js | utils/model3d |
 | ArchiveViewer | zip.js | utils/archive, utils/url, utils/format |
-| DatabaseViewer | DuckDB-WASM | query/index |
+| DatabaseViewer | DuckDB-WASM | query/index. Handles .duckdb (native attach), .sqlite (sqlite scanner), .ducklake (ATTACH TYPE ducklake, autoloaded extension, read-only, catalog browsing with schema/table discovery, snapshot info). See `docs/ducklake-wasm-support.md` |
 | MarkdownViewer | Marked, Milkdown | utils/markdown, utils/markdown-sql, editor/MilkdownEditor |
 | RawViewer | custom hex dump | utils/hex, utils/format |
 | ImageViewer | native `<img>` | utils/url |
