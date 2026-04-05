@@ -245,14 +245,14 @@ const aliveTabs = $derived(tabs.aliveTabs);
 // Dynamic page title based on active tab
 const pageTitle = $derived.by(() => {
 	const tab = tabs.active;
-	if (!tab) return 'objex — Cloud Storage Explorer';
+	if (!tab) return 'objex - Cloud Storage Explorer';
 	const info = getFileTypeInfo(tab.extension);
-	return `${tab.name} — ${info.label} | objex`;
+	return `${tab.name} - ${info.label} | objex`;
 });
 const pageDescription = $derived.by(() => {
 	const tab = tabs.active;
 	if (!tab)
-		return 'Browse, query, and visualize Parquet, GeoTIFF, PMTiles, CSV, PDF, 3D models and more in S3, GCS, Azure — directly in your browser.';
+		return 'Browse, query, and visualize Parquet, GeoTIFF, PMTiles, CSV, PDF, 3D models and more in S3, GCS, Azure - directly in your browser.';
 	const info = getFileTypeInfo(tab.extension);
 	return `Viewing ${tab.name} (${info.label}) in objex cloud storage explorer`;
 });
