@@ -955,6 +955,16 @@ const EXTENSIONS: Record<string, FileTypeInfo> = {
 		duckdbReadFn: null,
 		mimeType: 'application/octet-stream'
 	},
+	'.ducklake': {
+		icon: 'Database',
+		color: 'text-teal-600 dark:text-teal-400',
+		label: 'DuckLake',
+		category: 'database',
+		viewer: 'database',
+		queryable: true,
+		duckdbReadFn: null,
+		mimeType: 'application/octet-stream'
+	},
 	'.sqlite': {
 		icon: 'Database',
 		color: 'text-sky-600 dark:text-sky-400',
@@ -1134,7 +1144,7 @@ export function buildDuckDbSource(pathOrExt: string, url: string): string {
  * Other cloud-native formats (.fgb, .pmtiles, .zarr) also support range
  * requests but have dedicated viewers and don't go through DuckDB/TableViewer.
  */
-const CLOUD_NATIVE_EXTS = new Set(['.parquet', '.geoparquet', '.gpq', '.gparquet']);
+const CLOUD_NATIVE_EXTS = new Set(['.parquet', '.geoparquet', '.gpq', '.gparquet', '.ducklake']);
 
 export function isCloudNativeFormat(pathOrExt: string): boolean {
 	const ext = pathOrExt.includes('.') ? `.${pathOrExt.split('.').pop()!.toLowerCase()}` : '';
@@ -1157,4 +1167,4 @@ export function getMimeType(extension: string): string {
 }
 
 /** Re-export folder info for components that need it directly. */
-export { FOLDER_INFO, DEFAULT_INFO };
+export { DEFAULT_INFO, FOLDER_INFO };

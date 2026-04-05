@@ -225,6 +225,12 @@ export const ar: Record<string, string> = {
 	'database.loadingTable': 'جارٍ تحميل الجدول...',
 	'database.selectTable': 'اختر جدولاً للتصفح',
 
+	// DuckLake
+	'ducklake.loading': 'جا��ٍ ربط كتالوج DuckLake...',
+	'ducklake.snapshots': 'لقطات',
+	'ducklake.noTables': 'لا توجد جداول في هذا المخطط',
+	'ducklake.extensionHint': 'قد لا يكون امتداد DuckLake متاحاً لهذا الإصدار من DuckDB-WASM.',
+
 	// PDF Viewer
 	'pdf.badge': 'PDF',
 	'pdf.loading': 'جارٍ تحميل PDF...',

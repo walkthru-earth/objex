@@ -1035,6 +1035,22 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
+	async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+		const db = await getDB();
+		await db.registerFileBuffer(name, buffer);
+		log(`registerFileBuffer → "${name}" (${buffer.byteLength} bytes)`);
+	}
+
+	async dropFile(name: string): Promise<void> {
+		const db = await getDB();
+		try {
+			await db.dropFile(name);
+			log(`dropFile → "${name}"`);
+		} catch {
+			// Ignore — file may not exist
+		}
+	}
+
 	async releaseMemory(): Promise<void> {
 		const db = await getDB();
 		const conn = await db.connect();

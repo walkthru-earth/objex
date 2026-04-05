@@ -225,6 +225,13 @@ export const en: Record<string, string> = {
 	'database.loadingTable': 'Loading table...',
 	'database.selectTable': 'Select a table to browse',
 
+	// DuckLake
+	'ducklake.loading': 'Attaching DuckLake catalog...',
+	'ducklake.snapshots': 'snapshots',
+	'ducklake.noTables': 'No tables in this schema',
+	'ducklake.extensionHint':
+		'The DuckLake extension may not be available for this DuckDB-WASM version.',
+
 	// PDF Viewer
 	'pdf.badge': 'PDF',
 	'pdf.loading': 'Loading PDF...',

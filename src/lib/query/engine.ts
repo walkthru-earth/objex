@@ -69,6 +69,10 @@ export interface QueryEngine {
 		sourceCrs?: string | null
 	): MapQueryHandle;
 	forceCancel?(): Promise<void>;
+	/** Register a file buffer in DuckDB-WASM's virtual filesystem for ATTACH. */
+	registerFileBuffer?(name: string, buffer: Uint8Array): Promise<void>;
+	/** Drop a previously registered file from DuckDB-WASM's virtual filesystem. */
+	dropFile?(name: string): Promise<void>;
 	releaseMemory(): Promise<void>;
 	dispose(): Promise<void>;
 }

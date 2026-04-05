@@ -58,16 +58,25 @@ $effect(() => {
 });
 
 async function handleAutoDetection() {
-	// Direct file URLs (e.g. ?url=https://...file.parquet) are opened eagerly
-	// in +page.svelte so they work on mobile. Skip if tab already exists.
 	const url = new URL(window.location.href);
 	const rawUrl = url.searchParams.get('url');
-	if (rawUrl && tabs.items.some((t) => t.id === `url:${rawUrl}`)) {
+
+	const detected = detectHostBucket();
+	if (!detected) {
+		// No recognizable host — let the eager URL tab handle it
 		return;
 	}
 
-	const detected = detectHostBucket();
-	if (!detected) return;
+	// A recognizable storage provider was detected. Close the eagerly-opened
+	// URL tab (if any) so we can re-open it with a proper connectionId that
+	// provides S3 credentials and endpoint config for DuckDB httpfs.
+	if (rawUrl) {
+		const eagerTabId = `url:${rawUrl}`;
+		const eagerTab = tabs.items.find((t) => t.id === eagerTabId);
+		if (eagerTab) {
+			tabs.close(eagerTabId);
+		}
+	}
 
 	const hasUrlParam = url.searchParams.has('url');
 
