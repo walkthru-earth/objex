@@ -207,3 +207,4 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 - `docs/notebook-viewer-research.md` -- Notebook viewer implementation research
 - `docs/ui-ux-improvement-plan.md` -- UI/UX improvement plan
 - `docs/zarr-viewer-architecture.md` -- Zarr viewer architecture, detection, library versions, upstream issues
+- `docs/duckdb-wasm-upgrade-analysis.md` -- DuckDB-WASM upgrade blockers (stoi crash, Arrow mismatch, GeoArrow export), workaround chain, action plan
