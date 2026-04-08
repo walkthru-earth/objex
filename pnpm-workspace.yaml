@@ -3,9 +3,11 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
+  - '@vaadin/vaadin-usage-statistics'
   - core-js
   - esbuild
   - lefthook
+  - protobufjs
 
 patchedDependencies:
   '@developmentseed/deck.gl-geotiff@0.4.0': patches/@developmentseed__deck.gl-geotiff@0.4.0.patch
