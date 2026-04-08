@@ -123,6 +123,13 @@ async function getDB() {
 			} catch {
 				logWarn('geometry_always_xy not available — ST_Transform calls may warn');
 			}
+			// Raise httpfs force_download threshold so moderately sized remote files
+			// are fetched in one shot instead of many small range requests.
+			try {
+				await conn.query('SET GLOBAL force_download_threshold = 2000000');
+			} catch {
+				logWarn('force_download_threshold not available');
+			}
 			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
 			await conn.close();

@@ -21,6 +21,7 @@ graph TD
 - `conn.send()` for data queries (non-blocking, cancellable)
 - `conn.query()` only for fast metadata queries
 - `geometry_always_xy = true` set at DB init (DuckDB v1.5+ lon/lat axis order)
+- `force_download_threshold = 2000000` set at DB init (httpfs downloads files <2MB in one shot instead of range-requesting)
 - `DEFAULT_TARGET_CRS = 'OGC:CRS84'` (GeoParquet 1.1 canonical, equivalent to EPSG:4326 under always_xy)
 - GeoParquet auto-conversion enabled (default) — columns read as `GEOMETRY('EPSG:...')`
 - Legacy GeoParquet fallback: `enable_geoparquet_conversion = false` set per-connection when detected. The known CRS (from hyparquet metadata) is re-attached via `ST_SetCRS(ST_GeomFromWKB(...))` so downstream `ST_Transform` uses the 2-arg form
