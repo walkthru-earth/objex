@@ -26,6 +26,8 @@ export type {
 	QueryEngine,
 	QueryHandle,
 	QueryResult,
+	QuerySource,
 	SchemaField
 } from './engine';
 export { QueryCancelledError } from './engine';
+export { type ResolvedTableSource, resolveTableSource } from './source.js';

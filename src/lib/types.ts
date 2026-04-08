@@ -42,6 +42,17 @@ export interface Tab {
 	connectionId?: string;
 	extension: string;
 	size?: number;
+	/**
+	 * When set, the tab reads data from a SQL FROM-clause target (e.g. an
+	 * attached DuckLake/DuckDB/SQLite table) rather than a file URL. The ref
+	 * is inserted directly into generated SQL, so it must be fully-qualified
+	 * and pre-quoted, e.g. `__objex_db__."main"."air_quality"`.
+	 *
+	 * When `sourceRef` is set, file-specific loading paths (hyparquet
+	 * metadata, `parquet_kv_metadata`, etc.) are skipped, and schema / CRS /
+	 * row count are derived from the SQL source directly via DuckDB.
+	 */
+	sourceRef?: string;
 }
 
 export interface WriteResult {

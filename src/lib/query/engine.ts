@@ -41,6 +41,19 @@ export interface SchemaField {
 	nullable: boolean;
 }
 
+/**
+ * Abstraction over a DuckDB query source. Decouples schema / CRS / count
+ * helpers from assuming a file-backed path. `ref` is the FROM-clause target
+ * inserted into generated SQL (e.g. `read_parquet('url')` for files, or
+ * `attached_db."schema"."table"` for attached databases). `filePath` is
+ * optional and only used as a shortcut for Parquet file-level metadata
+ * queries (`parquet_kv_metadata`, `parquet_file_metadata`), not for SQL.
+ */
+export interface QuerySource {
+	ref: string;
+	filePath?: string;
+}
+
 export interface QueryEngine {
 	query(connId: string, sql: string): Promise<QueryResult>;
 	queryForMap(
@@ -50,14 +63,14 @@ export interface QueryEngine {
 		geomColType: string,
 		sourceCrs?: string | null
 	): Promise<MapQueryResult>;
-	getSchema(connId: string, path: string): Promise<SchemaField[]>;
-	getRowCount(connId: string, path: string): Promise<number>;
+	getSchema(connId: string, source: QuerySource): Promise<SchemaField[]>;
+	getRowCount(connId: string, source: QuerySource): Promise<number>;
 	/** Detect CRS from GeoParquet metadata. Returns e.g. 'EPSG:27700' or null if WGS84/unknown. */
-	detectCrs(connId: string, path: string, geomCol: string): Promise<string | null>;
+	detectCrs(connId: string, source: QuerySource, geomCol: string): Promise<string | null>;
 	/** Combined schema + CRS detection in a single connection (fewer web worker round-trips). */
 	getSchemaAndCrs?(
 		connId: string,
-		path: string,
+		source: QuerySource,
 		findGeoCol: (schema: SchemaField[]) => string | null
 	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }>;
 	queryCancellable?(connId: string, sql: string): QueryHandle;

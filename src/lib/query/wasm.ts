@@ -1,7 +1,7 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
-import { buildDuckDbSource } from '../file-icons/index.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
+import { buildTransformExpr, wrapWkbWithCrs } from '../utils/geometry-type.js';
 import {
 	type MapQueryHandle,
 	type MapQueryResult,
@@ -9,6 +9,7 @@ import {
 	type QueryEngine,
 	type QueryHandle,
 	type QueryResult,
+	type QuerySource,
 	type SchemaField
 } from './engine';
 
@@ -101,8 +102,14 @@ async function getDB() {
 		const conn = await db.connect();
 		try {
 			const tExt = performance.now();
+			// Workaround for duckdb/duckdb-wasm#2199: calling duckdb_coordinate_systems()
+			// FIRST autoloads spatial and registers default CRS properly. Running it
+			// AFTER an explicit LOAD spatial triggers a timing bug in PROJ (WASM-only)
+			// that causes "stoi: no conversion" on any GeoParquet with CRS metadata.
 			await withTimeout(
-				conn.query('INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;'),
+				conn.query(
+					'SELECT * FROM duckdb_coordinate_systems(); INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;'
+				),
 				INIT_TIMEOUT_MS,
 				'extension install (httpfs + spatial)'
 			);
@@ -421,22 +428,20 @@ export class WasmQueryEngine implements QueryEngine {
 				wkbExpr = quoted;
 				geomExpr = null; // geometry type detected client-side from WKB headers
 			} else {
+				// For BLOB inputs with a known source CRS, attach it via ST_SetCRS so
+				// downstream ST_Transform can use the 2-arg form and the CRS propagates
+				// through any subsequent spatial ops (DuckDB v1.5+).
 				geomExpr = spatialType
 					? quoted
 					: isWkbBlob
-						? `ST_GeomFromWKB(${quoted})`
+						? wrapWkbWithCrs(quoted, sourceCrs)
 						: `ST_GeomFromGeoJSON(${quoted})`;
 
 				// Re-project to WGS84 if the source CRS is not EPSG:4326/CRS84.
 				// geometry_always_xy is set globally at DB init, so no per-call always_xy needed.
 				if (sourceCrs) {
-					// DuckDB v1.5: if GEOMETRY type carries CRS, use 2-arg ST_Transform
-					const hasCrsInType = /^GEOMETRY\('/i.test(geomColType);
-					if (hasCrsInType) {
-						geomExpr = `ST_Transform(${geomExpr}, '${DEFAULT_TARGET_CRS}')`;
-					} else {
-						geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}')`;
-					}
+					const effectiveType = isWkbBlob ? `GEOMETRY('${sourceCrs}')` : geomColType;
+					geomExpr = buildTransformExpr(geomExpr, effectiveType, sourceCrs, DEFAULT_TARGET_CRS);
 				}
 
 				// ST_AsWKB needed — DuckDB GEOMETRY columns (from ST_ReadSHP, ST_Read)
@@ -497,9 +502,9 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
-	async getSchema(connId: string, path: string): Promise<SchemaField[]> {
+	async getSchema(connId: string, source: QuerySource): Promise<SchemaField[]> {
 		const t0 = performance.now();
-		log('getSchema →', path);
+		log('getSchema →', source.ref);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -508,8 +513,7 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
-			const source = buildDuckDbSource(path, path);
-			const result = await conn.query(`DESCRIBE SELECT * FROM ${source}`);
+			const result = await conn.query(`DESCRIBE SELECT * FROM ${source.ref}`);
 			const rows = result.toArray();
 
 			const schema = rows.map((row: any) => ({
@@ -527,9 +531,9 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
-	async getRowCount(connId: string, path: string): Promise<number> {
+	async getRowCount(connId: string, source: QuerySource): Promise<number> {
 		const t0 = performance.now();
-		log('getRowCount →', path);
+		log('getRowCount →', source.ref);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -541,11 +545,13 @@ export class WasmQueryEngine implements QueryEngine {
 			// For Parquet files, try reading row count from file footer metadata first.
 			// This avoids parsing column types (which can fail on exotic geometry types)
 			// and is faster than SELECT COUNT(*) since it reads only footer bytes.
-			const isParquet = /\.parquet$/i.test(path);
-			if (isParquet) {
+			// Only applicable when we have a concrete file path — SQL-backed sources
+			// (attached DuckLake/DuckDB/SQLite tables) fall through to COUNT(*).
+			const isParquet = source.filePath ? /\.parquet$/i.test(source.filePath) : false;
+			if (isParquet && source.filePath) {
 				try {
 					const metaResult = await conn.query(
-						`SELECT SUM(num_rows)::BIGINT as cnt FROM parquet_file_metadata('${path}')`
+						`SELECT SUM(num_rows)::BIGINT as cnt FROM parquet_file_metadata('${source.filePath}')`
 					);
 					const metaRows = metaResult.toArray();
 					const count = Number(metaRows[0].cnt);
@@ -559,8 +565,7 @@ export class WasmQueryEngine implements QueryEngine {
 				}
 			}
 
-			const source = buildDuckDbSource(path, path);
-			const result = await conn.query(`SELECT COUNT(*) as cnt FROM ${source}`);
+			const result = await conn.query(`SELECT COUNT(*) as cnt FROM ${source.ref}`);
 			const rows = result.toArray();
 			const count = Number(rows[0].cnt);
 			log(`getRowCount → ${count} via COUNT(*) in ${elapsed(t0)}`);
@@ -575,11 +580,11 @@ export class WasmQueryEngine implements QueryEngine {
 
 	async getSchemaAndCrs(
 		connId: string,
-		path: string,
+		source: QuerySource,
 		findGeoCol: (schema: SchemaField[]) => string | null
 	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }> {
 		const t0 = performance.now();
-		log('getSchemaAndCrs →', path);
+		log('getSchemaAndCrs →', source.ref);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -590,8 +595,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			// Schema detection
 			const tSchema = performance.now();
-			const source = buildDuckDbSource(path, path);
-			const result = await conn.query(`DESCRIBE SELECT * FROM ${source}`);
+			const result = await conn.query(`DESCRIBE SELECT * FROM ${source.ref}`);
 			const schemaRows = result.toArray();
 			const schema: SchemaField[] = schemaRows.map((row: any) => ({
 				name: row.column_name,
@@ -610,7 +614,7 @@ export class WasmQueryEngine implements QueryEngine {
 			// CRS detection reusing the same connection
 			log(`getSchemaAndCrs → geo column: ${geomCol}, detecting CRS...`);
 			const tCrs = performance.now();
-			const crs = await this.detectCrsWithConn(conn, path, geomCol);
+			const crs = await this.detectCrsWithConn(conn, source, geomCol);
 			log(
 				`getSchemaAndCrs → CRS: ${crs ?? 'WGS84/null'} in ${elapsed(tCrs)}, total ${elapsed(t0)}`
 			);
@@ -679,9 +683,9 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
-	async detectCrs(connId: string, path: string, geomCol: string): Promise<string | null> {
+	async detectCrs(connId: string, source: QuerySource, geomCol: string): Promise<string | null> {
 		const t0 = performance.now();
-		log(`detectCrs → standalone call for "${geomCol}"`, path);
+		log(`detectCrs → standalone call for "${geomCol}"`, source.ref);
 		const db = await getDB();
 		const conn = await db.connect();
 
@@ -690,7 +694,7 @@ export class WasmQueryEngine implements QueryEngine {
 				await this.configureStorage(conn, connId);
 			}
 
-			const crs = await this.detectCrsWithConn(conn, path, geomCol);
+			const crs = await this.detectCrsWithConn(conn, source, geomCol);
 			log(`detectCrs → ${crs ?? 'WGS84/null'} in ${elapsed(t0)}`);
 			return crs;
 		} catch (err) {
@@ -703,16 +707,16 @@ export class WasmQueryEngine implements QueryEngine {
 
 	private async detectCrsWithConn(
 		conn: any,
-		path: string,
+		source: QuerySource,
 		geomCol: string
 	): Promise<string | null> {
 		// Strategy 0: DuckDB v1.5 — CRS embedded in GEOMETRY column type
-		// e.g., GEOMETRY('EPSG:4326') → extract CRS directly from type string
+		// e.g., GEOMETRY('EPSG:4326') → extract CRS directly from type string.
+		// Works uniformly for file-backed and SQL-backed (attached) sources.
 		try {
 			const t0 = performance.now();
-			const source = buildDuckDbSource(path, path);
 			const descResult = await conn.query(
-				`SELECT column_type FROM (DESCRIBE SELECT * FROM ${source}) WHERE column_name = '${geomCol}'`
+				`SELECT column_type FROM (DESCRIBE SELECT * FROM ${source.ref}) WHERE column_name = '${geomCol}'`
 			);
 			const descRows = descResult.toArray();
 			log(`detectCrs strategy 0 (column type) → ${descRows.length} rows in ${elapsed(t0)}`);
@@ -730,6 +734,15 @@ export class WasmQueryEngine implements QueryEngine {
 		} catch (err) {
 			log('detectCrs strategy 0 → skipped:', (err as Error)?.message ?? err);
 		}
+
+		// Strategies 1 and 2 rely on file-level Parquet metadata functions.
+		// SQL-backed sources (attached DuckLake/DuckDB/SQLite tables) don't have
+		// a Parquet file path, so strategy 0 is authoritative for them.
+		if (!source.filePath) {
+			log('detectCrs → no filePath, skipping Parquet metadata strategies');
+			return null;
+		}
+		const path = source.filePath;
 
 		// Strategy 1: GeoParquet file-level metadata (geo key in KV metadata)
 		try {
@@ -913,15 +926,11 @@ export class WasmQueryEngine implements QueryEngine {
 					geomExpr = spatialType
 						? quoted
 						: isWkbBlob
-							? `ST_GeomFromWKB(${quoted})`
+							? wrapWkbWithCrs(quoted, sourceCrs)
 							: `ST_GeomFromGeoJSON(${quoted})`;
 					if (sourceCrs) {
-						const hasCrsInType = /^GEOMETRY\('/i.test(geomColType);
-						if (hasCrsInType) {
-							geomExpr = `ST_Transform(${geomExpr}, '${DEFAULT_TARGET_CRS}')`;
-						} else {
-							geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', '${DEFAULT_TARGET_CRS}')`;
-						}
+						const effectiveType = isWkbBlob ? `GEOMETRY('${sourceCrs}')` : geomColType;
+						geomExpr = buildTransformExpr(geomExpr, effectiveType, sourceCrs, DEFAULT_TARGET_CRS);
 					}
 					wkbExpr = `ST_AsWKB(${geomExpr})`;
 				}

@@ -2,15 +2,23 @@
 import { format as formatSql } from 'sql-formatter';
 import { untrack } from 'svelte';
 import CodeMirrorEditor from '$lib/components/editor/CodeMirrorEditor.svelte';
-import { buildDuckDbSource, isCloudNativeFormat } from '$lib/file-icons/index.js';
+import { DEFAULT_TARGET_CRS } from '$lib/constants.js';
+import { isCloudNativeFormat } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { MapQueryResult, SchemaField } from '$lib/query/engine';
-import { getQueryEngine, QueryCancelledError, type QueryHandle } from '$lib/query/index.js';
+import {
+	getQueryEngine,
+	QueryCancelledError,
+	type QueryHandle,
+	type ResolvedTableSource,
+	resolveTableSource
+} from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import type { GeoArrowGeomType } from '$lib/utils/geoarrow.js';
+import { buildTransformExpr, wrapWkbWithCrs } from '$lib/utils/geometry-type.js';
 import {
 	extractBounds,
 	extractEpsgFromGeoMeta,
@@ -91,8 +99,8 @@ const columnTypes = $derived(Object.fromEntries(schema.map((f) => [f.name, f.typ
 const displayColumns = $derived(columns.filter((c) => c !== '__wkb'));
 
 function buildDefaultSql(offset = 0): string {
-	const fileUrl = buildDuckDbUrl(tab);
-	const source = buildDuckDbSource(tab.path, fileUrl);
+	const resolved = resolveTableSource(tab);
+	const source = resolved.ref;
 
 	let sql: string;
 	if (geoCol) {
@@ -115,20 +123,17 @@ function buildDefaultSql(offset = 0): string {
 			// Already WKB — use directly, no conversion needed
 			wkbExpr = `${quoted} AS __wkb`;
 		} else {
+			// For BLOB inputs with a known source CRS, attach it via ST_SetCRS so the
+			// 2-arg ST_Transform form can be used (DuckDB v1.5+).
 			let geomExpr = spatialType
 				? quoted
 				: isWkbBlob
-					? `ST_GeomFromWKB(${quoted})`
+					? wrapWkbWithCrs(quoted, sourceCrs)
 					: `ST_GeomFromGeoJSON(${quoted})`;
 			if (sourceCrs) {
-				// DuckDB v1.5: if GEOMETRY type carries CRS, use 2-arg ST_Transform.
 				// geometry_always_xy is set globally at DB init, so no per-call always_xy.
-				const hasCrsInType = /^GEOMETRY\('/i.test(geoColType);
-				if (hasCrsInType) {
-					geomExpr = `ST_Transform(${geomExpr}, 'EPSG:4326')`;
-				} else {
-					geomExpr = `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326')`;
-				}
+				const effectiveType = isWkbBlob ? `GEOMETRY('${sourceCrs}')` : geoColType;
+				geomExpr = buildTransformExpr(geomExpr, effectiveType, sourceCrs, DEFAULT_TARGET_CRS);
 			}
 			wkbExpr = `ST_AsWKB(${geomExpr}) AS __wkb`;
 		}
@@ -288,17 +293,21 @@ async function loadTable() {
 	customSql = initialSql;
 
 	try {
-		const fileUrl = buildDuckDbUrl(tab);
-		const httpsUrl = buildHttpsUrl(tab);
-		const cloudNative = isCloudNativeFormat(tab.path);
-		const isParquet = /\.parquet$/i.test(tab.path);
-		const streamable = canStreamDirectly(tab);
+		const resolved: ResolvedTableSource = resolveTableSource(tab);
+		const isFileSource = resolved.isFileSource;
+		const fileUrl = resolved.fileUrl ?? '';
+		const httpsUrl = isFileSource ? buildHttpsUrl(tab) : '';
+		const cloudNative = isFileSource && isCloudNativeFormat(tab.path);
+		const isParquet = isFileSource && /\.parquet$/i.test(tab.path);
+		const streamable = isFileSource && canStreamDirectly(tab);
 
 		// Start DuckDB boot immediately (runs in parallel with hyparquet)
 		loadStage = t('table.initEngine');
 		const enginePromise = getQueryEngine();
 
 		// ── Fast metadata via hyparquet (runs concurrently with DuckDB boot) ──
+		// Only applies to file-backed sources. SQL-backed sources (attached
+		// DuckLake tables, etc.) go straight to DuckDB for schema + CRS.
 		let metaFromHyparquet = false;
 		let needsDuckDbCrs = false;
 		let isLegacyGeoParquet = false;
@@ -451,7 +460,7 @@ async function loadTable() {
 		// reads GeoParquet as GEOMETRY('EPSG:...') with CRS embedded in the type.
 		if (metaFromHyparquet && geoCol && !isLegacyGeoParquet) {
 			try {
-				const duckSchema = await engine.getSchema(connId, fileUrl);
+				const duckSchema = await engine.getSchema(connId, resolved);
 				if (thisGen !== loadGeneration) return;
 				const duckGeoField = duckSchema.find((f: { name: string }) => f.name === geoCol);
 				if (duckGeoField) {
@@ -481,7 +490,7 @@ async function loadTable() {
 		// (native Parquet GEOMETRY without "geo" KV metadata), use DuckDB
 		if (metaFromHyparquet && needsDuckDbCrs && geoCol) {
 			try {
-				sourceCrs = await engine.detectCrs(connId, fileUrl, geoCol);
+				sourceCrs = await engine.detectCrs(connId, resolved, geoCol);
 				if (thisGen !== loadGeneration) return;
 				if (sourceCrs) {
 					loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
@@ -496,16 +505,22 @@ async function loadTable() {
 			}
 		}
 
-		if (cloudNative && !metaFromHyparquet) {
-			// Fallback: DuckDB metadata queries
+		// DuckDB-backed schema + CRS pre-load. Runs when:
+		//   - the source is SQL-backed (attached table, no hyparquet path), OR
+		//   - it's a cloud-native file and hyparquet metadata failed (CORS, etc.)
+		if (!isFileSource || (cloudNative && !metaFromHyparquet)) {
+			// Fallback / SQL source: DuckDB metadata queries
 			loadStage = t('table.loadingSchema');
 			loadProgress = [
 				...loadProgress,
-				{ label: t('progress.source'), value: t('progress.duckdbFallback') }
+				{
+					label: t('progress.source'),
+					value: isFileSource ? t('progress.duckdbFallback') : resolved.label
+				}
 			];
 
 			if (engine.getSchemaAndCrs) {
-				const result = await engine.getSchemaAndCrs(connId, fileUrl, findGeoColumn);
+				const result = await engine.getSchemaAndCrs(connId, resolved, findGeoColumn);
 				if (thisGen !== loadGeneration) return;
 				schema = result.schema;
 				columns = schema.map((f) => f.name);
@@ -532,7 +547,7 @@ async function loadTable() {
 					}
 				}
 			} else {
-				schema = await engine.getSchema(connId, fileUrl);
+				schema = await engine.getSchema(connId, resolved);
 				if (thisGen !== loadGeneration) return;
 				columns = schema.map((f) => f.name);
 				const colPreview =
@@ -553,7 +568,7 @@ async function loadTable() {
 						...loadProgress,
 						{ label: t('progress.geometry'), value: `${detectedGeoCol} (${geoColType})` }
 					];
-					sourceCrs = await engine.detectCrs(connId, fileUrl, detectedGeoCol);
+					sourceCrs = await engine.detectCrs(connId, resolved, detectedGeoCol);
 					if (thisGen !== loadGeneration) return;
 					if (sourceCrs) {
 						loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
@@ -598,9 +613,12 @@ async function loadTable() {
 
 		executionTimeMs = Math.round(performance.now() - start);
 
-		if (!cloudNative && result) {
-			// Non-cloud-native (CSV, GeoJSON, etc.): derive schema from the
-			// query result so we avoid a second full-file download.
+		if (isFileSource && !cloudNative && result) {
+			// Non-cloud-native file (CSV, GeoJSON, etc.): derive schema from the
+			// query result so we avoid a second full-file download. Skipped for
+			// SQL-backed sources (attached DuckLake tables), which already have
+			// a proper schema from getSchemaAndCrs — re-deriving here would pick
+			// up the projected `__wkb` alias and clobber the real geo column.
 			schema = (result.columns ?? []).map((col, i) => ({
 				name: col,
 				type: result.types?.[i] ?? 'VARCHAR',
@@ -655,7 +673,7 @@ async function loadTable() {
 			} else {
 				loadStage = t('table.countingRows');
 				engine
-					.getRowCount(connId, fileUrl)
+					.getRowCount(connId, resolved)
 					.then((count) => {
 						if (thisGen === loadGeneration) {
 							totalRows = count;

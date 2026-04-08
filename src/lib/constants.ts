@@ -16,8 +16,12 @@ export const STORAGE_KEYS = {
 /** EPSG codes considered WGS84 (no reprojection needed). */
 export const WGS84_CODES = new Set([4326, 4979]);
 
-/** Default target CRS for ST_Transform. */
-export const DEFAULT_TARGET_CRS = 'EPSG:4326';
+/**
+ * Default target CRS for ST_Transform. Uses OGC:CRS84 (longitude, latitude)
+ * to match GeoParquet 1.1+ spec and DuckDB v1.5's canonical form.
+ * Functionally equivalent to EPSG:4326 under `geometry_always_xy = true`.
+ */
+export const DEFAULT_TARGET_CRS = 'OGC:CRS84';
 
 // ── Query engine constants ──
 
