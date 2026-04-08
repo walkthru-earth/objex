@@ -9,7 +9,7 @@ import { getQueryEngine } from '$lib/query/index.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import TableGrid from './TableGrid.svelte';
+import TableViewer from './TableViewer.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -19,10 +19,14 @@ let tables = $state<string[]>([]);
 let schemas = $state<string[]>([]);
 let selectedSchema = $state<string>('main');
 let selectedTable = $state<string | null>(null);
-let columns = $state<string[]>([]);
-let rows = $state<Record<string, any>[]>([]);
-let tableLoading = $state(false);
 let showSql = $state(false);
+
+/**
+ * Synthetic tab for the embedded TableViewer. Rebuilt whenever the user
+ * picks a different table, so TableViewer sees a new `tab.id` and runs its
+ * normal load lifecycle (including tabResources cleanup of the previous).
+ */
+let childTab = $state<Tab | null>(null);
 
 // DuckLake state: true for .ducklake files, auto-detected for .duckdb files
 let isDuckLake = $state(false);
@@ -46,9 +50,8 @@ $effect(() => {
 function cleanup() {
 	tables = [];
 	schemas = [];
-	rows = [];
-	columns = [];
 	selectedTable = null;
+	childTab = null;
 	isDuckLake = false;
 	snapshotVersion = null;
 	snapshotTimestamp = null;
@@ -197,7 +200,7 @@ async function loadDuckLake(engine: any, connId: string) {
 	try {
 		const schemaResult = await engine.query(
 			connId,
-			`SELECT DISTINCT schema_name FROM (DESCRIBE) WHERE database = '${ATTACH_ALIAS}' ORDER BY schema_name;`
+			`SELECT DISTINCT "schema" AS schema_name FROM (DESCRIBE) WHERE database = '${ATTACH_ALIAS}' ORDER BY "schema";`
 		);
 		schemas = (schemaResult.rows ?? [])
 			.map((r: any) => r.schema_name)
@@ -207,6 +210,14 @@ async function loadDuckLake(engine: any, connId: string) {
 		schemas = ['main'];
 	}
 
+	// Align selectedSchema with the discovered list. DuckLake catalogs often
+	// use 'default' or a user-named schema, not 'main', so the initial value
+	// would otherwise produce an empty table list until the user manually
+	// switches via the dropdown.
+	if (!schemas.includes(selectedSchema)) {
+		selectedSchema = schemas[0];
+	}
+
 	// Load tables for selected schema
 	await loadDuckLakeTables(engine, connId);
 }
@@ -214,7 +225,7 @@ async function loadDuckLake(engine: any, connId: string) {
 async function loadDuckLakeTables(engine: any, connId: string) {
 	const result = await engine.query(
 		connId,
-		`SELECT table_name FROM (DESCRIBE) WHERE database = '${ATTACH_ALIAS}' AND schema_name = '${selectedSchema}' ORDER BY table_name;`
+		`SELECT "name" AS table_name FROM (DESCRIBE) WHERE database = '${ATTACH_ALIAS}' AND "schema" = '${selectedSchema}' ORDER BY "name";`
 	);
 	tables = (result.rows ?? [])
 		.map((r: any) => r.table_name)
@@ -224,9 +235,7 @@ async function loadDuckLakeTables(engine: any, connId: string) {
 async function switchSchema(schema: string) {
 	selectedSchema = schema;
 	selectedTable = null;
-	columns = [];
-	rows = [];
-	tableLoading = true;
+	childTab = null;
 
 	try {
 		const engine = await getQueryEngine();
@@ -234,34 +243,39 @@ async function switchSchema(schema: string) {
 		await loadDuckLakeTables(engine, connId);
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
-	} finally {
-		tableLoading = false;
 	}
 }
 
-async function selectTable(tableName: string) {
-	selectedTable = tableName;
-	tableLoading = true;
-
-	try {
-		const engine = await getQueryEngine();
-		const connId = tab.connectionId ?? '';
-
-		let fromClause: string;
-		if (isDuckLake) {
-			fromClause = `${ATTACH_ALIAS}."${selectedSchema}"."${tableName}"`;
-		} else {
-			fromClause = `"${tableName}"`;
-		}
-
-		const result = await engine.query(connId, `SELECT * FROM ${fromClause} LIMIT 1000`);
-		columns = result.columns;
-		rows = result.rows ?? [];
-	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
-	} finally {
-		tableLoading = false;
+/**
+ * Build the FROM-clause target for a table inside the attached database.
+ * For DuckLake/DuckDB we fully-qualify via the attach alias and schema;
+ * for SQLite, the scanner exposes tables by bare name in the main catalog.
+ */
+function buildSourceRef(tableName: string): string {
+	// DuckLake / .duckdb tables live inside the attach alias; SQLite's scanner
+	// exposes tables by bare name in the main catalog.
+	const ext = tab.extension.toLowerCase();
+	if (isDuckLake || ext === 'duckdb') {
+		return `${ATTACH_ALIAS}."${selectedSchema}"."${tableName}"`;
 	}
+	return `"${tableName}"`;
+}
+
+function selectTable(tableName: string) {
+	selectedTable = tableName;
+	const ref = buildSourceRef(tableName);
+	// Synthetic tab: unique id per (db-tab, schema, table) so TableViewer
+	// re-runs its $effect-driven load and tabResources cleanup fires on
+	// the previous selection.
+	childTab = {
+		id: `${tab.id}::${selectedSchema}.${tableName}`,
+		name: `${selectedSchema}.${tableName}`,
+		path: `${tab.path}#${selectedSchema}.${tableName}`,
+		source: tab.source,
+		connectionId: tab.connectionId,
+		extension: 'parquet',
+		sourceRef: ref
+	};
 }
 </script>
 
@@ -351,18 +365,18 @@ async function selectTable(tableName: string) {
 				{/if}
 			</div>
 
-			<!-- Content -->
+			<!-- Content: embed TableViewer with a synthetic tab pointed at the
+			     attached table. TableViewer handles SQL editing, CRS detection
+			     from DuckDB v1.5 GEOMETRY types, and zero-copy WKB → map. -->
 			<div class="flex flex-1 flex-col overflow-hidden">
 				{#if showSql}
 					<div class="flex-1">
 						<SqlEditor connId={tab.connectionId ?? ''} />
 					</div>
-				{:else if tableLoading}
-					<div class="flex flex-1 items-center justify-center">
-						<p class="text-sm text-zinc-400">{t('database.loadingTable')}</p>
-					</div>
-				{:else if selectedTable && columns.length > 0}
-					<TableGrid {columns} {rows} />
+				{:else if childTab}
+					{#key childTab.id}
+						<TableViewer tab={childTab} />
+					{/key}
 				{:else}
 					<div class="flex flex-1 items-center justify-center">
 						<p class="text-sm text-zinc-400">{t('database.selectTable')}</p>
