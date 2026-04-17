@@ -168,6 +168,37 @@ export function isDefaultBandConfig(
 	);
 }
 
+// ─── TIFF tag inspection ─────────────────────────────────────────
+
+export interface CogTagInfo {
+	/** TIFF SampleFormat[0] value. 1=uint, 2=int, 3=float. Defaults to 1 when absent. */
+	sampleFormat: number;
+	/** True when SampleFormat[0] === 1 (unsigned integer). */
+	isUint: boolean;
+	/**
+	 * True when Photometric === 3 (Palette) and the ColorMap tag is present.
+	 * These COGs should defer to the library's default Colormap GPU module,
+	 * not our custom JS pipeline, so the embedded palette renders correctly.
+	 */
+	isPaletteIndexed: boolean;
+}
+
+/**
+ * Inspect the TIFF tags that drive pipeline selection. Centralizes the
+ * Photometric.Palette === 3 magic number and the SampleFormat fallback in one
+ * place so viewers don't reimplement raw tag reads. Photometric values come
+ * from the @cogeotiff/core Photometric enum.
+ */
+export function inspectCogTags(geotiff: GeoTIFFType): CogTagInfo {
+	const tags = geotiff.cachedTags;
+	const sampleFormat = tags.sampleFormat?.[0] ?? 1;
+	return {
+		sampleFormat,
+		isUint: sampleFormat === 1,
+		isPaletteIndexed: tags.photometric === 3 && Boolean(tags.colorMap)
+	};
+}
+
 /**
  * Check if a given band config requires a custom pipeline (vs library default).
  * Library default only works for uint with standard RGB band order, or for
@@ -270,6 +301,116 @@ export function createRescaledPipeline(
 			};
 		}
 	};
+}
+
+// ─── GeoTIFF normalization for COGLayer ──────────────────────────
+
+// Web Mercator's safe latitude limit. EPSG:4326 bboxes outside ±85.051129° hit
+// out-of-domain proj4 NaN when the library generates its tile matrix set.
+const WM_LAT_LIMIT = 85.051129;
+
+/**
+ * Apply the two upstream-bug workarounds a GeoTIFF needs before being handed
+ * to `COGLayer`:
+ * 1. Strip oversized overviews (image smaller than tile size). These produce
+ *    out-of-domain proj4 NaN during pre-flight reprojection.
+ * 2. Clamp EPSG:4326 bbox to Web Mercator's safe range. Global 4326 COGs with
+ *    ±90° extents crash the tile matrix generator.
+ *
+ * Mutates the GeoTIFF in place. Safe to call repeatedly. Kept out of the
+ * Svelte component so MultiCOG/Mosaic can apply the same fix per sub-COG.
+ */
+export function normalizeCogGeotiff(geotiff: GeoTIFFType): void {
+	const validOverviews = geotiff.overviews.filter(
+		(ov) => ov.width >= ov.tileWidth && ov.height >= ov.tileHeight
+	);
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	(geotiff as any).overviews = validOverviews;
+
+	if (geotiff.crs === 4326) {
+		const [x0, y0, x1, y1] = geotiff.bbox;
+		const clamped = [
+			Math.max(x0, -180),
+			Math.max(y0, -WM_LAT_LIMIT),
+			Math.min(x1, 180),
+			Math.min(y1, WM_LAT_LIMIT)
+		] as [number, number, number, number];
+		if (clamped[0] !== x0 || clamped[1] !== y0 || clamped[2] !== x1 || clamped[3] !== y1) {
+			Object.defineProperty(geotiff, 'bbox', {
+				value: clamped,
+				writable: false,
+				configurable: true
+			});
+		}
+	}
+}
+
+// ─── Pipeline dispatch ────────────────────────────────────────────
+
+/**
+ * Resolved COGLayer data props. Empty object means "library default pipeline".
+ * Spread into `new COGLayer({ ..., ...resolved })` to activate.
+ *
+ * COGLayer's data-prop types are a discriminated XOR and the four pipelines we
+ * dispatch to return different DataT shapes (`CustomTileData`, `MinimalDataT`).
+ * Typing this as `Record<string, any>` matches the `customProps` pattern
+ * already used at the COGLayer boundary and keeps the dispatch site simple.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ResolvedCogPipeline = Record<string, any>;
+
+export interface SelectCogPipelineOptions {
+	/** Active band/color config, or null/undefined when not yet resolved. */
+	bandConfig?: BandConfig | null;
+	/** Linear rescale GPU module values. No-op when omitted or at defaults. */
+	rescale?: RescaleConfig;
+}
+
+/**
+ * Decide which getTileData/renderTile pair COGLayer should use for a GeoTIFF.
+ * Four outcomes, in priority order:
+ *
+ * 1. Custom configurable (band swap, color ramp) — when bandConfig is active
+ *    and needsCustomPipelineForConfig is true (non-uint, mode=single, or
+ *    non-standard RGB band order).
+ * 2. Custom non-uint (Int/Float source) — when no bandConfig yet but the
+ *    GeoTIFF itself forces custom handling.
+ * 3. Library default + LinearRescale — uint path is fine AND the user moved
+ *    the rescale slider away from defaults.
+ * 4. Library default — returns `{}`, caller spreads into COGLayer props.
+ *
+ * Pure dispatch. Kept separate from the Svelte component so MultiCOG/Mosaic
+ * viewers can call it per sub-COG without re-implementing the decision tree.
+ */
+export function selectCogPipeline(
+	geotiff: GeoTIFFType,
+	opts: SelectCogPipelineOptions = {}
+): ResolvedCogPipeline {
+	const { bandConfig, rescale } = opts;
+	const useCustom = bandConfig
+		? needsCustomPipelineForConfig(geotiff, bandConfig)
+		: needsCustomPipeline(geotiff);
+
+	if (useCustom && bandConfig) {
+		return {
+			getTileData: createConfigurableGetTileData(geotiff, bandConfig),
+			renderTile: customRenderTile
+		};
+	}
+	if (useCustom) {
+		return {
+			getTileData: createCustomGetTileData(geotiff),
+			renderTile: customRenderTile
+		};
+	}
+	if (rescale && isRescaleActive(rescale)) {
+		const pipeline = createRescaledPipeline(geotiff, rescale);
+		return {
+			getTileData: pipeline.getTileData,
+			renderTile: pipeline.renderTile
+		};
+	}
+	return {};
 }
 
 const BITMAP_SOURCE = 'geotiff-bitmap-src';

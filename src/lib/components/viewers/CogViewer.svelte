@@ -13,22 +13,19 @@ import {
 	type CogInfo,
 	clampBounds,
 	cleanupNativeBitmap,
-	createConfigurableGetTileData,
-	createCustomGetTileData,
 	createEpsgResolver,
-	createRescaledPipeline,
-	customRenderTile,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
-	isRescaleActive,
-	needsCustomPipeline,
+	inspectCogTags,
 	needsCustomPipelineForConfig,
+	normalizeCogGeotiff,
 	type PixelValue,
 	type RescaleConfig,
 	readPixelAtLngLat,
 	renderNonTiledBitmap,
-	resolveProj4Def
+	resolveProj4Def,
+	selectCogPipeline
 } from '../../utils/cog.js';
 import { buildHttpsUrl } from '../../utils/url.js';
 import CogControls from './CogControls.svelte';
@@ -196,10 +193,9 @@ async function loadCog(map: maplibregl.Map) {
 		if (preflightGeotiff) {
 			geotiffRef = preflightGeotiff;
 			isTiledRef = isTiled;
-			const tags = preflightGeotiff.cachedTags;
-			sampleFormatRef = tags.sampleFormat?.[0] ?? 1;
-			// Photometric.Palette === 3 in @cogeotiff/core.
-			isPaletteIndexed = tags.photometric === 3 && Boolean(tags.colorMap);
+			const tagInfo = inspectCogTags(preflightGeotiff);
+			sampleFormatRef = tagInfo.sampleFormat;
+			isPaletteIndexed = tagInfo.isPaletteIndexed;
 
 			// Resolve proj4 definition for CRS conversion (pixel inspector)
 			try {
@@ -250,58 +246,16 @@ function buildAndAddLayer(
 	preflightGeotiff: GeoTIFF | undefined,
 	signal: AbortSignal
 ) {
-	const useCustom = preflightGeotiff
-		? bandConfig
-			? needsCustomPipelineForConfig(preflightGeotiff, bandConfig)
-			: needsCustomPipeline(preflightGeotiff)
-		: false;
+	// Pick the library-default or one of three custom pipelines. Empty when the
+	// library-default uint path runs unchanged.
+	const customProps = preflightGeotiff
+		? selectCogPipeline(preflightGeotiff, { bandConfig, rescale })
+		: {};
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const customProps: Record<string, any> = {};
-	if (useCustom && preflightGeotiff && bandConfig) {
-		customProps.getTileData = createConfigurableGetTileData(preflightGeotiff, bandConfig);
-		customProps.renderTile = customRenderTile;
-	} else if (useCustom && preflightGeotiff) {
-		customProps.getTileData = createCustomGetTileData(preflightGeotiff);
-		customProps.renderTile = customRenderTile;
-	} else if (preflightGeotiff && isRescaleActive(rescale)) {
-		// Default uint pipeline plus LinearRescale GPU module. Library default
-		// runs unchanged when rescale is at defaults, so we only swap in the
-		// wrapped pipeline when the user has actually moved the slider.
-		const pipeline = createRescaledPipeline(preflightGeotiff, rescale);
-		customProps.getTileData = pipeline.getTileData;
-		customProps.renderTile = pipeline.renderTile;
-	}
+	// Apply upstream-bug workarounds in place (overview filter, 4326 bbox clamp).
+	if (preflightGeotiff) normalizeCogGeotiff(preflightGeotiff);
 
 	const cogInput = preflightGeotiff ?? buildHttpsUrl(tab);
-
-	if (preflightGeotiff) {
-		// Strip oversized overviews
-		const validOverviews = preflightGeotiff.overviews.filter(
-			(ov) => ov.width >= ov.tileWidth && ov.height >= ov.tileHeight
-		);
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(preflightGeotiff as any).overviews = validOverviews;
-
-		// Clamp EPSG:4326 bbox
-		if (preflightGeotiff.crs === 4326) {
-			const [x0, y0, x1, y1] = preflightGeotiff.bbox;
-			const WM_LAT_LIMIT = 85.051129;
-			const clamped = [
-				Math.max(x0, -180),
-				Math.max(y0, -WM_LAT_LIMIT),
-				Math.min(x1, 180),
-				Math.min(y1, WM_LAT_LIMIT)
-			] as [number, number, number, number];
-			if (clamped[0] !== x0 || clamped[1] !== y0 || clamped[2] !== x1 || clamped[3] !== y1) {
-				Object.defineProperty(preflightGeotiff, 'bbox', {
-					value: clamped,
-					writable: false,
-					configurable: true
-				});
-			}
-		}
-	}
 
 	const layer = new COGLayer({
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
