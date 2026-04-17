@@ -14,6 +14,10 @@ export default defineConfig({
 		'hyparquet-compressors',
 		'yaml',
 		'@developmentseed/geotiff',
+		'@developmentseed/epsg',
+		'@developmentseed/epsg/all',
+		'@developmentseed/epsg/all.csv.gz?url',
+		'@developmentseed/proj',
 		'maplibre-gl',
 		'proj4'
 	]

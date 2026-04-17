@@ -1,5 +1,14 @@
+import type { GetTileDataOptions, MinimalDataT } from '@developmentseed/deck.gl-geotiff';
+import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
+import type { RenderTileResult } from '@developmentseed/deck.gl-raster';
+import { LinearRescale } from '@developmentseed/deck.gl-raster/gpu-modules';
+import loadEpsg from '@developmentseed/epsg/all';
+import epsgCsvUrl from '@developmentseed/epsg/all.csv.gz?url';
 import type { GeoTIFF as GeoTIFFType, Overview } from '@developmentseed/geotiff';
 import { GeoTIFF } from '@developmentseed/geotiff';
+import type { EpsgResolver, ProjectionDefinition } from '@developmentseed/proj';
+import { parseWkt } from '@developmentseed/proj';
+import type { Device } from '@luma.gl/core';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
 
@@ -161,16 +170,106 @@ export function isDefaultBandConfig(
 
 /**
  * Check if a given band config requires a custom pipeline (vs library default).
- * Library default only works for uint with standard RGB band order.
+ * Library default only works for uint with standard RGB band order, or for
+ * palette-indexed uint COGs where the embedded ColorMap tag auto-renders.
  */
 export function needsCustomPipelineForConfig(geotiff: GeoTIFFType, config: BandConfig): boolean {
 	const tags = geotiff.cachedTags;
 	const sf = tags.sampleFormat;
 	const isUint = sf !== null && sf[0] === 1;
 	if (!isUint) return true;
+	// Palette-indexed uint COGs with an embedded ColorMap tag are auto-rendered
+	// by the library via its Colormap GPU module. Defer to the default pipeline
+	// only while the user has not changed the default band config.
+	// Photometric.Palette === 3 in @cogeotiff/core.
+	if (
+		tags.photometric === 3 &&
+		tags.colorMap &&
+		isDefaultBandConfig(config, geotiff.count, sf[0])
+	) {
+		return false;
+	}
 	if (config.mode === 'single') return true;
 	if (config.rBand !== 0 || config.gBand !== 1 || config.bBand !== 2) return true;
 	return false;
+}
+
+// ─── Linear rescale (GPU shader module, default pipeline only) ───
+
+/**
+ * Min/max rescale values applied via the `LinearRescale` shader module. Values
+ * are in normalized shader space [0, 1]. Default `{ min: 0, max: 1 }` is a
+ * no-op and the library-default pipeline is used as-is.
+ */
+export interface RescaleConfig {
+	min: number;
+	max: number;
+}
+
+export const DEFAULT_RESCALE: RescaleConfig = { min: 0, max: 1 };
+
+/** True when the rescale values would produce a visible change on the GPU. */
+export function isRescaleActive(cfg: RescaleConfig): boolean {
+	return cfg.min !== DEFAULT_RESCALE.min || cfg.max !== DEFAULT_RESCALE.max;
+}
+
+/**
+ * Build a `getTileData` + `renderTile` pair that reuses the library-default
+ * uint pipeline (via `inferRenderPipeline`) and appends `LinearRescale` to the
+ * returned render pipeline. Only safe to use when the default pipeline would
+ * have been chosen anyway, i.e. `needsCustomPipelineForConfig(geotiff, cfg)`
+ * is false. For non-uint or custom band configs the custom JS pipeline already
+ * bakes RGBA in CPU and a GPU rescale would be cosmetic.
+ *
+ * `inferRenderPipeline` needs the GPU `Device` which arrives in the first
+ * tile's `GetTileDataOptions`, so the pipeline is built lazily on first call.
+ */
+export function createRescaledPipeline(
+	geotiff: GeoTIFFType,
+	rescale: RescaleConfig
+): {
+	getTileData: (
+		image: GeoTIFFType | Overview,
+		options: GetTileDataOptions
+	) => Promise<MinimalDataT>;
+	renderTile: (data: MinimalDataT) => RenderTileResult;
+} {
+	let builtFor: Device | null = null;
+	let defaultGetTileData:
+		| ((image: GeoTIFFType | Overview, options: GetTileDataOptions) => Promise<MinimalDataT>)
+		| null = null;
+	let defaultRenderTile: ((data: MinimalDataT) => RenderTileResult) | null = null;
+
+	function ensureBuilt(device: Device): void {
+		if (builtFor === device && defaultGetTileData && defaultRenderTile) return;
+		const inferred = inferRenderPipeline(geotiff, device);
+		// `inferRenderPipeline` returns generic callbacks. `MinimalDataT` is the
+		// contractual superset used by COGLayer — safe upcast.
+		defaultGetTileData = inferred.getTileData as unknown as (
+			image: GeoTIFFType | Overview,
+			options: GetTileDataOptions
+		) => Promise<MinimalDataT>;
+		defaultRenderTile = inferred.renderTile as unknown as (data: MinimalDataT) => RenderTileResult;
+		builtFor = device;
+	}
+
+	return {
+		getTileData: async (image, options) => {
+			ensureBuilt(options.device);
+			return defaultGetTileData!(image, options);
+		},
+		renderTile: (data) => {
+			const base = defaultRenderTile!(data);
+			const pipeline = base.renderPipeline ?? [];
+			return {
+				...base,
+				renderPipeline: [
+					...pipeline,
+					{ module: LinearRescale, props: { rescaleMin: rescale.min, rescaleMax: rescale.max } }
+				]
+			};
+		}
+	};
 }
 
 const BITMAP_SOURCE = 'geotiff-bitmap-src';
@@ -328,13 +427,14 @@ async function computeGeographicBounds(
 		return clampBounds({ west: x0, south: y0, east: x1, north: y1 });
 	}
 
-	// For other CRS, resolve proj4 definition and edge-sample
+	// For other CRS, resolve the projection definition from the bundled EPSG
+	// database (numeric codes) or fall back to ProjJSON.
 	let proj4Def: string;
 	if (typeof crs === 'number') {
-		// Fetch proj4 string from epsg.io
-		const resp = await fetch(`https://epsg.io/${crs}.proj4`, { signal });
-		if (!resp.ok) return null;
-		proj4Def = (await resp.text()).trim();
+		const wkt = await lookupEpsgWkt(crs);
+		if (signal.aborted) return null;
+		if (!wkt) return null;
+		proj4Def = wkt;
 	} else {
 		// ProjJson — try to pass directly to proj4 (limited support)
 		proj4Def = JSON.stringify(crs);
@@ -887,19 +987,90 @@ export interface PixelValue {
 	col: number;
 }
 
+// ─── EPSG resolution via bundled database ────────────────────────
+
 /**
- * Resolve a proj4 definition string for a CRS code.
- * Returns null for EPSG:4326 (no conversion needed).
+ * Look up the WKT string for an EPSG code from the bundled
+ * `@developmentseed/epsg` database. The CSV is streamed, gunzipped and parsed
+ * once on first use, subsequent lookups share the cached map via the
+ * `loadEpsg()` internal singleton promise.
+ */
+async function lookupEpsgWkt(code: number): Promise<string | null> {
+	const db = await loadEpsg(epsgCsvUrl);
+	return db.get(code) ?? null;
+}
+
+// Units that `@developmentseed/proj` `metersPerUnit` accepts.
+const ACCEPTED_CRS_UNITS = new Set([
+	'm',
+	'metre',
+	'meter',
+	'meters',
+	'foot',
+	'us survey foot',
+	'degree'
+]);
+
+/**
+ * Normalize a parsed projection definition so `generateTileMatrixSet` can
+ * compute metersPerUnit. wkt-parser sets `units = wkt.UNIT.name.toLowerCase()`
+ * and some EPSG WKT entries in the bundled database have a missing or
+ * non-standard UNIT node, which surfaces as `units = "unknown"` and a downstream
+ * throw. Infer the unit from `to_meter` or projection type when possible.
+ */
+function normalizeCrsUnits(def: ProjectionDefinition): ProjectionDefinition {
+	const current = def.units?.toLowerCase();
+	if (current && ACCEPTED_CRS_UNITS.has(current)) return def;
+	if (def.projName === 'longlat') {
+		def.units = 'degree';
+		return def;
+	}
+	const toMeter = def.to_meter;
+	if (toMeter === undefined || Math.abs(toMeter - 1) < 1e-9) {
+		def.units = 'meter';
+	} else if (Math.abs(toMeter - 0.3048) < 1e-9) {
+		def.units = 'foot';
+	} else if (Math.abs(toMeter - 1200 / 3937) < 1e-9) {
+		def.units = 'us survey foot';
+	}
+	return def;
+}
+
+/**
+ * Create an async EPSG resolver for `@developmentseed/deck.gl-geotiff`.
+ * Looks up the numeric EPSG code in the bundled WKT database and returns the
+ * `ProjectionDefinition` produced by `parseWkt`. Throws a clear error when the
+ * code is not present in the database.
+ */
+export function createEpsgResolver(): EpsgResolver {
+	const cache = new Map<number, ProjectionDefinition>();
+	return async (code: number): Promise<ProjectionDefinition> => {
+		const cached = cache.get(code);
+		if (cached) return cached;
+		const wkt = await lookupEpsgWkt(code);
+		if (!wkt) {
+			throw new Error(`EPSG:${code} not found in bundled projection database`);
+		}
+		const def = normalizeCrsUnits(parseWkt(wkt));
+		cache.set(code, def);
+		return def;
+	};
+}
+
+/**
+ * Resolve a proj4-compatible definition for a CRS read from a GeoTIFF.
+ * For numeric EPSG codes this returns the WKT string from the bundled EPSG
+ * database, which `proj4()` accepts directly. For ProjJSON it falls back to a
+ * JSON string. Returns null for EPSG:4326 (no conversion needed) or when the
+ * code is not present in the database.
  */
 export async function resolveProj4Def(
 	crs: number | unknown,
-	signal: AbortSignal
+	_signal: AbortSignal
 ): Promise<string | null> {
 	if (crs === 4326) return null;
 	if (typeof crs === 'number') {
-		const resp = await fetch(`https://epsg.io/${crs}.proj4`, { signal });
-		if (!resp.ok) return null;
-		return (await resp.text()).trim();
+		return lookupEpsgWkt(crs);
 	}
 	// ProjJSON — stringify for proj4
 	return JSON.stringify(crs);

@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@developmentseed/deck.gl-geotiff@0.5.0':
-    hash: f399953483e7760e8a7d5ac76d74cfde2a92d5821abf061a2d381b92661adb28
+    hash: 298bfc6e7a484b39405f4cde4db4014fe1be7ee5870b72291686a2e81ee632a5
     path: patches/@developmentseed__deck.gl-geotiff@0.5.0.patch
 
 importers:
@@ -60,8 +60,17 @@ importers:
         version: 9.3.0(@deck.gl/core@9.3.0)(@loaders.gl/core@4.4.1)(@luma.gl/core@9.3.2)(@luma.gl/engine@9.3.2(@luma.gl/core@9.3.2)(@luma.gl/shadertools@9.3.2(@luma.gl/core@9.3.2)))(@luma.gl/gltf@9.3.2(@luma.gl/core@9.3.2)(@luma.gl/engine@9.3.2(@luma.gl/core@9.3.2)(@luma.gl/shadertools@9.3.2(@luma.gl/core@9.3.2)))(@luma.gl/shadertools@9.3.2(@luma.gl/core@9.3.2)))(@luma.gl/shadertools@9.3.2(@luma.gl/core@9.3.2))
       '@developmentseed/deck.gl-geotiff':
         specifier: ^0.5.0
-        version: 0.5.0(patch_hash=f399953483e7760e8a7d5ac76d74cfde2a92d5821abf061a2d381b92661adb28)(71f7c8cef45b143cb9c716f19212e74e)
+        version: 0.5.0(patch_hash=298bfc6e7a484b39405f4cde4db4014fe1be7ee5870b72291686a2e81ee632a5)(71f7c8cef45b143cb9c716f19212e74e)
+      '@developmentseed/deck.gl-raster':
+        specifier: ^0.5.0
+        version: 0.5.0(80a3faea8054c108d36d16f6219b2182)
+      '@developmentseed/epsg':
+        specifier: ^0.5.0
+        version: 0.5.0
       '@developmentseed/geotiff':
+        specifier: ^0.5.0
+        version: 0.5.0
+      '@developmentseed/proj':
         specifier: ^0.5.0
         version: 0.5.0
       '@duckdb/duckdb-wasm':
@@ -618,6 +627,9 @@ packages:
       '@developmentseed/morecantile': ^0.5.0
       '@luma.gl/core': ^9.3.2
       '@luma.gl/shadertools': ^9.3.2
+
+  '@developmentseed/epsg@0.5.0':
+    resolution: {integrity: sha512-etBN61c/B413lft39mazw3dg+bfUPMEIq94WjKhm4nn4HZYCW2fkGSUNq/0ucRgvB6Qe+DKlsHRZijjNh3Xqxw==}
 
   '@developmentseed/geotiff@0.5.0':
     resolution: {integrity: sha512-VUdSlTm4w+mIWIyuDSFU7o7TCywHTT+Pvj98jB8pCG9S93YHw88eW2JEUOWmzXuIeNja7egns0MfHrny7rgpHA==}
@@ -5274,7 +5286,7 @@ snapshots:
 
   '@developmentseed/affine@0.5.0': {}
 
-  '@developmentseed/deck.gl-geotiff@0.5.0(patch_hash=f399953483e7760e8a7d5ac76d74cfde2a92d5821abf061a2d381b92661adb28)(71f7c8cef45b143cb9c716f19212e74e)':
+  '@developmentseed/deck.gl-geotiff@0.5.0(patch_hash=298bfc6e7a484b39405f4cde4db4014fe1be7ee5870b72291686a2e81ee632a5)(71f7c8cef45b143cb9c716f19212e74e)':
     dependencies:
       '@cogeotiff/core': 9.5.0
       '@deck.gl/core': 9.3.0
@@ -5308,6 +5320,8 @@ snapshots:
       '@math.gl/core': 4.1.0
       '@math.gl/culling': 4.1.0
       '@math.gl/web-mercator': 4.1.0
+
+  '@developmentseed/epsg@0.5.0': {}
 
   '@developmentseed/geotiff@0.5.0':
     dependencies:

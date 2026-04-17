@@ -21,3 +21,28 @@ index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..ba313dc586d974ebaa422449cfa18f5d
          const forwardTo3857 = makeClampedForwardTo3857((x, y) => converter3857.forward([x, y], false), forwardTo4326);
          const inverseFrom3857 = (x, y) => converter3857.inverse([x, y], false);
          if (this.props.onGeoTIFFLoad) {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index fe6d5a8d773e5d22500deb6a9d7814ea0dd01e9a..7577a0186c61f95c6775b603bcd0781d02c877be 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -6,4 +6,5 @@ export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
+ export { type MosaicSource, MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d";
+ export type { MultiCOGLayerProps, MultiCOGSourceConfig, } from "./multi-cog-layer.js";
+ export { MultiCOGLayer } from "./multi-cog-layer.js";
++export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.js b/dist/index.js
+index bd207d158f794e2956b46dc7c30be80f21ab7848..5ade2dbc3e79cce33146b6d5644b8850a4f8cd84 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3,4 +3,9 @@ export * as texture from "./geotiff/texture.js";
+ export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
+ export { MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d";
+ export { MultiCOGLayer } from "./multi-cog-layer.js";
++// objex patch: re-export inferRenderPipeline so consumers can build the
++// library-default uint pipeline and append modules (e.g. LinearRescale) without
++// forking the default getTileData and renderTile. Upstream does not expose this
++// helper yet. Track if upstream adds a `renderPipeline` prop to COGLayer.
++export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
+ //# sourceMappingURL=index.js.map

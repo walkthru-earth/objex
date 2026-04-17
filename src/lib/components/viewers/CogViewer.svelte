@@ -15,12 +15,17 @@ import {
 	cleanupNativeBitmap,
 	createConfigurableGetTileData,
 	createCustomGetTileData,
+	createEpsgResolver,
+	createRescaledPipeline,
 	customRenderTile,
+	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
+	isRescaleActive,
 	needsCustomPipeline,
 	needsCustomPipelineForConfig,
 	type PixelValue,
+	type RescaleConfig,
 	readPixelAtLngLat,
 	renderNonTiledBitmap,
 	resolveProj4Def
@@ -39,6 +44,11 @@ let showControls = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let cogInfo = $state<CogInfo | null>(null);
 let bandConfig = $state<BandConfig | null>(null);
+let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
+// Palette-indexed COGs render through the library's Colormap module; a GPU
+// rescale at that stage is cosmetic and would confuse the legend. Keep the
+// slider hidden when a ColorMap tag is present.
+let isPaletteIndexed = $state(false);
 let pixelValue = $state<PixelValue | null>(null);
 let inspecting = $state(false);
 
@@ -50,6 +60,17 @@ let proj4DefRef: string | null = null;
 let sampleFormatRef = 1;
 let isTiledRef = true;
 let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+// True when the library-default uint pipeline will run. LinearRescale only
+// operates on already-normalized RGB 0..1, so the slider is meaningful only
+// here, and only for non-palette data (palette renders through Colormap).
+// `needsCustomPipelineForConfig` only touches read-only tags on the GeoTIFF,
+// safe to call outside reactive tracking.
+const rescaleApplicable = $derived.by(() => {
+	if (!cogInfo || !bandConfig || isPaletteIndexed) return false;
+	const g = geotiffRef;
+	if (!g) return false;
+	return !needsCustomPipelineForConfig(g, bandConfig);
+});
 // Tracks whether the camera has already been framed for the current tab.
 // Prevents fitCogBounds from resetting the user's view when the band/style
 // config changes and the COGLayer is rebuilt.
@@ -60,6 +81,11 @@ let hasFittedOnce = false;
 // reliable across all environments. COGLayer's defaultDecoderPool() would
 // create workers that crash with NS_ERROR_CORRUPTED_CONTENT in Firefox.
 const pool = new DecoderPool();
+
+// EPSG resolver backed by the bundled `@developmentseed/epsg` WKT database.
+// Avoids the library default that calls epsg.io at runtime. The CSV is
+// streamed and parsed lazily on first use and cached for the session.
+const epsgResolver = createEpsgResolver();
 
 // ─── Tab change reset ────────────────────────────────────────────
 
@@ -85,6 +111,8 @@ $effect(() => {
 		error = null;
 		cogInfo = null;
 		bandConfig = null;
+		rescale = { ...DEFAULT_RESCALE };
+		isPaletteIndexed = false;
 		pixelValue = null;
 		bounds = undefined;
 		hasFittedOnce = false;
@@ -170,6 +198,8 @@ async function loadCog(map: maplibregl.Map) {
 			isTiledRef = isTiled;
 			const tags = preflightGeotiff.cachedTags;
 			sampleFormatRef = tags.sampleFormat?.[0] ?? 1;
+			// Photometric.Palette === 3 in @cogeotiff/core.
+			isPaletteIndexed = tags.photometric === 3 && Boolean(tags.colorMap);
 
 			// Resolve proj4 definition for CRS conversion (pixel inspector)
 			try {
@@ -234,6 +264,13 @@ function buildAndAddLayer(
 	} else if (useCustom && preflightGeotiff) {
 		customProps.getTileData = createCustomGetTileData(preflightGeotiff);
 		customProps.renderTile = customRenderTile;
+	} else if (preflightGeotiff && isRescaleActive(rescale)) {
+		// Default uint pipeline plus LinearRescale GPU module. Library default
+		// runs unchanged when rescale is at defaults, so we only swap in the
+		// wrapped pipeline when the user has actually moved the slider.
+		const pipeline = createRescaledPipeline(preflightGeotiff, rescale);
+		customProps.getTileData = pipeline.getTileData;
+		customProps.renderTile = pipeline.renderTile;
 	}
 
 	const cogInput = preflightGeotiff ?? buildHttpsUrl(tab);
@@ -272,6 +309,7 @@ function buildAndAddLayer(
 		id: `cog-layer-${tab.id}`,
 		geotiff: cogInput,
 		pool,
+		epsgResolver,
 		signal,
 		...customProps,
 		onGeoTIFFLoad: (
@@ -354,6 +392,23 @@ function handleConfigChange(newConfig: BandConfig) {
 	}
 
 	// Rebuild with new config
+	buildAndAddLayer(mapRef, geotiffRef, abortController.signal);
+}
+
+function handleRescaleChange(next: RescaleConfig) {
+	rescale = next;
+	if (!mapRef || !geotiffRef || !isTiledRef) return;
+
+	// Remove old overlay and rebuild. deck.gl diffs on layer id, so reusing the
+	// stable per-tab id keeps tile cache state where possible.
+	if (overlayRef) {
+		try {
+			mapRef.removeControl(overlayRef as unknown as maplibregl.IControl);
+		} catch {
+			/* already removed */
+		}
+		overlayRef = null;
+	}
 	buildAndAddLayer(mapRef, geotiffRef, abortController.signal);
 }
 
@@ -456,6 +511,9 @@ onDestroy(cleanup);
 				bandCount={cogInfo.bandCount}
 				{bandConfig}
 				onConfigChange={handleConfigChange}
+				{rescale}
+				rescaleApplicable={rescaleApplicable}
+				onRescaleChange={handleRescaleChange}
 			/>
 		{/if}
 

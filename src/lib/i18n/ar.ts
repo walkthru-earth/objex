@@ -429,6 +429,8 @@ export const ar: Record<string, string> = {
 	'cog.colorRamp': 'تدرج الألوان',
 	'cog.pixelValue': 'قيمة البكسل',
 	'cog.reading': 'قراءة البكسل...',
+	'cog.rescale': 'إعادة القياس',
+	'cog.rescaleReset': 'إعادة تعيين',
 
 	// PMTiles Viewer
 	'pmtiles.mapView': 'خريطة',

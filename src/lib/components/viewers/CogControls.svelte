@@ -4,17 +4,25 @@ import {
 	type BandConfig,
 	COLOR_RAMP_STOPS,
 	type ColorRampId,
+	DEFAULT_RESCALE,
+	type RescaleConfig,
 	rampToGradientCss
 } from '../../utils/cog.js';
 
 let {
 	bandCount,
 	bandConfig,
-	onConfigChange
+	onConfigChange,
+	rescale,
+	rescaleApplicable,
+	onRescaleChange
 }: {
 	bandCount: number;
 	bandConfig: BandConfig;
 	onConfigChange: (config: BandConfig) => void;
+	rescale: RescaleConfig;
+	rescaleApplicable: boolean;
+	onRescaleChange: (rescale: RescaleConfig) => void;
 } = $props();
 
 const RAMP_IDS: ColorRampId[] = ['grayscale', 'terrain', 'viridis', 'magma', 'turbo', 'spectral'];
@@ -36,6 +44,23 @@ function setBand(key: 'rBand' | 'gBand' | 'bBand' | 'band', value: number) {
 
 function setRamp(id: ColorRampId) {
 	onConfigChange({ ...bandConfig, colorRamp: id });
+}
+
+function setRescaleMin(value: number) {
+	// Keep min strictly less than max, clamp to [0, 1].
+	const clamped = Math.max(0, Math.min(1, value));
+	const next = Math.min(clamped, rescale.max - 0.001);
+	onRescaleChange({ min: Number.isFinite(next) ? next : 0, max: rescale.max });
+}
+
+function setRescaleMax(value: number) {
+	const clamped = Math.max(0, Math.min(1, value));
+	const next = Math.max(clamped, rescale.min + 0.001);
+	onRescaleChange({ min: rescale.min, max: Number.isFinite(next) ? next : 1 });
+}
+
+function resetRescale() {
+	onRescaleChange({ ...DEFAULT_RESCALE });
 }
 </script>
 
@@ -122,6 +147,61 @@ function setRamp(id: ColorRampId) {
 						</span>
 					</button>
 				{/each}
+			</div>
+		</div>
+	{/if}
+
+	{#if rescaleApplicable}
+		<!-- GPU LinearRescale slider. Default uint pipeline only. -->
+		<div class="mt-2 space-y-1 border-t border-border pt-2">
+			<div class="flex items-center justify-between">
+				<span class="text-muted-foreground">{t('cog.rescale')}</span>
+				<button
+					class="text-[10px] text-muted-foreground hover:text-card-foreground"
+					onclick={resetRescale}
+				>
+					{t('cog.rescaleReset')}
+				</button>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<input
+					type="number"
+					min="0"
+					max="1"
+					step="0.01"
+					class="w-14 rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+					value={rescale.min}
+					oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
+				/>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					class="flex-1 accent-primary"
+					value={rescale.min}
+					oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
+				/>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<input
+					type="number"
+					min="0"
+					max="1"
+					step="0.01"
+					class="w-14 rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+					value={rescale.max}
+					oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
+				/>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					class="flex-1 accent-primary"
+					value={rescale.max}
+					oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
+				/>
 			</div>
 		</div>
 	{/if}
