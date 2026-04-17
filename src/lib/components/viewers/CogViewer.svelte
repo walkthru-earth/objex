@@ -50,6 +50,10 @@ let proj4DefRef: string | null = null;
 let sampleFormatRef = 1;
 let isTiledRef = true;
 let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+// Tracks whether the camera has already been framed for the current tab.
+// Prevents fitCogBounds from resetting the user's view when the band/style
+// config changes and the COGLayer is rebuilt.
+let hasFittedOnce = false;
 
 // Main-thread decoder pool — worker-based DecoderPool fails in Vite dev mode
 // (ESM workers can't load through the dev server). Main-thread decoding is
@@ -83,6 +87,7 @@ $effect(() => {
 		bandConfig = null;
 		pixelValue = null;
 		bounds = undefined;
+		hasFittedOnce = false;
 		showControls = false;
 		showInfo = false;
 		if (mapRef) loadCog(mapRef);
@@ -188,8 +193,11 @@ async function loadCog(map: maplibregl.Map) {
 			});
 			if (signal.aborted) return;
 			cogInfo = info;
-			bounds = [info.bounds.west, info.bounds.south, info.bounds.east, info.bounds.north];
-			fitCogBounds(map, info.bounds);
+			if (!hasFittedOnce) {
+				bounds = [info.bounds.west, info.bounds.south, info.bounds.east, info.bounds.north];
+				fitCogBounds(map, info.bounds);
+				hasFittedOnce = true;
+			}
 			setupClickHandler(map);
 			loading = false;
 			return;
@@ -259,7 +267,9 @@ function buildAndAddLayer(
 	}
 
 	const layer = new COGLayer({
-		id: `cog-layer-${Date.now()}`,
+		// Stable id per tab so rebuilds on band/style change don't force deck.gl
+		// to treat this as a brand-new layer and drop cached tile state.
+		id: `cog-layer-${tab.id}`,
 		geotiff: cogInput,
 		pool,
 		signal,
@@ -285,8 +295,14 @@ function buildAndAddLayer(
 				dataType: buildDataTypeLabel(sf, bps),
 				bounds: clamped
 			};
-			bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
-			fitCogBounds(map, clamped);
+			// Only frame the camera on the first load of this tab. Band/style
+			// rebuilds re-fire onGeoTIFFLoad; refitting would clobber the user's
+			// current view.
+			if (!hasFittedOnce) {
+				bounds = [clamped.west, clamped.south, clamped.east, clamped.north];
+				fitCogBounds(map, clamped);
+				hasFittedOnce = true;
+			}
 			setupClickHandler(map);
 			loading = false;
 		},
