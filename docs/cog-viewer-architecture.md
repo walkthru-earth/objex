@@ -589,3 +589,13 @@ Upgraded from `@developmentseed/deck.gl-geotiff@0.3.0` to `@0.4.0` on 2026-03-26
 - `RasterReprojector` iteration cap — native (10000 default)
 - Partial tile skip (<25% coverage) — removed with PR #349's CARTESIAN rendering
 - All debug `console.log`/`console.warn` from patches
+
+---
+
+## Upstream examples as references
+
+The `developmentseed/deck.gl-raster/examples/` directory ships six runnable examples that document the supported wiring patterns in v0.5. The set covers `cog-basic`, `land-cover`, `naip-mosaic`, `sentinel-2`, `usgs-topo-cutline`, and `zarr-sentinel2-tci`, each pinning a distinct code path (plain COG, categorical palette, mosaic, multi-band RGB, cutline masking, Zarr). The cheatsheet at [`.claude/skills/deckgl-geotiff-raster/SKILL.md`](../.claude/skills/deckgl-geotiff-raster/SKILL.md) section 11 summarizes the pattern each one demonstrates so contributors can cross-reference an example before adding new viewer logic.
+
+## EPSG resolver regression notes
+
+When we swapped `epsg.io` for `@developmentseed/epsg`'s bundled CSV (see root `CLAUDE.md`), `parseWkt()` from `@developmentseed/proj` started returning `units: "unknown"` for a subset of EPSG codes whose CSV-bundled WKT has a missing or malformed root `UNIT` node. `generateTileMatrixSet` then throws `Unsupported CRS units: unknown when computing metersPerUnit`. The fix is a one-function guard, `normalizeCrsUnits()` in `utils/cog.ts`, wrapped around every `parseWkt()` output. The helper infers `degree` for geographic CRS (`projName === "longlat"`), then maps `to_meter` values of 1, 0.3048, and 1200/3937 to `meter`, `foot`, and `us survey foot` respectively. Any new EPSG resolver added elsewhere in the codebase must reuse `normalizeCrsUnits()` to avoid the same crash.

@@ -96,7 +96,11 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
   - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error, not supported by `@developmentseed/geotiff`
   - DecoderPool workers fail in Vite dev mode, using main-thread `DecoderPool()` (no workers)
   - Antimeridian longitude wrapping, pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366) still open in v0.5)
-  - v0.5 ships a native `LinearRescale` shader module (`rescaleMin`/`rescaleMax`) for min/max value-range sliders. Not yet wired, would apply to uint COGs only since our non-uint path produces final RGBA `ImageData` in JS
+  - v0.5's `LinearRescale` shader module is wired via `CogControls`. `createRescaledPipeline()` in `utils/cog.ts` wraps `inferRenderPipeline` (re-exported through our pnpm patch) and appends `LinearRescale` to the returned pipeline. Slider is hidden whenever `needsCustomPipelineForConfig` is true (non-uint, palette-indexed, mode=single, non-standard RGB band order) because the custom JS pipeline bakes RGBA in CPU and a GPU rescale would be cosmetic
+  - v0.5's `CutlineBbox` shader module takes prop `{ bbox: [minX, minY, maxX, maxY] }` in mercator meters (EPSG:3857), not lnglat
+  - Palette-indexed uint COGs with an embedded `ColorMap` tag (Photometric.Palette === 3) defer to the library default pipeline so the embedded palette renders correctly. `needsCustomPipelineForConfig` short-circuits when the user has not changed the default band config
+- **Local EPSG resolver**: `createEpsgResolver()` in `utils/cog.ts` looks up numeric EPSG codes in `@developmentseed/epsg`'s bundled gzipped CSV via `loadEpsg()` and parses each WKT with `parseWkt()` from `@developmentseed/proj`. Passed to `COGLayer` as the `epsgResolver` prop. Replaces runtime `epsg.io` fetches. First COG per session downloads `all.csv.gz` once, cached for the session
+- **wkt-parser `units = "unknown"` gotcha**: wkt-parser sets `def.units` from the WKT `UNIT` node. Some entries in the bundled EPSG CSV have a missing or malformed UNIT node, so `parseWkt()` returns `units: "unknown"`, which makes `generateTileMatrixSet` throw `Unsupported CRS units: unknown when computing metersPerUnit`. `normalizeCrsUnits()` in `utils/cog.ts` is applied to every resolver output, inferring `degree` for `longlat`, `meter` for `to_meter === 1` or missing, `foot` for 0.3048, and `us survey foot` for 1200/3937
 - **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions (now in `utils/cog.ts`)
 - **DuckDB v1.5 GEOMETRY type**: GeoParquet columns read as `GEOMETRY('EPSG:...')` with CRS in type. `geometry_always_xy = true` set globally at DB init. For legacy GeoParquet (missing `"version"` field), `enable_geoparquet_conversion = false` is set per-connection as fallback
 - **hyparquet vs DuckDB type mismatch**: hyparquet reports physical type (BLOB/GEOMETRY), DuckDB v1.5 reports `GEOMETRY('EPSG:...')`. After DuckDB boots, schema is refreshed from DuckDB for accurate type
@@ -212,3 +216,6 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 - `docs/zarr-viewer-architecture.md` -- Zarr viewer architecture, detection, library versions, upstream issues
 - `docs/duckdb-wasm-upgrade-analysis.md` -- DuckDB-WASM upgrade blockers (stoi crash, Arrow mismatch, GeoArrow export), workaround chain, action plan
 - `docs/ducklake-wasm-support.md` -- DuckLake 0.4+ WASM support research, compatibility tables, integration architecture
+- `docs/colormap-tag-investigation.md` -- Palette-indexed COG rendering, ColorMap TIFF tag short-circuit in `needsCustomPipelineForConfig`
+- `docs/multicog-sentinel2-design.md` -- MultiCOGLayer wiring design for Sentinel-2 style multi-asset scenes
+- `docs/mosaic-layer-stac-design.md` -- MosaicLayer + STAC catalog integration design
