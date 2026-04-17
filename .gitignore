@@ -8,3 +8,8 @@ dist/
 packages/objex-utils/dist/
 *.local
 .DS_Store
+
+# Local Claude Code artifacts (per-developer skills, local settings, worktrees)
+.claude/skills/
+.claude/settings.local.json
+.claude/worktrees/
