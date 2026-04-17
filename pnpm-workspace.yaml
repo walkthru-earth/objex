@@ -10,4 +10,4 @@ onlyBuiltDependencies:
   - protobufjs
 
 patchedDependencies:
-  '@developmentseed/deck.gl-geotiff@0.4.0': patches/@developmentseed__deck.gl-geotiff@0.4.0.patch
+  '@developmentseed/deck.gl-geotiff@0.5.0': patches/@developmentseed__deck.gl-geotiff@0.5.0.patch

@@ -689,10 +689,12 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 
 /**
  * Custom renderTile for non-uint COGs.
- * Returns the ImageData directly — RasterLayer accepts ImageData.
+ * v0.5 RasterLayer requires a RenderTileResult with `image` or `renderPipeline`.
+ * We produce an ImageData and pass it through the `image` slot. deck.gl manages
+ * the texture lifecycle and prepends a CreateTexture module automatically.
  */
-export function customRenderTile(data: CustomTileData): ImageData {
-	return data.imageData;
+export function customRenderTile(data: CustomTileData): { image: ImageData } {
+	return { image: data.imageData };
 }
 
 // ─── Configurable custom pipeline ────────────────────────────────

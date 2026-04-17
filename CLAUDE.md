@@ -89,13 +89,14 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 
 ## Edge Cases
 
-- **COG v0.4 workarounds**: See `docs/cog-viewer-architecture.md` for full details. v0.4 natively handles polar NaN (via `makeClampedForwardTo3857`), mesh iteration cap, and Web Mercator CARTESIAN rendering. Remaining workarounds:
+- **COG v0.5 workarounds**: See `docs/cog-viewer-architecture.md` for full details. v0.5 keeps the v0.4 native fixes (polar NaN via `makeClampedForwardTo3857`, mesh iteration cap, Web Mercator CARTESIAN rendering). v0.5 changes the `renderTile` return shape to `{ image?, renderPipeline? }` (our `customRenderTile` wraps `ImageData` in `{ image }`). Remaining workarounds:
   - Oversized overviews (image < tile size) are filtered in pre-flight to prevent out-of-domain proj4 NaN
   - Non-uint COGs (Int8/16, Float32/64) use custom `getTileData`/`renderTile` (library still only auto-renders uint). User band/color changes also trigger custom pipeline via `createConfigurableGetTileData`
   - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet` (safety net)
-  - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error -- not supported by `@developmentseed/geotiff`
-  - DecoderPool workers fail in Vite dev mode -- using main-thread `DecoderPool()` (no workers)
-  - Antimeridian longitude wrapping -- pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366))
+  - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error, not supported by `@developmentseed/geotiff`
+  - DecoderPool workers fail in Vite dev mode, using main-thread `DecoderPool()` (no workers)
+  - Antimeridian longitude wrapping, pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366) still open in v0.5)
+  - v0.5 ships a native `LinearRescale` shader module (`rescaleMin`/`rescaleMax`) for min/max value-range sliders. Not yet wired, would apply to uint COGs only since our non-uint path produces final RGBA `ImageData` in JS
 - **`safeClamp()`**: use instead of `Math.max/min` -- NaN propagates through Math functions (now in `utils/cog.ts`)
 - **DuckDB v1.5 GEOMETRY type**: GeoParquet columns read as `GEOMETRY('EPSG:...')` with CRS in type. `geometry_always_xy = true` set globally at DB init. For legacy GeoParquet (missing `"version"` field), `enable_geoparquet_conversion = false` is set per-connection as fallback
 - **hyparquet vs DuckDB type mismatch**: hyparquet reports physical type (BLOB/GEOMETRY), DuckDB v1.5 reports `GEOMETRY('EPSG:...')`. After DuckDB boots, schema is refreshed from DuckDB for accurate type
@@ -195,7 +196,7 @@ See `RELEASE.md` for full details, trusted publishing setup, dry-run, and rollba
 ## Reference Docs
 
 - `RELEASE.md` -- Release checklist, version bumping, dry-run, rollback procedures
-- `docs/cog-viewer-architecture.md` -- COG viewer v0.4 architecture, workarounds, upstream issues to track
+- `docs/cog-viewer-architecture.md` -- COG viewer v0.5 architecture, workarounds, upstream issues to track
 - `docs/duckdb-v1.5-geometry-upgrade.md` -- Parameterized GEOMETRY type, migration path
 - `docs/arrow-table-grid-research.md` -- TableGrid rewrite, quak analysis, append-on-scroll
 - `docs/svelte5-performance-guide.md` -- Reactivity patterns, $state.raw, $effect cleanup

@@ -1,15 +1,15 @@
 diff --git a/dist/cog-layer.js b/dist/cog-layer.js
-index c7bff1b2fc7bc1a254d82982fc74a4b2b744b3c2..8e305ffacb2b2bd00759d5e1992db5a1f6cdb5a3 100644
+index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..ba313dc586d974ebaa422449cfa18f5dd91f6014 100644
 --- a/dist/cog-layer.js
 +++ b/dist/cog-layer.js
-@@ -72,12 +72,16 @@ export class COGLayer extends CompositeLayer {
+@@ -70,12 +70,16 @@ export class COGLayer extends CompositeLayer {
          const tms = generateTileMatrixSet(geotiff, sourceProjection);
          // @ts-expect-error - proj4 typings are incomplete and don't support
          // wkt-parser input
 -        const converter4326 = proj4(sourceProjection, "EPSG:4326");
 +        // objex patch: +over disables proj4 adjust_lon to fix antimeridian
-+        // wrapping. Without it, forward(-180.001°) wraps to positive easting,
-+        // causing 360° round-trip errors and unconvergeable mesh refinement.
++        // wrapping. Without it, forward(-180.001 deg) wraps to positive easting,
++        // causing 360 deg round-trip errors and unconvergeable mesh refinement.
 +        // See https://github.com/developmentseed/deck.gl-raster/issues/366
 +        const converter4326 = proj4(sourceProjection, "+proj=longlat +datum=WGS84 +over");
          const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
