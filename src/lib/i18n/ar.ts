@@ -230,6 +230,7 @@ export const ar: Record<string, string> = {
 
 	// DuckLake
 	'ducklake.loading': 'جا��ٍ ربط كتالوج DuckLake...',
+	'ducklake.snapshot': 'لقطة',
 	'ducklake.snapshots': 'لقطات',
 	'ducklake.noTables': 'لا توجد جداول في هذا المخطط',
 	'ducklake.extensionHint': 'قد لا يكون امتداد DuckLake متاحاً لهذا الإصدار من DuckDB-WASM.',

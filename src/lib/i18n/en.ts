@@ -230,6 +230,7 @@ export const en: Record<string, string> = {
 
 	// DuckLake
 	'ducklake.loading': 'Attaching DuckLake catalog...',
+	'ducklake.snapshot': 'Snapshot',
 	'ducklake.snapshots': 'snapshots',
 	'ducklake.noTables': 'No tables in this schema',
 	'ducklake.extensionHint':

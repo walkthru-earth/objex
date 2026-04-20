@@ -30,9 +30,10 @@ let childTab = $state<Tab | null>(null);
 
 // DuckLake state: true for .ducklake files, auto-detected for .duckdb files
 let isDuckLake = $state(false);
+let snapshots = $state.raw<Array<{ id: number; timeMs: number | null }>>([]);
 let snapshotVersion = $state<number | null>(null);
-let snapshotTimestamp = $state<string | null>(null);
-let snapshotCount = $state<number>(0);
+let snapshotTimeMs = $state<number | null>(null);
+let switchingSnapshot = $state(false);
 
 const ATTACH_ALIAS = '__objex_db__';
 
@@ -53,9 +54,10 @@ function cleanup() {
 	selectedTable = null;
 	childTab = null;
 	isDuckLake = false;
+	snapshots = [];
 	snapshotVersion = null;
-	snapshotTimestamp = null;
-	snapshotCount = 0;
+	snapshotTimeMs = null;
+	switchingSnapshot = false;
 }
 
 $effect(() => {
@@ -163,7 +165,7 @@ async function tryDetectDuckLake(engine: any, connId: string): Promise<boolean> 
 	}
 }
 
-async function loadDuckLake(engine: any, connId: string) {
+async function loadDuckLake(engine: any, connId: string, snapshotId: number | null = null) {
 	// Detach any previous catalog (ignore errors)
 	try {
 		await engine.query(connId, `DETACH ${ATTACH_ALIAS};`);
@@ -171,29 +173,36 @@ async function loadDuckLake(engine: any, connId: string) {
 		// ignore
 	}
 
-	// Attach the DuckLake catalog from VFS. The ducklake extension autoloads.
-	await engine.query(connId, `ATTACH '${VFS_PATH}' AS ${ATTACH_ALIAS} (TYPE ducklake, READ_ONLY);`);
+	// When snapshotId is given, attach at that snapshot for time travel; otherwise
+	// DuckLake attaches at the latest snapshot.
+	const snapshotClause = snapshotId !== null ? `, SNAPSHOT_VERSION ${snapshotId}` : '';
+	await engine.query(
+		connId,
+		`ATTACH '${VFS_PATH}' AS ${ATTACH_ALIAS} (TYPE ducklake, READ_ONLY${snapshotClause});`
+	);
 
-	// Load snapshot metadata
-	try {
-		const snapResult = await engine.query(
-			connId,
-			`SELECT snapshot_id, snapshot_time FROM ducklake_snapshots('${ATTACH_ALIAS}') ORDER BY snapshot_id DESC LIMIT 1;`
-		);
-		if (snapResult.rows?.length > 0) {
-			snapshotVersion = snapResult.rows[0].snapshot_id;
-			const ts = snapResult.rows[0].snapshot_time;
-			snapshotTimestamp = ts ? String(ts) : null;
+	// Snapshot history is immutable for a read-only attached catalog, so only
+	// query it on first load; switching snapshots reuses the cached list.
+	if (snapshots.length === 0) {
+		try {
+			const snapResult = await engine.query(
+				connId,
+				`SELECT snapshot_id, snapshot_time FROM ducklake_snapshots('${ATTACH_ALIAS}') ORDER BY snapshot_id DESC;`
+			);
+			const rows = snapResult.rows ?? [];
+			snapshots = rows.map((r: any) => ({
+				id: Number(r.snapshot_id),
+				timeMs: coerceTimestampMs(r.snapshot_time)
+			}));
+		} catch {
+			// Snapshot queries may fail on very old DuckLake specs; fall back silently.
+			snapshots = [];
 		}
-		const countResult = await engine.query(
-			connId,
-			`SELECT COUNT(*)::INT AS cnt FROM ducklake_snapshots('${ATTACH_ALIAS}');`
-		);
-		if (countResult.rows?.length > 0) {
-			snapshotCount = countResult.rows[0].cnt ?? 0;
-		}
-	} catch {
-		// Snapshot queries may fail on very old DuckLake specs
+	}
+	const current = snapshotId !== null ? snapshots.find((s) => s.id === snapshotId) : snapshots[0];
+	if (current) {
+		snapshotVersion = current.id;
+		snapshotTimeMs = current.timeMs;
 	}
 
 	// Discover schemas
@@ -230,6 +239,73 @@ async function loadDuckLakeTables(engine: any, connId: string) {
 	tables = (result.rows ?? [])
 		.map((r: any) => r.table_name)
 		.filter((name: any): name is string => !!name);
+}
+
+async function switchSnapshot(id: number) {
+	if (id === snapshotVersion) return;
+	switchingSnapshot = true;
+	error = null;
+	// Clear the currently-open table so TableViewer tears down and re-renders
+	// against the new catalog state.
+	selectedTable = null;
+	childTab = null;
+	try {
+		const engine = await getQueryEngine();
+		const connId = tab.connectionId ?? '';
+		await loadDuckLake(engine, connId, id);
+	} catch (err) {
+		error = err instanceof Error ? err.message : String(err);
+	} finally {
+		switchingSnapshot = false;
+	}
+}
+
+/**
+ * DuckDB-WASM returns TIMESTAMP in different shapes depending on the driver
+ * path: BigInt microseconds (Arrow int64), Number milliseconds, Date object,
+ * or ISO string. Normalize all of them to epoch milliseconds so downstream
+ * formatting has a single code path.
+ */
+function coerceTimestampMs(raw: unknown): number | null {
+	if (raw === null || raw === undefined) return null;
+	if (raw instanceof Date) {
+		const t = raw.getTime();
+		return Number.isNaN(t) ? null : t;
+	}
+	if (typeof raw === 'bigint') {
+		// DuckDB TIMESTAMP is microseconds since epoch.
+		return Number(raw / 1000n);
+	}
+	// Heuristic: > 1e14 is microseconds (any year past 5138 in ms is unrealistic)
+	const msFromEpochNumber = (n: number) => (n > 1e14 ? Math.floor(n / 1000) : n);
+	if (typeof raw === 'number') {
+		return Number.isFinite(raw) ? msFromEpochNumber(raw) : null;
+	}
+	if (typeof raw === 'string') {
+		const trimmed = raw.trim();
+		if (/^\d+$/.test(trimmed)) {
+			const n = Number(trimmed);
+			return Number.isFinite(n) ? msFromEpochNumber(n) : null;
+		}
+		const parsed = Date.parse(trimmed);
+		return Number.isNaN(parsed) ? null : parsed;
+	}
+	return null;
+}
+
+function formatSnapshotTime(ms: number | null): string | null {
+	if (ms === null) return null;
+	const d = new Date(ms);
+	if (Number.isNaN(d.getTime())) return null;
+	return `${d
+		.toISOString()
+		.replace('T', ' ')
+		.replace(/\.\d+Z$/, '')} UTC`;
+}
+
+function formatSnapshotLabel(s: { id: number; timeMs: number | null }): string {
+	const time = formatSnapshotTime(s.timeMs);
+	return time ? `v${s.id} (${time})` : `v${s.id}`;
 }
 
 async function switchSchema(schema: string) {
@@ -293,13 +369,26 @@ function selectTable(tableName: string) {
 			<span class="hidden text-xs text-zinc-400 sm:inline">{tables.length} {t('database.tables')}</span>
 		{/if}
 		{#if isDuckLake && snapshotVersion !== null}
-			<span class="hidden items-center gap-1 text-xs text-zinc-400 sm:inline-flex">
+			<div class="hidden items-center gap-1 text-xs text-zinc-400 sm:inline-flex">
 				<ClockIcon class="h-3 w-3" />
-				v{snapshotVersion}
-				{#if snapshotCount > 1}
-					({snapshotCount} {t('ducklake.snapshots')})
+				{#if snapshots.length > 1}
+					<select
+						class="rounded bg-white px-1.5 py-0.5 text-xs text-zinc-700 disabled:opacity-60 dark:bg-zinc-800 dark:text-zinc-300"
+						disabled={switchingSnapshot}
+						title={t('ducklake.snapshot')}
+						value={snapshotVersion}
+						onchange={(e) => switchSnapshot(Number(e.currentTarget.value))}
+					>
+						{#each snapshots as snap (snap.id)}
+							<option value={snap.id}>{formatSnapshotLabel(snap)}</option>
+						{/each}
+					</select>
+					<span class="text-zinc-400">({snapshots.length} {t('ducklake.snapshots')})</span>
+				{:else}
+					{@const formatted = formatSnapshotTime(snapshotTimeMs)}
+					<span>v{snapshotVersion}{#if formatted}&nbsp;({formatted}){/if}</span>
 				{/if}
-			</span>
+			</div>
 		{/if}
 
 		<div class="ms-auto">
