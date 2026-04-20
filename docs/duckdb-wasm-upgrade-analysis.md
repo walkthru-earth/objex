@@ -1,6 +1,18 @@
 # DuckDB-WASM Upgrade Analysis (2026-03-29)
 
-## TL;DR
+## Status update (2026-04-20): RESOLVED
+
+Currently on `@duckdb/duckdb-wasm@1.33.1-dev53.0` with DuckDB core 1.5.2 and DuckLake 1.0 working end-to-end (storage v68 catalogs attach and read correctly, snapshot time-travel picker wired in `DatabaseViewer.svelte`).
+
+The `stoi` crash was root-caused (Maxxen, 2026-03-29) as a PROJ default-CRS registration timing issue under WASM, not the `arrow_duck_schema.cpp` parsing theory below. Workaround shipped in `src/lib/query/wasm.ts`: run `SELECT * FROM duckdb_coordinate_systems()` BEFORE the explicit `LOAD spatial` in init SQL. Ordering is load-bearing. Confirmed working across dev44.0 → dev53.0.
+
+Keep the `enable_geoparquet_conversion = false` retry fallback in TableViewer for true legacy GeoParquet (files missing the `"version"` field), it's a different code path.
+
+Everything below this banner is preserved as historical investigation.
+
+---
+
+## TL;DR (historical, pre-workaround)
 
 Cannot upgrade `@duckdb/duckdb-wasm` past `1.33.1-dev20.0`. The stoi crash (#2199) is the hard blocker. **Tested dev41.0 on 2026-03-29: crash persists.** PR #2200 did NOT fix it. A fix to `duckdb/duckdb` core (`arrow_duck_schema.cpp` lines 191/230) is required.
 

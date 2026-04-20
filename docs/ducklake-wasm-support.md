@@ -1,9 +1,9 @@
 # DuckLake WASM Support
 
-Research and implementation plan for integrating DuckLake 0.4+ with DuckDB-WASM in objex.
+Research and implementation plan for integrating DuckLake with DuckDB-WASM in objex.
 
 **Date**: 2026-04-05
-**Status**: Implementation in progress
+**Status update (2026-04-20)**: SHIPPED. `@duckdb/duckdb-wasm@1.33.1-dev53.0` attaches DuckLake 1.0 catalogs (storage v68) end-to-end. `DatabaseViewer.svelte` auto-detects `.ducklake` and `.duckdb` DuckLake catalogs, lists snapshots via `ducklake_snapshots('<alias>')`, and exposes a snapshot picker in the header that re-attaches with `SNAPSHOT_VERSION N` for time travel. The storage-version and `stoi`-crash blockers called out further down are resolved, see the status banner in `docs/duckdb-wasm-upgrade-analysis.md` for how. Sections below the "Research" heading predate the fix and are preserved for historical context, treat any claim about `dev20.0` being the pin as stale.
 
 ## What is DuckLake?
 
