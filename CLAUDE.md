@@ -95,7 +95,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
   - EPSG:4326 global bbox is clamped to ±85.051129° before `generateTileMatrixSet` (safety net)
   - User-defined CRS (GeoTIFF model type 32767, e.g. Mollweide) shows error, not supported by `@developmentseed/geotiff`
   - DecoderPool workers fail in Vite dev mode, using main-thread `DecoderPool()` (no workers)
-  - Antimeridian longitude wrapping, pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366) still open in v0.5)
+  - Antimeridian longitude wrapping, pnpm patch adds proj4 `+over` flag ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366) and [PR #374](https://github.com/developmentseed/deck.gl-raster/pull/374) both still open in v0.5)
   - v0.5's `LinearRescale` shader module is wired via `CogControls`. `createRescaledPipeline()` in `utils/cog.ts` wraps `inferRenderPipeline` (re-exported through our pnpm patch) and appends `LinearRescale` to the returned pipeline. Slider is hidden whenever `needsCustomPipelineForConfig` is true (non-uint, palette-indexed, mode=single, non-standard RGB band order) because the custom JS pipeline bakes RGBA in CPU and a GPU rescale would be cosmetic
   - v0.5's `CutlineBbox` shader module takes prop `{ bbox: [minX, minY, maxX, maxY] }` in mercator meters (EPSG:3857), not lnglat
   - Palette-indexed uint COGs with an embedded `ColorMap` tag (Photometric.Palette === 3) defer to the library default pipeline so the embedded palette renders correctly. `needsCustomPipelineForConfig` short-circuits when the user has not changed the default band config
