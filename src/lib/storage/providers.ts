@@ -366,9 +366,9 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 	gcs: {
 		defaultEnabled: false,
 		docsUrl: 'https://cloud.google.com/storage/docs/using-cors',
-		note: 'CORS cannot be configured via the Cloud Console. Use the gcloud CLI.',
+		note: 'Use the gcloud CLI. For private buckets signed with HMAC keys, `responseHeader` must also list the AWS SigV4 headers (Authorization, x-amz-date, x-amz-content-sha256) or GCS will silently reject the preflight.',
 		cliSteps: [
-			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": [\n      "Content-Type",\n      "Content-Length",\n      "Content-Range",\n      "Accept-Ranges",\n      "ETag"\n    ],\n    "maxAgeSeconds": 3600\n  }\n]',
+			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": [\n      "Content-Type",\n      "Content-Length",\n      "Content-Range",\n      "Accept-Ranges",\n      "ETag",\n      "Authorization",\n      "x-amz-content-sha256",\n      "x-amz-date",\n      "x-amz-*",\n      "x-goog-*"\n    ],\n    "maxAgeSeconds": 3600\n  }\n]',
 			'gcloud storage buckets update gs://BUCKET --cors-file=cors.json'
 		]
 	},
