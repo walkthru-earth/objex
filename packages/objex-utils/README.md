@@ -3,51 +3,50 @@
 [![npm](https://img.shields.io/npm/v/@walkthru-earth/objex-utils?color=cb3837)](https://www.npmjs.com/package/@walkthru-earth/objex-utils)
 [![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-Pure TypeScript utilities extracted from [objex](https://github.com/walkthru-earth/objex) — zero Svelte dependency. Works with any JS framework or Node.js.
+Pure TypeScript utilities extracted from [objex](https://github.com/walkthru-earth/objex). Zero Svelte dependency. Works with any JS framework or Node 18+.
+
+Built for high-performance geospatial pipelines: WKB parsing, GeoArrow table construction, GeoParquet footer reading via range requests, cloud URL parsing, and a 200+ extension file-type registry.
 
 ## Install
 
 ```bash
 pnpm add @walkthru-earth/objex-utils
+# or
+npm install @walkthru-earth/objex-utils
 ```
 
-## Usage
+## At a glance
 
 ```ts
 import {
-  // WKB / Geometry
+  // WKB / GeoArrow
   parseWKB,
   findGeoColumn,
   buildGeoArrowTables,
 
-  // Storage URLs
-  parseStorageUrl,
-  looksLikeUrl,
-
-  // Parquet metadata
+  // Parquet metadata (hyparquet, range requests)
   readParquetMetadata,
   extractEpsgFromGeoMeta,
   extractBounds,
 
-  // File type registry
+  // Storage URLs
+  parseStorageUrl,
+  resolveCloudUrl,
+  looksLikeUrl,
+
+  // File-type registry
   getFileTypeInfo,
   getViewerKind,
-  getMimeType,
+  getDuckDbReadFn,
   isQueryable,
 
-  // Formatting
+  // Formatting / classification / hex / CSV / JSON
   formatFileSize,
-  formatDate,
   formatValue,
-  jsonReplacerBigInt,
-
-  // Column types
   classifyType,
-  typeColor,
-  typeLabel,
-
-  // Hex dump
   generateHexDump,
+  serializeToCsv,
+  serializeToJson,
 
   // Error handling
   handleLoadError,
@@ -59,33 +58,41 @@ import {
 } from '@walkthru-earth/objex-utils';
 ```
 
-## Exports
+## Documentation
 
-| Export | Description |
-|--------|-------------|
-| `parseWKB()` | Parse WKB binary into coordinates with geometry type classification |
-| `findGeoColumn()` | 5-priority heuristic to detect geometry columns in tabular data |
-| `buildGeoArrowTables()` | Convert WKB arrays to GeoArrow tables for deck.gl rendering |
-| `parseStorageUrl()` | Parse S3/GCS/Azure/R2 URLs into provider, bucket, key |
-| `readParquetMetadata()` | Read Parquet file metadata via HTTP range requests (hyparquet) |
-| `getFileTypeInfo()` | Map file extensions to viewer kind, category, icon, and MIME type |
-| `formatFileSize()` | Human-readable file sizes (1024-based: KB, MB, GB) |
-| `formatValue()` | Format any value for display (handles BigInt, Date, objects, null) |
-| `generateHexDump()` | Generate hex dump rows from binary data |
-| `classifyType()` | Classify SQL/Arrow column types into categories |
-| `handleLoadError()` | Normalize errors, silently skip AbortError |
-| `WGS84_CODES` | Set of EPSG codes considered WGS84 (4326, 4979) |
+Full per-module developer reference lives in [`docs/`](./docs/README.md). Each page lists the exact TypeScript signature, parameter semantics, return shape, peer-dependency requirements, and non-obvious behavior.
 
-## Optional Peer Dependencies
+| Page | Covers |
+|------|--------|
+| [`docs/geometry.md`](./docs/geometry.md) | WKB parser, GeoArrow builder, geometry-column detection |
+| [`docs/cog.md`](./docs/cog.md) | Cloud-Optimized GeoTIFF pipeline helpers, band configs, color ramps |
+| [`docs/parquet-metadata.md`](./docs/parquet-metadata.md) | `readParquetMetadata` + CRS / bounds / geometry-type extractors |
+| [`docs/storage.md`](./docs/storage.md) | URL parsing, provider registry, `StorageAdapter`, `UrlAdapter` |
+| [`docs/query-engine.md`](./docs/query-engine.md) | `QueryEngine` interface + handle / result types |
+| [`docs/file-types.md`](./docs/file-types.md) | File-type registry: `getFileTypeInfo`, `getViewerKind`, `getDuckDbReadFn`, … |
+| [`docs/formatting.md`](./docs/formatting.md) | Display formatters, column-type classification, hex dump, CSV/JSON export |
+| [`docs/file-sort.md`](./docs/file-sort.md) | `sortFileEntries`, `toggleSortField` |
+| [`docs/markdown-sql.md`](./docs/markdown-sql.md) | Markdown + SQL block parsing (Evidence-compatible) |
+| [`docs/local-storage.md`](./docs/local-storage.md) | SSR-safe `loadFromStorage` / `persistToStorage` |
+| [`docs/errors.md`](./docs/errors.md) | `handleLoadError` |
+| [`docs/types-constants.md`](./docs/types-constants.md) | `Connection`, `Tab`, `FileEntry`, `WriteResult`, `Theme`, shared constants |
 
-Heavy dependencies are optional — only install what you use:
+## Optional peer dependencies
 
-- `apache-arrow` — required for `buildGeoArrowTables()`
-- `hyparquet` + `hyparquet-compressors` — required for `readParquetMetadata()`
+Heavy dependencies are **optional** peers. Install only what you use.
+
+| Peer | Required by |
+|------|-------------|
+| `apache-arrow >=14` | `buildGeoArrowTables` |
+| `hyparquet >=1.25` | `readParquetMetadata` and friends |
+| `hyparquet-compressors >=1.1` | SNAPPY / ZSTD / GZIP / LZ4 / BROTLI support in `readParquetMetadata` |
+| `yaml >=2` | `parseMarkdownDocument` (lazy-loaded — only when frontmatter is present) |
+
+As of v1.2 the `yaml` dependency is imported dynamically inside `parseMarkdownDocument`. Consumers who never call that function do not need `yaml` at all. Before v1.2 the bundle failed to load without `yaml` even for unrelated imports.
 
 ## Related
 
-- [`@walkthru-earth/objex`](https://www.npmjs.com/package/@walkthru-earth/objex) — Full Svelte 5 component library with viewers, stores, and query engine
+- [`@walkthru-earth/objex`](https://www.npmjs.com/package/@walkthru-earth/objex) — Full Svelte 5 component library with viewers, stores, and query engine.
 
 ## License
 

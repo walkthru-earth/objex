@@ -2,10 +2,13 @@
 
 Pure TypeScript sub-package. Zero Svelte dependency. Built with tsup (ESM + CJS + DTS).
 
+Developer-facing reference docs live in [`docs/`](./docs/README.md) — one page per module with full signatures, inputs/outputs, and peer-dep notes. Keep them in sync whenever a public export changes.
+
 ```mermaid
 graph LR
     IDX[src/index.ts] -->|re-exports| SRC["../../src/lib/*"]
     IDX --> TSUP[tsup] --> DIST["dist/index.js<br/>dist/index.cjs<br/>dist/index.d.ts"]
+    IDX -. documented in .-> DOCS[docs/*.md]
 ```
 
 Re-exports from `src/lib/`:
@@ -33,8 +36,10 @@ Re-exports from `src/lib/`:
 
 **Important**: All re-exported source files must use **relative imports** (not `$lib/`). The `$lib` alias is SvelteKit-only and breaks the tsup build.
 
-- External (not bundled): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`, `@developmentseed/geotiff`, `maplibre-gl`, `proj4`
+- External (not bundled): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`, `@developmentseed/geotiff`, `@developmentseed/epsg`, `@developmentseed/proj`, `maplibre-gl`, `proj4`
+- `yaml` is loaded lazily via dynamic `import()` inside `parseMarkdownDocument` so the bundle loads without it installed. Keep it this way.
 - `tsconfig.json` has `rootDir: "../.."` to allow DTS generation across monorepo
+- `package.json` `files` must include `dist` and `docs` so the published tarball carries the reference docs.
 
 ```bash
 pnpm --filter @walkthru-earth/objex-utils run build

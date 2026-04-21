@@ -63,7 +63,7 @@ import { readParquetMetadata } from '@walkthru-earth/objex/utils/parquet-metadat
 import { getFileTypeInfo } from '@walkthru-earth/objex/file-icons';
 ```
 
-Requires `svelte ^5` and `@sveltejs/kit ^2` as peer dependencies. Heavy deps (DuckDB, deck.gl, MapLibre, Arrow, hyparquet) are optional peers -- only install what you need.
+Requires `svelte ^5` and `@sveltejs/kit ^2` as peer dependencies. Heavy deps (DuckDB, deck.gl, MapLibre, Arrow, hyparquet, hyparquet-compressors, yaml) are optional peers -- only install what you need.
 
 ### `@walkthru-earth/objex-utils` -- Pure TypeScript Utilities
 
@@ -85,6 +85,8 @@ import {
   classifyType
 } from '@walkthru-earth/objex-utils';
 ```
+
+Full per-module reference docs: [`packages/objex-utils/docs/`](packages/objex-utils/docs/README.md).
 
 ### Exports
 
