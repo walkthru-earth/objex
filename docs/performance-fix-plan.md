@@ -94,15 +94,6 @@ $effect(() => {
 onDestroy(cleanup);
 ```
 
-### Step 2.1: Fix MapViewer
-
-**File:** `src/lib/components/viewers/MapViewer.svelte`
-
-- Add `cleanup()` function that nulls `geojsonData`
-- Add `tabResources.register(tab.id, cleanup)`
-- Add `AbortController` to `loadGeoJson()` — pass signal to `adapter.read()`
-- Add `onDestroy(cleanup)`
-
 ### Step 2.2: Fix NotebookViewer
 
 **File:** `src/lib/components/viewers/NotebookViewer.svelte`
@@ -200,12 +191,6 @@ Change `features` to `$state.raw`:
 let features = $state.raw<GeoJSON.Feature[]>([]);
 ```
 Safe — features are appended via reassignment during streaming (`features = [...features, ...batch]`).
-
-### Step 3.4: MapViewer
-
-**File:** `src/lib/components/viewers/MapViewer.svelte`
-
-Change `geojsonData` to `$state.raw` — it's a large GeoJSON object replaced wholesale.
 
 ### Step 3.5: ArchiveViewer
 

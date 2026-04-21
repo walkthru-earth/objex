@@ -22,7 +22,7 @@ graph LR
 | `browser-cloud.ts` | `BrowserCloudAdapter` | index.ts (factory) |
 | `browser-azure.ts` | `BrowserAzureAdapter` | index.ts (factory) |
 | `url-adapter.ts` | `UrlAdapter` | lib/index.ts (npm export) |
-| `index.ts` | `getAdapter()`, `clearAdapterCache()` | stores/browser, FileTreeSidebar, ArchiveViewer, ModelViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer |
+| `index.ts` | `getAdapter()`, `clearAdapterCache()` | stores/browser, FileTreeSidebar, ArchiveViewer, ModelViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, NotebookViewer, CodeViewer, ImageViewer |
 
 `adapter.ts`, `url-adapter.ts`, and `utils/storage-url.ts` use relative imports (not `$lib`) — they're published to npm via `objex-utils`. `providers.ts` is also imported by `storage-url.ts` via relative path.
 

@@ -29,7 +29,6 @@
 - All 9+ viewers that call `adapter.read()` without cancellation:
   - `src/lib/components/viewers/CodeViewer.svelte`
   - `src/lib/components/viewers/MarkdownViewer.svelte`
-  - `src/lib/components/viewers/MapViewer.svelte`
   - `src/lib/components/viewers/ImageViewer.svelte`
   - `src/lib/components/viewers/MediaViewer.svelte`
   - `src/lib/components/viewers/NotebookViewer.svelte`
@@ -67,7 +66,6 @@ $effect(() => {
 - `src/lib/components/viewers/TableGrid.svelte` — `rows` prop (up to 5000 items)
 - `src/lib/components/browser/FileTreeSidebar.svelte` — `rootNodes` (up to 3000+ items)
 - `src/lib/components/viewers/FlatGeobufViewer.svelte` — `features` array
-- `src/lib/components/viewers/MapViewer.svelte` — `geojsonData` (large GeoJSON)
 - `src/lib/components/viewers/TableViewer.svelte` — `rows` state
 - `src/lib/components/viewers/ArchiveViewer.svelte` — entry arrays
 - `src/lib/stores/query-history.svelte.ts` — `entries` array (bounded at 200)
@@ -137,7 +135,6 @@ For TableViewer (the main consumer), only `rows` is used — `arrowBytes` is com
 
 | Viewer | Heavy data held | Missing |
 |---|---|---|
-| `MapViewer.svelte` | `geojsonData` (full GeoJSON) | `tabResources.register()` |
 | `NotebookViewer.svelte` | rendered HTML cells, `rawContent` | `tabResources.register()`, `onDestroy` |
 | `DatabaseViewer.svelte` | `rows`, `tables` arrays | `tabResources.register()`, `onDestroy`, DuckDB DETACH |
 | `CodeViewer.svelte` | `rawCode`, `html` strings | `tabResources.register()` (has `$effect` cleanup for blob URL, but not for data) |

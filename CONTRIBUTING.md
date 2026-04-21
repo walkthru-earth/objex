@@ -84,7 +84,7 @@ graph TD
         ZARR["ZarrViewer<br/>+ ZarrMapViewer"]
         COPC["CopcViewer"]
         DB["DatabaseViewer"]
-        CODE["CodeViewer<br/>+ StyleEditorOverlay<br/>+ marimo detection"]
+        CODE["CodeViewer<br/>+ marimo detection"]
         NB["NotebookViewer"]
         PDF["PdfViewer"]
         IMG["ImageViewer"]

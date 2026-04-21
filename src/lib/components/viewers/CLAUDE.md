@@ -46,7 +46,7 @@ graph TD
 | CogViewer | @developmentseed/deck.gl-geotiff v0.5, @developmentseed/geotiff | utils/cog, utils/url, CogControls |
 | PmtilesViewer | pmtiles, MapLibre | utils/pmtiles, utils/url-state, pmtiles/* sub-components |
 | FlatGeobufViewer | flatgeobuf, deck.gl | utils/deck, utils/url |
-| ZarrViewer | zarrita 0.6.1, @carbonplan/zarr-layer 0.4.2 | utils/zarr (ZarrNode, ZarrHierarchy, fetchHierarchy, ensureCodecsRegistered, findNodeByPath, formatCodecs, formatChunkKeys, computeChunkCount/Size/Uncompressed, inferDims, DIM_LIKE_NAMES), utils/url-state. Tree view with detail panel for hierarchical Zarr stores. Map mode for stores with root-level numeric coordinate arrays. Guards against >10k tiles (no multiscale pyramid). Supports v2/v3, consolidated/non-consolidated, string dtype, sharding_indexed. See `docs/zarr-viewer-architecture.md` |
+| ZarrViewer | zarrita 0.6.1, @carbonplan/zarr-layer 0.4.2 | utils/zarr (ZarrNode, ZarrHierarchy, fetchHierarchy, ensureCodecsRegistered, formatCodecs, formatChunkKeys, computeChunkCount/Size/Uncompressed, inferDims, DIM_LIKE_NAMES), utils/url-state. Tree view with detail panel for hierarchical Zarr stores. Map mode for stores with root-level numeric coordinate arrays. Guards against >10k tiles (no multiscale pyramid). Supports v2/v3, consolidated/non-consolidated, string dtype, sharding_indexed. See `docs/zarr-viewer-architecture.md` |
 | CodeViewer | Shiki | utils/shiki, utils/url-state |
 | NotebookViewer | Marked, Shiki, ansi_up | utils/notebook, utils/shiki |
 | PdfViewer | pdf.js | utils/pdf |

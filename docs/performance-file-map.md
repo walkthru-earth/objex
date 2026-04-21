@@ -63,13 +63,6 @@
 
 ## Viewers — High Priority
 
-### `src/lib/components/viewers/MapViewer.svelte`
-- **Phase:** 2.1, 3.4
-- **Issues:** No tabResources; no AbortController; geojsonData not freed on LRU eviction
-- **Change:** Add cleanup(), tabResources.register(), AbortController, $state.raw for geojsonData
-- **Depends on:** `adapter.ts` (for signal), `tab-resources.svelte.ts`
-- **Depended on by:** None (leaf component)
-
 ### `src/lib/components/viewers/DatabaseViewer.svelte`
 - **Phase:** 2.3, 4.2
 - **Issues:** Dead adapter.read(); no tabResources; no onDestroy; DuckDB never DETACHed
@@ -236,5 +229,4 @@ SEQUENTIAL (depends on Group A):
 2. Remove DatabaseViewer dead read (Phase 4.3) — 1 file
 3. Null CogViewer GeoTIFF refs (Phase 5.1) — 1 file
 4. Null GeoParquet wkbArraysRef (Phase 5.2) — 1 file
-5. Add tabResources to MapViewer (Phase 2.1 partial) — 1 file
-6. Add tabResources to NotebookViewer (Phase 2.2 partial) — 1 file
+5. Add tabResources to NotebookViewer (Phase 2.2 partial) — 1 file
