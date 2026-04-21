@@ -1,7 +1,7 @@
 import { connectionStore } from '../stores/connections.svelte.js';
 import { type AzureCredentials, credentialStore } from '../stores/credentials.svelte.js';
 import type { Connection, FileEntry, WriteResult } from '../types.js';
-import type { ListPage, StorageAdapter } from './adapter.js';
+import { AuthRequiredError, type ListPage, type StorageAdapter } from './adapter.js';
 
 // --- Helpers ---
 
@@ -106,6 +106,12 @@ export class BrowserAzureAdapter implements StorageAdapter {
 		const res = await fetch(url, { signal });
 		if (!res.ok) {
 			const body = await res.text().catch(() => '');
+			if (res.status === 401 || res.status === 403) {
+				throw new AuthRequiredError(
+					res.status,
+					`Azure list failed (${res.status}): ${body || res.statusText}`
+				);
+			}
 			throw new Error(`Azure list failed (${res.status}): ${body || res.statusText}`);
 		}
 

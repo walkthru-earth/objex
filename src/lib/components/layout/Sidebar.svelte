@@ -57,6 +57,33 @@ $effect(() => {
 	}
 });
 
+// Auto-detected ?url= buckets are saved anonymously (zero-click demo flow).
+// If the first LIST returns 401/403, the bucket is actually private — flip
+// the connection to non-anonymous and open the credential dialog so the
+// user can paste keys instead of seeing a silent failure.
+$effect(() => {
+	const conn = browser.authRequired;
+	if (!conn) return;
+	handleAuthRequired(conn);
+});
+
+async function handleAuthRequired(conn: Connection) {
+	browser.clearAuthRequired();
+	await connections.update(conn.id, {
+		name: conn.name,
+		provider: conn.provider,
+		endpoint: conn.endpoint,
+		bucket: conn.bucket,
+		region: conn.region,
+		anonymous: false,
+		authMethod: conn.authMethod,
+		rootPrefix: conn.rootPrefix
+	});
+	const updated = connections.getById(conn.id);
+	if (!updated) return;
+	await ensureCredentials(updated);
+}
+
 async function handleAutoDetection() {
 	const url = new URL(window.location.href);
 	const rawUrl = url.searchParams.get('url');

@@ -1,3 +1,4 @@
+import { AuthRequiredError } from '../storage/adapter.js';
 import { getAdapter } from '../storage/index.js';
 import type { Connection, FileEntry } from '../types.js';
 import { credentialStore } from './credentials.svelte.js';
@@ -9,6 +10,7 @@ function createBrowserStore() {
 	let entries = $state<FileEntry[]>([]);
 	let loading = $state<boolean>(false);
 	let error = $state<string | null>(null);
+	let authRequired = $state<Connection | null>(null);
 	let uploading = $state<boolean>(false);
 	let uploadProgress = $state<{ current: number; total: number }>({ current: 0, total: 0 });
 
@@ -25,10 +27,20 @@ function createBrowserStore() {
 			const result = await adapter.list(startPrefix);
 			entries = result;
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
+			if (e instanceof AuthRequiredError && connection.anonymous) {
+				// Auto-detected a private bucket. Surface it for the Sidebar to
+				// flip the connection to non-anonymous and prompt for credentials.
+				authRequired = connection;
+			} else {
+				error = e instanceof Error ? e.message : String(e);
+			}
 		} finally {
 			loading = false;
 		}
+	}
+
+	function clearAuthRequired() {
+		authRequired = null;
 	}
 
 	async function navigateTo(prefix: string) {
@@ -154,6 +166,10 @@ function createBrowserStore() {
 			if (activeConnection.anonymous) return false;
 			return credentialStore.has(activeConnection.id);
 		},
+		get authRequired() {
+			return authRequired;
+		},
+		clearAuthRequired,
 		browse,
 		navigateTo,
 		navigateUp,

@@ -7,6 +7,20 @@ export interface ListPage {
 	hasMore: boolean;
 }
 
+/**
+ * Thrown by adapters when the server returns 401 or 403 on an anonymous
+ * request. The browser store catches this to trigger a credential prompt
+ * for auto-detected `?url=` connections that turned out to be private.
+ */
+export class AuthRequiredError extends Error {
+	readonly status: number;
+	constructor(status: number, message: string) {
+		super(message);
+		this.name = 'AuthRequiredError';
+		this.status = status;
+	}
+}
+
 export interface StorageAdapter {
 	// Read operations
 	list(path: string, signal?: AbortSignal): Promise<FileEntry[]>;

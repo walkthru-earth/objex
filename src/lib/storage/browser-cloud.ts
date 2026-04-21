@@ -2,7 +2,7 @@ import { AwsClient } from 'aws4fetch';
 import { connectionStore } from '../stores/connections.svelte.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import type { Connection, FileEntry, WriteResult } from '../types.js';
-import type { ListPage, StorageAdapter } from './adapter.js';
+import { AuthRequiredError, type ListPage, type StorageAdapter } from './adapter.js';
 import { buildProviderBaseUrl, isGcsProvider, type ProviderId } from './providers.js';
 
 // --- Helpers ---
@@ -158,6 +158,12 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		const res = await fetch(`${url}?${params}`, { signal });
 		if (!res.ok) {
 			const body = await res.text().catch(() => '');
+			if (res.status === 401 || res.status === 403) {
+				throw new AuthRequiredError(
+					res.status,
+					`GCS list failed (${res.status}): ${body || res.statusText}`
+				);
+			}
 			throw new Error(`GCS list failed (${res.status}): ${body || res.statusText}`);
 		}
 
@@ -224,6 +230,12 @@ export class BrowserCloudAdapter implements StorageAdapter {
 		const res = await cloudFetch(`${baseUrl}?${params}`, { signal });
 		if (!res.ok) {
 			const body = await res.text().catch(() => '');
+			if (res.status === 401 || res.status === 403) {
+				throw new AuthRequiredError(
+					res.status,
+					`List failed (${res.status}): ${body || res.statusText}`
+				);
+			}
 			throw new Error(`List failed (${res.status}): ${body || res.statusText}`);
 		}
 
