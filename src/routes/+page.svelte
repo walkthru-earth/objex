@@ -202,22 +202,41 @@ $effect(() => {
 
 // Keep the full URL (?url= and #hash) in sync with the active tab.
 // Save/restore view mode per tab so switching back preserves the view.
+//
+// The incoming #hash from a shared link (e.g. ?url=...#map) must survive
+// two transitions before any viewer mounts:
+//  1. eager URL tab opens (module-level openUrlTab)
+//  2. Sidebar auto-detection closes it and opens a remote tab
+// To support that, we only wipe the hash on *user-initiated* tab switches
+// (the previous tab still exists). Initial page load and auto-migration
+// (previous tab closed) preserve the hash so viewers can read their view
+// mode from it at mount time.
 let prevActiveTabId = '';
 const tabViewModes = new Map<string, string>();
 $effect(() => {
 	const tab = tabs.active;
 	const id = tab?.id ?? '';
+	const prevTabStillExists = !!prevActiveTabId && tabs.items.some((t) => t.id === prevActiveTabId);
+	const userSwitched = !!prevActiveTabId && prevActiveTabId !== id && prevTabStillExists;
 
-	if (prevActiveTabId && prevActiveTabId !== id) {
-		// Save the current view mode for the tab we're leaving
+	if (userSwitched) {
+		// Save the current view mode for the tab the user is leaving
 		tabViewModes.set(prevActiveTabId, getUrlView());
 	}
 
 	if (!tab) {
 		clearUrlState();
 	} else {
-		// Restore view mode hash for the tab we're switching to
-		updateUrlView(tabViewModes.get(id) ?? '');
+		// Restore saved view; on user switches with no saved view, wipe any
+		// stale hash from the previous tab. On initial load and auto-migration
+		// (prev tab was closed), leave the hash alone so the incoming #map /
+		// #stac / etc. reaches the newly-mounted viewer.
+		const saved = tabViewModes.get(id);
+		if (saved !== undefined) {
+			updateUrlView(saved);
+		} else if (userSwitched) {
+			updateUrlView('');
+		}
 
 		// Sync ?url= param
 		if (tab.source === 'url') {
