@@ -29,7 +29,14 @@ jobs:
       - run: pnpm run check
       - run: pnpm run build
 
+      # Verify both publishable packages build cleanly so tarball regressions
+      # (stray $lib/ imports, broken .d.ts, missing exports) are caught here,
+      # not at release. Mirrors what ci:publish does before pnpm publish.
+      - run: pnpm run package
+      - run: pnpm --filter @walkthru-earth/objex-utils run build
+
       - uses: actions/upload-artifact@v4
         with:
           name: build
           path: build/
+
