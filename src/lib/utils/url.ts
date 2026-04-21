@@ -2,10 +2,10 @@ import {
 	buildProviderBaseUrl,
 	isPubliclyStreamable,
 	type ProviderId
-} from '$lib/storage/providers.js';
-import { connections } from '$lib/stores/connections.svelte.js';
-import { credentialStore } from '$lib/stores/credentials.svelte.js';
-import type { Tab } from '$lib/types.js';
+} from '../storage/providers.js';
+import { connections } from '../stores/connections.svelte.js';
+import { credentialStore } from '../stores/credentials.svelte.js';
+import type { Tab } from '../types.js';
 import { getNativeScheme, safeDecodeURIComponent } from './cloud-url.js';
 
 /**
