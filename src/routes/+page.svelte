@@ -225,7 +225,11 @@ $effect(() => {
 	}
 
 	if (!tab) {
-		clearUrlState();
+		// Only wipe URL state when the user actually emptied the tab list.
+		// A transient null activeTabId (e.g. Sidebar auto-detection awaits
+		// between tabs.close() and tabs.open()) must NOT clear ?url= and
+		// the incoming #hash, or the new viewer never sees them.
+		if (tabs.items.length === 0) clearUrlState();
 	} else {
 		// Restore saved view; on user switches with no saved view, wipe any
 		// stale hash from the previous tab. On initial load and auto-migration
