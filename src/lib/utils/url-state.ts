@@ -32,42 +32,44 @@ export function buildUrlParam(conn: Connection, prefix?: string): string {
 }
 
 /**
- * Set the ?url= param to a raw URL string (for direct URL tabs).
+ * Apply a URL mutation, skipping `replaceState` if nothing changed.
+ * Every public mutator below funnels through this to avoid `replaceState`
+ * thrash when the tab-sync effect re-fires on unrelated reactive changes.
  */
-export function setRawUrlParam(rawUrl: string) {
+function writeLocation(mutate: (url: URL) => void) {
 	try {
 		const url = new URL(window.location.href);
-		url.searchParams.set('url', rawUrl);
-		replaceState(url.pathname + url.search + url.hash, {});
+		const before = url.pathname + url.search + url.hash;
+		mutate(url);
+		const after = url.pathname + url.search + url.hash;
+		if (before === after) return;
+		replaceState(after, {});
 	} catch {
 		/* ignore */
 	}
+}
+
+/**
+ * Set the ?url= param to a raw URL string (for direct URL tabs).
+ */
+export function setRawUrlParam(rawUrl: string) {
+	writeLocation((url) => url.searchParams.set('url', rawUrl));
 }
 
 /**
  * Sync the ?url= param in the browser URL.
  */
 export function syncUrlParam(conn: Connection, prefix?: string) {
-	try {
-		const url = new URL(window.location.href);
-		url.searchParams.set('url', buildUrlParam(conn, prefix));
-		replaceState(url.pathname + url.search + url.hash, {});
-	} catch {
-		/* ignore */
-	}
+	writeLocation((url) => url.searchParams.set('url', buildUrlParam(conn, prefix)));
 }
 
 /**
  * Update the #hash in the URL to reflect the current view mode.
  */
 export function updateUrlView(view: string) {
-	try {
-		const url = new URL(window.location.href);
+	writeLocation((url) => {
 		url.hash = view || '';
-		replaceState(url.pathname + url.search + url.hash, {});
-	} catch {
-		/* ignore */
-	}
+	});
 }
 
 /**
@@ -96,15 +98,24 @@ export function getUrlPrefix(): string {
 }
 
 /**
+ * True when a `?url=` param is present. Single source of truth, used by
+ * the tab-sync effect and Sidebar auto-detection to decide whether an
+ * auto-migration is in progress (see `+page.svelte` tab-sync effect).
+ */
+export function hasUrlParam(): boolean {
+	try {
+		return new URL(window.location.href).searchParams.has('url');
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Clear all URL state params.
  */
 export function clearUrlState() {
-	try {
-		const url = new URL(window.location.href);
+	writeLocation((url) => {
 		url.searchParams.delete('url');
 		url.hash = '';
-		replaceState(url.pathname + url.search, {});
-	} catch {
-		/* ignore */
-	}
+	});
 }

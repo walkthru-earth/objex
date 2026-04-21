@@ -65,7 +65,7 @@ graph TD
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
 | `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `discoverV3Children()` (internal), `listS3Children()` (internal), `ensureCodecsRegistered()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `findNodeByPath()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
 | `zarr-tab.ts` | `openZarrTab()` | FileBrowser, FileTreeSidebar, +page.svelte |
-| `url-state.ts` | `syncUrlParam()`, `updateUrlView()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
+| `url-state.ts` | `syncUrlParam()`, `updateUrlView()`, `getUrlView()`, `getUrlPrefix()`, `hasUrlParam()`, `setRawUrlParam()`, `clearUrlState()`, `buildUrlParam()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `pdf.ts` | `loadPdfDocument()` | PdfViewer |
 | `model3d.ts` | `createModelScene()`, `loadModel()` | ModelViewer |
 | `markdown.ts` | `renderMarkdown()`, `detectRTL()` | MarkdownViewer |
