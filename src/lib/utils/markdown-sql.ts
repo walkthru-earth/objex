@@ -1,5 +1,3 @@
-import YAML from 'yaml';
-
 export interface SqlBlock {
 	name: string;
 	sql: string;
@@ -21,17 +19,17 @@ export interface ParsedMarkdownDocument {
  * SELECT * FROM table
  * ```
  */
-export function parseMarkdownDocument(markdown: string): ParsedMarkdownDocument {
+export async function parseMarkdownDocument(markdown: string): Promise<ParsedMarkdownDocument> {
 	let frontmatter: Record<string, any> = {};
 	let content = markdown;
 
-	// Extract YAML frontmatter
 	const fmMatch = markdown.match(/^---\n([\s\S]*?)\n---\n/);
 	if (fmMatch) {
 		try {
+			const { default: YAML } = await import('yaml');
 			frontmatter = YAML.parse(fmMatch[1]) || {};
 		} catch {
-			// Invalid YAML — ignore
+			// Invalid YAML or yaml peer dep not installed, ignore frontmatter
 		}
 		content = markdown.slice(fmMatch[0].length);
 	}

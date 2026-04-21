@@ -73,7 +73,7 @@ async function loadMarkdown() {
 		contentDir = isRTL ? 'rtl' : 'ltr';
 
 		// Parse for SQL blocks
-		const parsed = parseMarkdownDocument(rawMarkdown);
+		const parsed = await parseMarkdownDocument(rawMarkdown);
 		hasSqlBlocks = parsed.sqlBlocks.length > 0;
 
 		if (parsed.sqlBlocks.length > 0) {
