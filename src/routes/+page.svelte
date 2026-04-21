@@ -21,12 +21,13 @@ import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
-import { tabs } from '$lib/stores/tabs.svelte.js';
+import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import { resolveCloudUrl } from '$lib/utils/cloud-url.js';
 import {
 	clearUrlState,
 	getUrlPrefix,
 	getUrlView,
+	hasUrlParam,
 	setRawUrlParam,
 	syncUrlParam,
 	updateUrlView
@@ -69,7 +70,7 @@ function openUrlTab(rawUrl: string) {
 
 	const info = getFileTypeInfo(ext);
 	if (info.viewer === 'raw') return;
-	const tabId = `url:${url}`;
+	const tabId = eagerUrlTabId(url);
 	tabs.open({
 		id: tabId,
 		name: fileName,
@@ -220,16 +221,18 @@ $effect(() => {
 	const userSwitched = !!prevActiveTabId && prevActiveTabId !== id && prevTabStillExists;
 
 	if (userSwitched) {
-		// Save the current view mode for the tab the user is leaving
 		tabViewModes.set(prevActiveTabId, getUrlView());
 	}
 
 	if (!tab) {
-		// Only wipe URL state when the user actually emptied the tab list.
-		// A transient null activeTabId (e.g. Sidebar auto-detection awaits
-		// between tabs.close() and tabs.open()) must NOT clear ?url= and
-		// the incoming #hash, or the new viewer never sees them.
-		if (tabs.items.length === 0) clearUrlState();
+		// Preserve ?url= + #hash while a pending migration is in flight
+		// (Sidebar auto-detection awaits between tabs.close(eager) and
+		// tabs.open(remote)), otherwise the new viewer never sees them.
+		// hasUrlParam() is the authoritative signal; absence of any ?url=
+		// means user really did clear everything.
+		if (tabs.items.length === 0 && !hasUrlParam()) {
+			clearUrlState();
+		}
 	} else {
 		// Restore saved view; on user switches with no saved view, wipe any
 		// stale hash from the previous tab. On initial load and auto-migration
@@ -242,7 +245,6 @@ $effect(() => {
 			updateUrlView('');
 		}
 
-		// Sync ?url= param
 		if (tab.source === 'url') {
 			setRawUrlParam(tab.path);
 		} else if (tab.connectionId) {

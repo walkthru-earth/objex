@@ -4,6 +4,17 @@ import { tabResources } from './tab-resources.svelte.js';
 /** Maximum number of viewer instances kept alive (mounted but hidden). */
 const MAX_ALIVE = 5;
 
+/**
+ * Tab-id for eagerly-opened direct-URL tabs (`source: 'url'`).
+ * The Sidebar's host-detection auto-migration closes an eager tab by its id
+ * and re-opens as a remote tab once a connection is available; the eager id
+ * is built in `+page.svelte::openUrlTab` and matched in `Sidebar.svelte::
+ * handleAutoDetection`, so both sides must agree on the format.
+ */
+export function eagerUrlTabId(url: string): string {
+	return `url:${url}`;
+}
+
 function releaseDuckDbMemory() {
 	import('$lib/query/index.js')
 		.then(({ getQueryEngine }) => getQueryEngine().then((engine) => engine.releaseMemory()))

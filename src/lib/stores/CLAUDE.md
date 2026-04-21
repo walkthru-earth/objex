@@ -24,7 +24,7 @@ Stores use shared utilities from `../utils/`:
 |------|--------|--------|
 | `connections.svelte.ts` | `connectionStore` | url.ts, browser-azure, browser-cloud, storage/index, ConnectionDialog, Sidebar, TableToolbar, +page.svelte |
 | `credentials.svelte.ts` | `credentialStore` | url.ts, browser-azure, browser-cloud, Sidebar, query/wasm |
-| `tabs.svelte.ts` | `tabStore` | StatusBar, TabBar, Sidebar, FileRow, FileTreeSidebar, +page.svelte |
+| `tabs.svelte.ts` | `tabStore`, `eagerUrlTabId(url)` | StatusBar, TabBar, Sidebar, FileRow, FileTreeSidebar, +page.svelte |
 | `tab-resources.svelte.ts` | `tabResources` | CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, ModelViewer, GeoParquetMapViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, ZarrMapViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer, PmtilesViewer |
 | `files.svelte.ts` | `fileStore` | StatusBar |
 | `browser.svelte.ts` | `browser` | StatusBar, Sidebar, FileBrowser, DropZone, UploadButton, FileRow, DeleteConfirmDialog, FileTreeSidebar, RenameDialog, CreateFolderDialog, +page.svelte |

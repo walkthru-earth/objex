@@ -23,7 +23,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
-import { tabs } from '$lib/stores/tabs.svelte.js';
+import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection } from '$lib/types.js';
 import { type DetectedHost, detectHostBucket } from '$lib/utils/host-detection.js';
 import { parseStorageUrl } from '$lib/utils/storage-url.js';
@@ -71,7 +71,7 @@ async function handleAutoDetection() {
 	// URL tab (if any) so we can re-open it with a proper connectionId that
 	// provides S3 credentials and endpoint config for DuckDB httpfs.
 	if (rawUrl) {
-		const eagerTabId = `url:${rawUrl}`;
+		const eagerTabId = eagerUrlTabId(rawUrl);
 		const eagerTab = tabs.items.find((t) => t.id === eagerTabId);
 		if (eagerTab) {
 			tabs.close(eagerTabId);
