@@ -9,10 +9,6 @@ const RTL_LOCALES: Set<Locale> = new Set(['ar']);
 
 let currentLocale = $state<Locale>('en');
 
-export function getLocale(): Locale {
-	return currentLocale;
-}
-
 export function setLocale(l: Locale): void {
 	currentLocale = l;
 }

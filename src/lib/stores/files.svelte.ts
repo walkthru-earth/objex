@@ -58,5 +58,4 @@ function createFilesStore() {
 	};
 }
 
-export const fileStore = createFilesStore();
-export { fileStore as files };
+export const files = createFilesStore();

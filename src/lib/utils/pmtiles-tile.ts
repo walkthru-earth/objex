@@ -77,20 +77,6 @@ export async function decodeMvtTile(
 	return { z, x, y, layers, rawSize };
 }
 
-/** Convert tile bytes to a Blob URL for raster tile preview. */
-export async function tileToImageUrl(
-	pmtiles: PMTiles,
-	z: number,
-	x: number,
-	y: number,
-	mimeType: string
-): Promise<string | null> {
-	const resp = await pmtiles.getZxy(z, x, y);
-	if (!resp) return null;
-	const blob = new Blob([resp.data], { type: mimeType });
-	return URL.createObjectURL(blob);
-}
-
 /** MIME type for a PMTiles tile format string. */
 export function tileMimeType(format: string): string {
 	const map: Record<string, string> = {

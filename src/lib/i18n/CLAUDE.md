@@ -12,7 +12,7 @@ graph LR
 
 | File | Exports | Used by |
 |------|---------|---------|
-| `index.svelte.ts` | `t()`, `getLocale()`, `setLocale()`, `getDir()`, `Locale` | Nearly all components (45+ files): all viewers, all browser components, all layout components, MilkdownEditor, +page.svelte, +layout.svelte, stores/settings |
+| `index.svelte.ts` | `t()`, `setLocale()`, `getDir()`, `Locale` | Nearly all components (45+ files): all viewers, all browser components, all layout components, MilkdownEditor, +page.svelte, +layout.svelte, stores/settings |
 | `en.ts` | English translations dict | index.svelte.ts |
 | `ar.ts` | Arabic translations dict | index.svelte.ts |
 

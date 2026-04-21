@@ -61,56 +61,6 @@ export async function loadDeckModules() {
 	return { MapboxOverlay, GeoJsonLayer };
 }
 
-export interface DeckOverlayOptions {
-	layerId: string;
-	data: GeoJSON.FeatureCollection;
-	/** Called with properties and the full GeoJSON Feature (for selection highlight). */
-	onClick?: (properties: Record<string, any>, feature: GeoJSON.Feature) => void;
-	/** Layer-level onHover — use hoverCursor(map) to toggle pointer on MapLibre canvas. */
-	onHover?: (info: { picked?: boolean }) => void;
-}
-
-/**
- * Create a MapboxOverlay with a single GeoJsonLayer.
- * Colors are assigned per-feature based on geometry type.
- */
-export function createDeckOverlay(
-	modules: { MapboxOverlay: any; GeoJsonLayer: any },
-	options: DeckOverlayOptions
-) {
-	const { MapboxOverlay, GeoJsonLayer } = modules;
-	const { layerId, data, onClick, onHover } = options;
-
-	return new MapboxOverlay({
-		interleaved: false,
-		layers: [
-			new GeoJsonLayer({
-				id: layerId,
-				data,
-				pickable: true,
-				stroked: true,
-				filled: true,
-				pointType: 'circle',
-				getFillColor: geojsonFillColor,
-				getLineColor: geojsonLineColor,
-				getPointRadius: 6,
-				getLineWidth: 2.5,
-				lineWidthMinPixels: 1.5,
-				pointRadiusMinPixels: 4,
-				pointRadiusMaxPixels: 12,
-				autoHighlight: true,
-				highlightColor: [255, 255, 255, 100],
-				onHover,
-				onClick: (info: any) => {
-					if (info.object?.properties && onClick) {
-						onClick({ ...info.object.properties }, info.object);
-					}
-				}
-			})
-		]
-	});
-}
-
 // ─── GeoArrow overlay (GeoParquetMapViewer) ──────────────────────────
 
 /** Lazy-load GeoArrow deck.gl layers + MapboxOverlay + GeoJsonLayer (for selection). */

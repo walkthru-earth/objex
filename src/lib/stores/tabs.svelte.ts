@@ -138,5 +138,4 @@ function createTabsStore() {
 	};
 }
 
-export const tabStore = createTabsStore();
-export { tabStore as tabs };
+export const tabs = createTabsStore();

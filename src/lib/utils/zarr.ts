@@ -281,19 +281,6 @@ export function formatChunkKeys(node: ZarrNode): string | null {
 	return node.chunkKeyEncoding ?? null;
 }
 
-/** Find a node by slash-delimited path. */
-export function findNodeByPath(root: ZarrNode, path: string): ZarrNode | null {
-	if (path === '/' || path === '') return root;
-	const parts = path.replace(/^\//, '').split('/');
-	let current = root;
-	for (const part of parts) {
-		const child = current.children.find((c) => c.name === part);
-		if (!child) return null;
-		current = child;
-	}
-	return current;
-}
-
 // ---------------------------------------------------------------------------
 // Tree builders
 // ---------------------------------------------------------------------------
