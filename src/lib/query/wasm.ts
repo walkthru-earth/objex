@@ -1,5 +1,6 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
+import { getAccessMode } from '../storage/providers.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import { buildTransformExpr, wrapWkbWithCrs } from '../utils/geometry-type.js';
 import {
@@ -649,9 +650,13 @@ export class WasmQueryEngine implements QueryEngine {
 				return;
 			}
 
-			// Azure uses direct HTTPS URLs with SAS token — no S3 config needed
-			if (connection.provider === 'azure') {
-				log('configureStorage → Azure provider, skipping S3 config');
+			// For public and SAS-signed connections DuckDB hits the HTTPS URL
+			// directly — no S3 signing config needed. Saves a worker round-trip
+			// on every query for anonymous/public buckets (AWS, GCS, R2, etc.)
+			// and Azure Blob (SAS token embedded in the URL).
+			const mode = getAccessMode(connection);
+			if (mode !== 'signed-s3') {
+				log(`configureStorage → ${mode}, skipping S3 config`);
 				return;
 			}
 

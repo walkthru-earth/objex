@@ -1,4 +1,8 @@
-import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
+import {
+	buildProviderBaseUrl,
+	isPubliclyStreamable,
+	type ProviderId
+} from '$lib/storage/providers.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore } from '$lib/stores/credentials.svelte.js';
 import type { Tab } from '$lib/types.js';
@@ -37,30 +41,22 @@ export function buildStorageUrl(tab: Tab): string {
 }
 
 /**
- * Build the URL that DuckDB should use for queries.
- * - Azure: always HTTPS URL with SAS token appended
- * - Anonymous with custom endpoint (Storj, R2, etc.): HTTPS URL — no S3 config needed,
- *   avoids endpoint/auth complexity, works directly via httpfs
- * - AWS S3 (no endpoint): s3:// — DuckDB routes via configured region
- * - Authenticated with endpoint: s3:// — needs S3 endpoint config for SigV4 signing
+ * Build the URL DuckDB should query. Derived from the connection's access mode:
+ *
+ * | Access mode     | DuckDB URL                        | Why                                       |
+ * |-----------------|-----------------------------------|-------------------------------------------|
+ * | `sas-https`     | HTTPS with SAS token              | No DuckDB Azure support; SAS in URL works |
+ * | `public-https`  | HTTPS (no auth)                   | httpfs fetches directly, no signing needed|
+ * | `signed-s3`     | `s3://bucket/key`                 | DuckDB signs with configured S3 settings  |
+ *
+ * Path is percent-decoded so DuckDB's httpfs doesn't double-encode
+ * (e.g. Arabic filenames `%D9%85` → `%25D9%2585`).
  */
 export function buildDuckDbUrl(tab: Tab): string {
 	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
 	if (!conn) return tab.path;
+	if (isPubliclyStreamable(conn)) return buildHttpsUrl(tab);
 
-	// Azure always uses HTTPS (DuckDB doesn't have native Azure Blob support)
-	if (conn.provider === 'azure') {
-		return buildHttpsUrl(tab);
-	}
-
-	// Anonymous connections with custom endpoints (Storj, R2, Wasabi, etc.)
-	// use HTTPS directly — simpler and avoids S3 endpoint configuration.
-	if (conn.anonymous && conn.endpoint) {
-		return buildHttpsUrl(tab);
-	}
-
-	// S3-compatible with credentials: use s3:// protocol so DuckDB uses its
-	// configured S3 settings (region, endpoint, url_style) for SigV4 signing.
 	// Decode percent-encoded paths (e.g. Arabic filenames) so DuckDB's httpfs
 	// doesn't double-encode them (%D9%85 → %25D9%2585).
 	const rawPath = safeDecodeURIComponent(tab.path.replace(/^\//, ''));
@@ -68,17 +64,15 @@ export function buildDuckDbUrl(tab: Tab): string {
 }
 
 /**
- * Check if a tab's file can be loaded directly via HTTPS URL (streaming).
- * True for URL-sourced tabs, anonymous buckets, and Azure (SAS token in URL).
- * False for authenticated S3 (needs signed URLs or blob download via adapter).
+ * True when any HTTP client (fetch/img/video/deck.gl/COG/Zarr/PMTiles) can
+ * load the tab's file directly via its HTTPS URL. False when SigV4 signing
+ * is required and the viewer must go through the storage adapter instead.
  */
 export function canStreamDirectly(tab: Tab): boolean {
 	if (tab.source === 'url') return true;
 	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
 	if (!conn) return true;
-	if (conn.anonymous) return true;
-	if (conn.provider === 'azure') return true;
-	return false;
+	return isPubliclyStreamable(conn);
 }
 
 /**

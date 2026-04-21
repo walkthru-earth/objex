@@ -576,3 +576,51 @@ export function buildProviderBaseUrl(
 export function isGcsProvider(provider: string, endpoint: string): boolean {
 	return provider === 'gcs' || (!!endpoint && /storage\.googleapis\.com/i.test(endpoint));
 }
+
+// ---------------------------------------------------------------------------
+// Access mode — single source of truth for how any HTTP client (DuckDB httpfs,
+// COG/Zarr/PMTiles libraries, fetch, img, video) can read files for a given
+// connection. Used by url.ts (URL construction), query/wasm.ts (S3 config
+// short-circuit), canStreamDirectly (viewer routing).
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal connection shape needed to decide access mode.
+ * Kept loose so callers don't need to import the full Connection type.
+ */
+export interface AccessModeInput {
+	provider: string;
+	anonymous?: boolean;
+	endpoint?: string;
+}
+
+/**
+ * How a connection's files can be read by the browser:
+ *
+ * - `public-https`: plain HTTPS via any HTTP client. No auth, no signing.
+ *   Covers anonymous AWS/GCS/R2/Storj/Wasabi/etc.
+ * - `sas-https`: HTTPS with SAS token embedded in the URL. Still works with
+ *   any HTTP client. Azure only.
+ * - `signed-s3`: requires SigV4 signing. DuckDB uses the `s3://` URI and
+ *   signs it via its S3 config; other viewers must go through the storage
+ *   adapter (which returns a blob) instead of streaming the HTTPS URL.
+ */
+export type AccessMode = 'public-https' | 'sas-https' | 'signed-s3';
+
+export function getAccessMode(conn: AccessModeInput): AccessMode {
+	if (conn.provider === 'azure') return 'sas-https';
+	// Anonymous buckets: every provider serves files over plain HTTPS without
+	// signing (AWS path/vhost, GCS, R2 public, Storj, Wasabi, DO, etc.).
+	if (conn.anonymous) return 'public-https';
+	// Authenticated: needs SigV4 signing.
+	return 'signed-s3';
+}
+
+/**
+ * True when the connection's files can be fetched by any HTTP client
+ * (fetch/img/video/DuckDB httpfs/COG/Zarr/etc.) without the storage adapter.
+ */
+export function isPubliclyStreamable(conn: AccessModeInput): boolean {
+	const mode = getAccessMode(conn);
+	return mode === 'public-https' || mode === 'sas-https';
+}

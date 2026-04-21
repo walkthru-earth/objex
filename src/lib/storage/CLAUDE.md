@@ -17,7 +17,7 @@ graph LR
 
 | File | Exports | Used by |
 |------|---------|---------|
-| `providers.ts` | `PROVIDERS`, `PROVIDER_IDS`, `ProviderId`, `ProviderDef`, `ProviderRegion`, `getProvider()`, `buildEndpointFromTemplate()`, `buildProviderBaseUrl()`, `isGcsProvider()` | ConnectionDialog, browser-cloud, url-state, host-detection, url.ts, storage-url.ts |
+| `providers.ts` | `PROVIDERS`, `PROVIDER_IDS`, `ProviderId`, `ProviderDef`, `ProviderRegion`, `getProvider()`, `buildEndpointFromTemplate()`, `buildProviderBaseUrl()`, `isGcsProvider()`, `AccessMode`, `AccessModeInput`, `getAccessMode()`, `isPubliclyStreamable()` | ConnectionDialog, browser-cloud, url-state, host-detection, url.ts, storage-url.ts, query/wasm.ts |
 | `adapter.ts` | `StorageAdapter` (interface), `ListPage` | lib/index.ts (npm export) |
 | `browser-cloud.ts` | `BrowserCloudAdapter` | index.ts (factory) |
 | `browser-azure.ts` | `BrowserAzureAdapter` | index.ts (factory) |
@@ -33,3 +33,19 @@ Single source of truth for all 13 providers: S3, GCS, R2, Azure, B2, DigitalOcea
 Each `ProviderDef` has: label, description, authMethod, needsRegion, needsEndpoint, defaultRegion, endpointTemplate (`{region}` placeholder), regions array, endpointPlaceholder, schemes.
 
 To add a new provider: add entry to `PROVIDERS`, add ID to `ProviderId` union and `PROVIDER_IDS` array. If it has a distinctive URL pattern, also update `storage-url.ts` and `host-detection.ts`.
+
+## Access Mode
+
+`getAccessMode(conn)` returns one of three values — the single source of truth for how any HTTP client (DuckDB httpfs, COG/Zarr/PMTiles, fetch/img/video) should read a connection's files:
+
+| Mode | URL form | When |
+|------|----------|------|
+| `public-https` | Plain HTTPS | Anonymous buckets (AWS/GCS/R2/Storj/Wasabi/etc.) |
+| `sas-https` | HTTPS with SAS token | Azure Blob (any auth) |
+| `signed-s3` | `s3://bucket/key` | Authenticated S3-compatible — needs SigV4 signing |
+
+Consumers:
+- `utils/url.ts` — `buildDuckDbUrl()` returns `s3://` only for `signed-s3`; `canStreamDirectly()` wraps `isPubliclyStreamable()`
+- `query/wasm.ts` — `configureStorage()` skips all S3 SETs (credentials, region, endpoint, url_style) for non-`signed-s3` modes, saving a worker round-trip per query
+
+**Do not** add another ad-hoc `provider === 'azure'` or `anonymous && endpoint` branch for URL routing. Use `getAccessMode()` / `isPubliclyStreamable()` instead. Adapter selection in `index.ts` is still provider-based (Azure uses a different API class), which is a separate concern from access mode.

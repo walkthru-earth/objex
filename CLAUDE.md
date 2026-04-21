@@ -123,6 +123,7 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - **Zarr sharding_indexed**: zarrita supports sharding via range requests (`getRange` with `suffixLength`). But arrays without multiscale pyramids hang the browser at global zoom — `ZarrMapViewer` guards against >10k tiles
 - **Zarr large arrays without pyramids**: e.g. `tge-labs/aef-mosaic` embeddings `[9,64,1859584,4009984]` with `sharding_indexed` codec. ZarrMapViewer shows error instead of flooding the browser with chunk requests. GDAL 3.12 also can't read this (`Unsupported codec: sharding_indexed`)
 - **Cloud protocol URLs**: `resolveCloudUrl()` in `url.ts` converts `s3://` → HTTPS with AWS region auto-detection from bucket name. Called once in `openUrlTab()` (+page.svelte) as single entry point -- never duplicate in individual viewers
+- **Connection access mode**: `getAccessMode(conn)` in `storage/providers.ts` returns `public-https | sas-https | signed-s3` and is the single source of truth for how HTTP clients (DuckDB httpfs, COG/Zarr/PMTiles, fetch/img/video) should read a connection's files. `buildDuckDbUrl()` returns `s3://` only for `signed-s3`; `canStreamDirectly()` wraps `isPubliclyStreamable()`; `configureStorage()` in `query/wasm.ts` skips all S3 SETs for non-`signed-s3` modes. Do NOT add new `provider === 'azure'` or `anonymous && endpoint` branches for URL routing -- call `getAccessMode()` / `isPubliclyStreamable()` instead. Adapter selection (`storage/index.ts`) stays provider-based because Azure uses a different API class
 
 ## npm Publishing Rules
 
