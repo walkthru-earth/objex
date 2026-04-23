@@ -220,8 +220,23 @@ const GEO_TYPE_KEYWORDS = [
 	'sdo_geometry'
 ];
 
-/** Substrings in column names that hint at geometry content. */
-const GEO_NAME_HINTS = ['geom', 'geometry', 'geo_', '_geo', 'wkb', 'wkt', 'shape', 'spatial'];
+/**
+ * Tokens in column names that hint at geometry content. Matched against
+ * snake_case / kebab-case / camelCase tokens only — never as loose substrings
+ * (e.g. `_geographic_` must not match `geo` via the `_geo` substring, because
+ * count columns like `n_geographic_entities` are INT, not geometry).
+ */
+const GEO_NAME_HINTS = ['geom', 'geometry', 'wkb', 'wkt', 'shape', 'spatial', 'geo'];
+
+/** Split a column name into lowercase tokens for hint matching. */
+function tokenizeColumnName(name: string): string[] {
+	return name
+		.replace(/([a-z])([A-Z])/g, '$1_$2')
+		.replace(/([a-z])([0-9])/g, '$1_$2')
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter(Boolean);
+}
 
 /** Valid GeoJSON geometry type names. */
 const GEOJSON_TYPES = [
@@ -275,18 +290,18 @@ export function findGeoColumn(schema: { name: string; type: string }[]): string 
 		if (GEO_NAMES.includes(f.name.toLowerCase())) return f.name;
 	}
 
-	// Priority 4: name contains geo hint with binary type
+	// Priority 4: name token matches geo hint with binary type
 	for (const f of schema) {
-		const n = f.name.toLowerCase();
+		const tokens = tokenizeColumnName(f.name);
 		const t = f.type.toLowerCase();
 		const isBinary = t.includes('blob') || t.includes('binary') || t.includes('bytea');
-		if (isBinary && GEO_NAME_HINTS.some((hint) => n.includes(hint))) return f.name;
+		if (isBinary && tokens.some((tok) => GEO_NAME_HINTS.includes(tok))) return f.name;
 	}
 
-	// Priority 5: name contains geo hint, any type
+	// Priority 5: name token matches geo hint, any type
 	for (const f of schema) {
-		const n = f.name.toLowerCase();
-		if (GEO_NAME_HINTS.some((hint) => n.includes(hint))) return f.name;
+		const tokens = tokenizeColumnName(f.name);
+		if (tokens.some((tok) => GEO_NAME_HINTS.includes(tok))) return f.name;
 	}
 
 	return null;
