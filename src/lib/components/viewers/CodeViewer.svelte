@@ -11,7 +11,7 @@ import type { Tab } from '$lib/types';
 import { copyToClipboard } from '$lib/utils/clipboard.js';
 import { handleLoadError } from '$lib/utils/error.js';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
 
@@ -96,7 +96,23 @@ const stacBadgeKey = $derived<Record<string, string>>({
 	'stac-collection': 'code.stacCollection',
 	'stac-item': 'code.stacItem'
 });
-const styleUrl = $derived(buildHttpsUrl(tab));
+// Third-party iframes can't route through the storage adapter, so the URL
+// must carry auth. Public/SAS connections resolve synchronously; `signed-s3`
+// must wait for the presign so the iframe never loads a bare `s3://` href.
+let styleUrl = $state('');
+$effect(() => {
+	const id = tab.id;
+	styleUrl = canStreamDirectly(tab) ? buildHttpsUrl(tab) : '';
+	let cancelled = false;
+	(async () => {
+		const url = await buildHttpsUrlAsync(tab);
+		if (cancelled || id !== tab.id) return;
+		styleUrl = url;
+	})();
+	return () => {
+		cancelled = true;
+	};
+});
 const stacBrowserSrc = $derived(
 	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
 );
@@ -481,7 +497,7 @@ async function copyCode() {
 		</div>
 	</div>
 
-	{#if viewMode === 'stac-browser'}
+	{#if viewMode === 'stac-browser' && styleUrl}
 		<div class="flex-1 overflow-hidden">
 			<iframe
 				src={stacBrowserSrc}
@@ -490,7 +506,7 @@ async function copyCode() {
 				allow="fullscreen"
 			></iframe>
 		</div>
-	{:else if viewMode === 'kepler'}
+	{:else if viewMode === 'kepler' && styleUrl}
 		<div class="flex-1 overflow-hidden">
 			<iframe
 				src={keplerSrc}
@@ -499,7 +515,7 @@ async function copyCode() {
 				allow="fullscreen"
 			></iframe>
 		</div>
-	{:else if viewMode === 'maputnik'}
+	{:else if viewMode === 'maputnik' && styleUrl}
 		<div class="flex-1 overflow-hidden">
 			<iframe
 				src={maputnikSrc}

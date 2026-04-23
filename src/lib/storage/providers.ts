@@ -366,9 +366,9 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 	gcs: {
 		defaultEnabled: false,
 		docsUrl: 'https://cloud.google.com/storage/docs/using-cors',
-		note: 'Use the gcloud CLI. For private buckets signed with HMAC keys, `responseHeader` must also list the AWS SigV4 headers (Authorization, x-amz-date, x-amz-content-sha256) or GCS will silently reject the preflight.',
+		note: 'Use the gcloud CLI. GCS `responseHeader` is dual-purpose (Access-Control-Expose-Headers AND Access-Control-Allow-Headers), so every request header the browser sends must be listed or the preflight fails silently. For private buckets signed with HMAC, include the AWS SigV4 headers (Authorization, x-amz-date, x-amz-content-sha256). For DuckDB httpfs partial reads, also include Range and the conditional If-* headers.',
 		cliSteps: [
-			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": [\n      "Content-Type",\n      "Content-Length",\n      "Content-Range",\n      "Accept-Ranges",\n      "ETag",\n      "Authorization",\n      "x-amz-content-sha256",\n      "x-amz-date",\n      "x-amz-*",\n      "x-goog-*"\n    ],\n    "maxAgeSeconds": 3600\n  }\n]',
+			'Create a cors.json file:\n[\n  {\n    "origin": ["*"],\n    "method": ["GET", "HEAD"],\n    "responseHeader": [\n      "Content-Type",\n      "Content-Length",\n      "Content-Range",\n      "Accept-Ranges",\n      "Range",\n      "If-Match",\n      "If-Modified-Since",\n      "If-None-Match",\n      "If-Unmodified-Since",\n      "ETag",\n      "Authorization",\n      "x-amz-content-sha256",\n      "x-amz-date",\n      "x-amz-*",\n      "x-goog-*"\n    ],\n    "maxAgeSeconds": 3600\n  }\n]',
 			'gcloud storage buckets update gs://BUCKET --cors-file=cors.json'
 		]
 	},
@@ -548,6 +548,17 @@ export function buildEndpointFromTemplate(id: ProviderId, region: string): strin
 	const def = PROVIDERS[id];
 	if (!def?.endpointTemplate) return '';
 	return def.endpointTemplate.replace('{region}', region);
+}
+
+/**
+ * Resolve an endpoint URL for a provider using its registered template,
+ * falling back to the provider's default region when none is supplied.
+ * Returns '' when the provider has no template (e.g. plain S3 or MinIO).
+ */
+export function resolveProviderEndpoint(provider: string, region?: string): string {
+	const def = PROVIDERS[provider as ProviderId];
+	if (!def?.endpointTemplate) return '';
+	return buildEndpointFromTemplate(provider as ProviderId, region || def.defaultRegion);
 }
 
 /**

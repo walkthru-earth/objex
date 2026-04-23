@@ -19,7 +19,7 @@ import {
 	hoverCursor,
 	loadDeckModules
 } from '$lib/utils/deck.js';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
@@ -55,6 +55,7 @@ let mapReadyPromise: Promise<void> | null = null;
 // Stored from preview for load-all (skip index)
 let storedHeader: HeaderMeta | null = null;
 let storedFeatureOffset = 0;
+let signedUrl: string | null = null;
 
 // proj4 converter for reprojecting from source CRS → WGS84
 let proj4Forward: ((coord: [number, number]) => [number, number]) | null = null;
@@ -217,6 +218,7 @@ function cleanup() {
 	dataVersion = 0;
 	storedHeader = null;
 	storedFeatureOffset = 0;
+	signedUrl = null;
 	proj4Forward = null;
 }
 
@@ -261,9 +263,14 @@ async function loadFlatGeobuf() {
 		await mapReadyPromise;
 		if (!overlay) return;
 
+		// Sign once per load so header + feature stream share the same signature.
+		// Cached across loadAllFeatures() so the "Load all" button doesn't re-sign.
+		const url = await buildHttpsUrlAsync(tab);
+		signedUrl = url;
+
 		// Read header via range requests (fast: 1-2 small requests)
 		// Gets metadata + feature offset to skip the spatial index
-		await readHeaderWithRangeRequests();
+		await readHeaderWithRangeRequests(url);
 
 		// Set up on-the-fly reprojection if the file uses a non-WGS84 CRS
 		proj4Forward = null;
@@ -298,7 +305,7 @@ async function loadFlatGeobuf() {
 		}
 
 		// Stream features (skips index if header was read, else sequential)
-		await streamFeatures(settings.featureLimit);
+		await streamFeatures(url, settings.featureLimit);
 	} catch (err) {
 		console.error('[FGB]', 'loadFlatGeobuf error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -314,9 +321,7 @@ async function loadFlatGeobuf() {
  * Read header via range requests (fast: 1-2 small requests).
  * Stores header + feature offset for the composite stream approach.
  */
-async function readHeaderWithRangeRequests(): Promise<boolean> {
-	const url = buildHttpsUrl(tab);
-
+async function readHeaderWithRangeRequests(url: string): Promise<boolean> {
 	let reader: HttpReader;
 	try {
 		reader = await HttpReader.open(url, false);
@@ -357,7 +362,9 @@ async function loadAllFeatures() {
 	try {
 		features = [];
 		featureCount = 0;
-		await streamFeatures();
+		const url = signedUrl ?? (await buildHttpsUrlAsync(tab));
+		signedUrl = url;
+		await streamFeatures(url);
 	} catch (err) {
 		console.error('[FGB]', 'loadAllFeatures error:', err);
 		if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -372,10 +379,9 @@ async function loadAllFeatures() {
  * Stream features sequentially.
  * If storedHeader is available, skips the index with a Range request + composite stream.
  */
-async function streamFeatures(limit?: number) {
+async function streamFeatures(url: string, limit?: number) {
 	const ac = new AbortController();
 	abortController = ac;
-	const url = buildHttpsUrl(tab);
 	const t0 = performance.now();
 
 	let iter: AsyncGenerator;

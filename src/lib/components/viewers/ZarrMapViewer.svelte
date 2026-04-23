@@ -5,7 +5,7 @@ import { onDestroy, untrack } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 import {
 	ensureCodecsRegistered,
 	extractZarrStoreUrl,
@@ -372,7 +372,7 @@ async function addZarrLayer(map: maplibregl.Map) {
 		await ensureCodecsRegistered();
 		const { ZarrLayer } = await import('@carbonplan/zarr-layer');
 
-		const storeUrl = buildStoreUrl();
+		const storeUrl = await buildStoreUrl();
 		const selector = buildSelector();
 
 		const opts: any = {
@@ -452,8 +452,8 @@ async function addZarrLayer(map: maplibregl.Map) {
 	}
 }
 
-function buildStoreUrl(): string {
-	const rawUrl = buildHttpsUrl(tab).replace(/\/+$/, '');
+async function buildStoreUrl(): Promise<string> {
+	const rawUrl = (await buildHttpsUrlAsync(tab)).replace(/\/+$/, '');
 	return extractZarrStoreUrl(rawUrl) ?? rawUrl;
 }
 

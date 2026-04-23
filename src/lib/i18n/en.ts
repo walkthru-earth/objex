@@ -382,6 +382,8 @@ export const en: Record<string, string> = {
 	'map.cogInfo': 'COG Info',
 	'map.cogCorsError':
 		'Cannot load COG: the server does not allow cross-origin requests (CORS). The file must be hosted with CORS headers enabled.',
+	'map.cogInvalidTiff':
+		'This file is not a valid TIFF. The server advertises image/tiff but the bytes do not match the TIFF signature, the file may be corrupt, encrypted, or mislabeled.',
 	'map.cogUnsupportedFormat':
 		'This COG uses {{type}} format which is not supported for map rendering. Only RGB COGs can be displayed.',
 	'map.noGeoColumn': 'No geometry column detected in schema',

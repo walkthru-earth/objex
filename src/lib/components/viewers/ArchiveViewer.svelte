@@ -29,7 +29,7 @@ import {
 	streamZipEntriesFromUrl
 } from '$lib/utils/archive';
 import { formatFileSize } from '$lib/utils/format';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -177,7 +177,7 @@ async function loadZip() {
 	const signal = abortController!.signal;
 
 	if (tab.source === 'remote') {
-		const url = buildHttpsUrl(tab);
+		const url = await buildHttpsUrlAsync(tab);
 		try {
 			scanning = true;
 			for await (const batch of streamZipEntriesFromUrl(url, signal)) {
@@ -208,7 +208,7 @@ async function loadTar() {
 	const signal = abortController!.signal;
 
 	if (tab.source === 'remote') {
-		const url = buildHttpsUrl(tab);
+		const url = await buildHttpsUrlAsync(tab);
 		try {
 			scanning = true;
 			remoteUrl = url;
@@ -240,7 +240,7 @@ async function loadTarGz() {
 
 	// For remote URLs: stream-fetch → decompress → parse progressively
 	if (tab.source === 'remote' || tab.source === 'url') {
-		const url = buildHttpsUrl(tab);
+		const url = await buildHttpsUrlAsync(tab);
 		try {
 			scanning = true;
 			const decompressedChunks: Uint8Array[] = [];

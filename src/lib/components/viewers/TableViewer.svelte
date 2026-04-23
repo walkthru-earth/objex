@@ -11,7 +11,8 @@ import {
 	QueryCancelledError,
 	type QueryHandle,
 	type ResolvedTableSource,
-	resolveTableSource
+	resolveTableSource,
+	resolveTableSourceAsync
 } from '$lib/query/index.js';
 import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
@@ -61,6 +62,8 @@ let viewMode = $state<'table' | 'map' | 'stac' | 'info'>(
 );
 let sqlQuery = $state('');
 let customSql = $state('');
+// Presigned URL for the source-cooperative parquet-table iframe (external fetcher).
+let parquetIframeUrl = $state('');
 let queryRunning = $state(false);
 let executionTimeMs = $state(0);
 
@@ -98,8 +101,12 @@ const columnTypes = $derived(Object.fromEntries(schema.map((f) => [f.name, f.typ
 // Columns for display — exclude internal __wkb helper
 const displayColumns = $derived(columns.filter((c) => c !== '__wkb'));
 
-function buildDefaultSql(offset = 0): string {
-	const resolved = resolveTableSource(tab);
+let resolvedSource: ResolvedTableSource | null = null;
+
+function buildDefaultSql(
+	offset = 0,
+	resolved: ResolvedTableSource = resolvedSource ?? resolveTableSource(tab)
+): string {
 	const source = resolved.ref;
 
 	let sql: string;
@@ -204,6 +211,8 @@ $effect(() => {
 		geoCol = null;
 		knownGeomType = undefined;
 		metadataBounds = null;
+		resolvedSource = null;
+		parquetIframeUrl = '';
 		error = null;
 	});
 	return unregister;
@@ -268,6 +277,10 @@ async function forceCancel() {
 
 async function loadTable() {
 	const thisGen = ++loadGeneration;
+	// Snapshot reactive values once. Reading `$derived` across awaits after the
+	// component's effect is torn down returns Svelte's destroyed-signal sentinel,
+	// which throws "can't convert symbol to string" in downstream template literals.
+	const cid = connId;
 
 	// Cancel in-flight query from a previous load to prevent duplicate concurrent queries
 	if (activeHandle) {
@@ -287,19 +300,30 @@ async function loadTable() {
 	loadStage = t('table.preparingQuery');
 	loadProgress = [];
 
-	// Set SQL eagerly so editor shows the query while loading
-	const initialSql = buildDefaultSql(0);
-	sqlQuery = initialSql;
-	customSql = initialSql;
+	resolvedSource = null;
+	const eagerSql = buildDefaultSql(0);
+	sqlQuery = eagerSql;
+	customSql = eagerSql;
 
 	try {
-		const resolved: ResolvedTableSource = resolveTableSource(tab);
+		const resolved: ResolvedTableSource = await resolveTableSourceAsync(tab);
+		if (thisGen !== loadGeneration) return;
+		resolvedSource = resolved;
+		const resolvedSql = buildDefaultSql(0, resolved);
+		sqlQuery = resolvedSql;
+		// Only overwrite the editor if the user hasn't edited it during the presign await.
+		if (customSql === eagerSql) customSql = resolvedSql;
 		const isFileSource = resolved.isFileSource;
 		const fileUrl = resolved.fileUrl ?? '';
 		const httpsUrl = isFileSource ? buildHttpsUrl(tab) : '';
 		const cloudNative = isFileSource && isCloudNativeFormat(tab.path);
 		const isParquet = isFileSource && /\.parquet$/i.test(tab.path);
 		const streamable = isFileSource && canStreamDirectly(tab);
+
+		// Parquet-table iframe fetches from its own origin. `resolved.fileUrl`
+		// is already the presigned HTTPS URL for signed-s3 (or the public URL
+		// for anonymous / SAS), so reuse it instead of signing a second time.
+		if (isParquet) parquetIframeUrl = fileUrl;
 
 		// Start DuckDB boot immediately (runs in parallel with hyparquet)
 		loadStage = t('table.initEngine');
@@ -448,7 +472,7 @@ async function loadTable() {
 		// Disable conversion for this connection and fall back to BLOB handling.
 		if (metaFromHyparquet && isLegacyGeoParquet && geoCol) {
 			try {
-				await engine.query(connId, 'SET enable_geoparquet_conversion = false');
+				await engine.query(cid, 'SET enable_geoparquet_conversion = false');
 				geoColType = 'BLOB';
 			} catch {
 				// Setting failed — DuckDB may still handle it gracefully
@@ -460,7 +484,7 @@ async function loadTable() {
 		// reads GeoParquet as GEOMETRY('EPSG:...') with CRS embedded in the type.
 		if (metaFromHyparquet && geoCol && !isLegacyGeoParquet) {
 			try {
-				const duckSchema = await engine.getSchema(connId, resolved);
+				const duckSchema = await engine.getSchema(cid, resolved);
 				if (thisGen !== loadGeneration) return;
 				const duckGeoField = duckSchema.find((f: { name: string }) => f.name === geoCol);
 				if (duckGeoField) {
@@ -490,7 +514,7 @@ async function loadTable() {
 		// (native Parquet GEOMETRY without "geo" KV metadata), use DuckDB
 		if (metaFromHyparquet && needsDuckDbCrs && geoCol) {
 			try {
-				sourceCrs = await engine.detectCrs(connId, resolved, geoCol);
+				sourceCrs = await engine.detectCrs(cid, resolved, geoCol);
 				if (thisGen !== loadGeneration) return;
 				if (sourceCrs) {
 					loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
@@ -520,7 +544,7 @@ async function loadTable() {
 			];
 
 			if (engine.getSchemaAndCrs) {
-				const result = await engine.getSchemaAndCrs(connId, resolved, findGeoColumn);
+				const result = await engine.getSchemaAndCrs(cid, resolved, findGeoColumn);
 				if (thisGen !== loadGeneration) return;
 				schema = result.schema;
 				columns = schema.map((f) => f.name);
@@ -547,7 +571,7 @@ async function loadTable() {
 					}
 				}
 			} else {
-				schema = await engine.getSchema(connId, resolved);
+				schema = await engine.getSchema(cid, resolved);
 				if (thisGen !== loadGeneration) return;
 				columns = schema.map((f) => f.name);
 				const colPreview =
@@ -568,7 +592,7 @@ async function loadTable() {
 						...loadProgress,
 						{ label: t('progress.geometry'), value: `${detectedGeoCol} (${geoColType})` }
 					];
-					sourceCrs = await engine.detectCrs(connId, resolved, detectedGeoCol);
+					sourceCrs = await engine.detectCrs(cid, resolved, detectedGeoCol);
 					if (thisGen !== loadGeneration) return;
 					if (sourceCrs) {
 						loadProgress = [...loadProgress, { label: t('progress.crs'), value: sourceCrs }];
@@ -599,7 +623,7 @@ async function loadTable() {
 		// Retry with enable_geoparquet_conversion=false and BLOB handling.
 		if (!result && error && isParquet && geoCol && !isLegacyGeoParquet) {
 			try {
-				await engine.query(connId, 'SET enable_geoparquet_conversion = false');
+				await engine.query(cid, 'SET enable_geoparquet_conversion = false');
 				geoColType = 'BLOB';
 				sqlQuery = buildDefaultSql(0);
 				customSql = sqlQuery;
@@ -673,7 +697,7 @@ async function loadTable() {
 			} else {
 				loadStage = t('table.countingRows');
 				engine
-					.getRowCount(connId, resolved)
+					.getRowCount(cid, resolved)
 					.then((count) => {
 						if (thisGen === loadGeneration) {
 							totalRows = count;
@@ -695,11 +719,14 @@ async function loadTable() {
 }
 
 async function executeQuery(sql: string) {
+	// Snapshot `connId` — reading the $derived after the effect is destroyed
+	// returns a Symbol sentinel and crashes downstream template literals.
+	const cid = connId;
 	try {
 		const engine = await getQueryEngine();
 
 		if (engine.queryCancellable) {
-			const handle = engine.queryCancellable(connId, sql);
+			const handle = engine.queryCancellable(cid, sql);
 			activeHandle = handle;
 			try {
 				const result = await handle.result;
@@ -716,7 +743,7 @@ async function executeQuery(sql: string) {
 			}
 		}
 
-		const result = await engine.query(connId, sql);
+		const result = await engine.query(cid, sql);
 		columns = result.columns;
 		rows = result.rows;
 		return result;
@@ -746,6 +773,8 @@ async function loadPage(page: number) {
 }
 
 async function runCustomSql() {
+	// Snapshot before any await — see note in executeQuery.
+	const cid = connId;
 	queryRunning = true;
 	error = null;
 	isCustomQuery = true;
@@ -768,7 +797,7 @@ async function runCustomSql() {
 			timestamp: Date.now(),
 			durationMs: executionTimeMs,
 			rowCount: rows.length,
-			connectionId: connId || undefined
+			connectionId: cid || undefined
 		});
 	} catch (err) {
 		executionTimeMs = Math.round(performance.now() - start);
@@ -780,7 +809,7 @@ async function runCustomSql() {
 			durationMs: executionTimeMs,
 			rowCount: 0,
 			error: error ?? undefined,
-			connectionId: connId || undefined
+			connectionId: cid || undefined
 		});
 	} finally {
 		queryRunning = false;
@@ -984,7 +1013,7 @@ function setStacView() {
 			<FileInfo
 				entries={loadProgress}
 				{schema}
-				parquetUrl={/\.parquet$/i.test(tab.path) ? buildHttpsUrl(tab) : ''}
+				parquetUrl={/\.parquet$/i.test(tab.path) ? parquetIframeUrl : ''}
 			/>
 		</div>
 	{:else if viewMode === 'stac'}

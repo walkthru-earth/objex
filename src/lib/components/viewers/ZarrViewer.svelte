@@ -9,7 +9,7 @@ import {
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import {
 	computeChunkCount,
@@ -120,7 +120,7 @@ async function loadHierarchy() {
 	error = null;
 
 	try {
-		const rawUrl = buildHttpsUrl(tab).replace(/\/+$/, '');
+		const rawUrl = (await buildHttpsUrlAsync(tab)).replace(/\/+$/, '');
 		const url = extractZarrStoreUrl(rawUrl) ?? rawUrl;
 		const storeName = tab.name.replace(/\.(zarr|zr3)$/, '');
 

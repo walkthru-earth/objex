@@ -33,6 +33,7 @@ export type {
 	QueryEngine,
 	QueryHandle,
 	QueryResult,
+	QuerySource,
 	SchemaField
 } from '../../../src/lib/query/engine.js';
 export { QueryCancelledError } from '../../../src/lib/query/engine.js';
@@ -40,6 +41,8 @@ export { QueryCancelledError } from '../../../src/lib/query/engine.js';
 export type { ListPage, StorageAdapter } from '../../../src/lib/storage/adapter.js';
 // Provider registry
 export type {
+	AccessMode,
+	AccessModeInput,
 	ProviderDef,
 	ProviderId,
 	ProviderRegion
@@ -47,10 +50,13 @@ export type {
 export {
 	buildEndpointFromTemplate,
 	buildProviderBaseUrl,
+	getAccessMode,
 	getProvider,
 	isGcsProvider,
+	isPubliclyStreamable,
 	PROVIDER_IDS,
-	PROVIDERS
+	PROVIDERS,
+	resolveProviderEndpoint
 } from '../../../src/lib/storage/providers.js';
 export { UrlAdapter } from '../../../src/lib/storage/url-adapter.js';
 // Core types
@@ -89,6 +95,8 @@ export { handleLoadError } from '../../../src/lib/utils/error.js';
 // Data export / serialization
 export {
 	escapeCsvField,
+	exportToCsv,
+	exportToJson,
 	serializeToCsv,
 	serializeToJson
 } from '../../../src/lib/utils/export.js';

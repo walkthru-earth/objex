@@ -12,7 +12,6 @@ import type { Tab } from '$lib/types';
 import { setupSelectionLayer, updateSelection } from '$lib/utils/map-selection.js';
 import { buildPmtilesLayers, getPmtilesProtocol, type PmtilesMetadata } from '$lib/utils/pmtiles';
 import { layerHue } from '$lib/utils/pmtiles-tile.js';
-import { buildHttpsUrl } from '$lib/utils/url.js';
 import AttributeTable from '../map/AttributeTable.svelte';
 import MapContainer from '../map/MapContainer.svelte';
 

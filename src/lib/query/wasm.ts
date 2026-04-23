@@ -1,6 +1,6 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
-import { getAccessMode } from '../storage/providers.js';
+import { getAccessMode, resolveProviderEndpoint } from '../storage/providers.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import { buildTransformExpr, wrapWkbWithCrs } from '../utils/geometry-type.js';
 import {
@@ -13,6 +13,7 @@ import {
 	type QuerySource,
 	type SchemaField
 } from './engine';
+import { isHttpsSourceRef } from './source.js';
 
 // CDN URLs for DuckDB WASM bundles — version injected at build time from package.json
 declare const __DUCKDB_WASM_VERSION__: string;
@@ -284,14 +285,18 @@ async function extractCrsFromLogicalType(
 // for map tooltips and expensive to extract row-by-row.
 const BINARY_TYPES = new Set(['BLOB', 'BYTEA', 'BINARY', 'LARGEBINARY', 'WKB_BLOB']);
 
-/** True if the Arrow type string represents a numeric primitive (zero-copy .toArray()). */
+/**
+ * True if the Arrow type string represents a numeric primitive whose `.toArray()`
+ * returns a plain typed array (zero-copy fast path). DECIMAL is excluded: Arrow
+ * emits decimals as multi-word BigInt buffers that need scale-aware formatting.
+ */
 function isNumericArrowType(typeStr: string): boolean {
 	const t = typeStr.toUpperCase();
+	if (t.startsWith('DECIMAL')) return false;
 	return (
 		t.includes('INT') ||
 		t.includes('FLOAT') ||
 		t.includes('DOUBLE') ||
-		t.includes('DECIMAL') ||
 		t === 'TINYINT' ||
 		t === 'SMALLINT' ||
 		t === 'BIGINT' ||
@@ -304,12 +309,65 @@ function isNumericArrowType(typeStr: string): boolean {
 }
 
 /**
+ * Parse DuckDB/Arrow DECIMAL type string → scale. Returns -1 if not a decimal.
+ *
+ * DuckDB DESCRIBE emits `DECIMAL(10,2)`. Arrow's `Decimal.toString()` emits
+ * `Decimal[10e+2]` (precision `e` signed-scale). Accept both.
+ */
+function decimalScale(typeStr: string): number {
+	const m = /^(?:DECIMAL\(\s*\d+\s*,\s*(-?\d+)\s*\)|Decimal\[\s*\d+e([+-]?\d+)\s*\])/i.exec(
+		typeStr
+	);
+	if (!m) return -1;
+	return Number(m[1] ?? m[2]);
+}
+
+/**
+ * Format an Arrow Decimal value (BigInt or Uint32Array of little-endian words)
+ * into a human-readable decimal string, applying the column scale.
+ */
+function formatDecimal(raw: unknown, scale: number): string | null {
+	if (raw == null) return null;
+	let bn: bigint;
+	if (typeof raw === 'bigint') {
+		bn = raw;
+	} else if (raw instanceof Uint32Array || raw instanceof Int32Array) {
+		const hi = BigInt(raw[raw.length - 1] >>> 0);
+		const signed = hi >= 0x80000000n;
+		let acc = 0n;
+		for (let w = raw.length - 1; w >= 0; w--) {
+			acc = (acc << 32n) | BigInt(raw[w] >>> 0);
+		}
+		bn = signed ? acc - (1n << BigInt(raw.length * 32)) : acc;
+	} else if (typeof raw === 'number') {
+		bn = BigInt(raw);
+	} else {
+		return String(raw);
+	}
+	const neg = bn < 0n;
+	const abs = neg ? -bn : bn;
+	if (scale <= 0) return (neg ? '-' : '') + abs.toString();
+	const divisor = 10n ** BigInt(scale);
+	const intPart = abs / divisor;
+	const fracPart = (abs % divisor).toString().padStart(scale, '0');
+	return `${neg ? '-' : ''}${intPart}.${fracPart}`;
+}
+
+/**
  * Extract column values using the fastest available method:
  * - Numeric primitives → .toArray() returns a typed array view (zero-copy),
  *   then Array.from() to convert to a plain JS array for downstream compat.
  * - Other types → per-element .get(i) for correctness (strings, structs, etc.)
  */
 function extractColumnBulk(col: any, numRows: number, typeStr: string): any[] {
+	const scale = decimalScale(typeStr);
+	if (scale >= 0) {
+		const values: any[] = new Array(numRows);
+		for (let i = 0; i < numRows; i++) {
+			values[i] = formatDecimal(col.get(i), scale);
+		}
+		return values;
+	}
 	if (isNumericArrowType(typeStr)) {
 		// .toArray() returns a TypedArray (Float64Array, Int32Array, etc.)
 		// which is a zero-copy view over the Arrow buffer.
@@ -327,6 +385,13 @@ function extractColumnBulk(col: any, numRows: number, typeStr: string): any[] {
  * Same optimisation as extractColumnBulk but appends instead of creating new.
  */
 function appendColumnBulk(target: any[], col: any, numRows: number, typeStr: string): void {
+	const scale = decimalScale(typeStr);
+	if (scale >= 0) {
+		for (let i = 0; i < numRows; i++) {
+			target.push(formatDecimal(col.get(i), scale));
+		}
+		return;
+	}
 	if (isNumericArrowType(typeStr)) {
 		const arr = col.toArray();
 		for (let i = 0; i < arr.length; i++) {
@@ -358,7 +423,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, sql);
 				log(`query → storage configured in ${elapsed(tConn)}`);
 			}
 
@@ -383,12 +448,24 @@ export class WasmQueryEngine implements QueryEngine {
 				};
 			}
 
+			// Arrow emits DECIMAL columns as multi-word BigInt / Uint32Array buffers.
+			// `String(rawDecimal)` yields the unscaled integer (or "0,0,0,0"),
+			// so rewrite each decimal cell through formatDecimal with the column scale.
+			const decimalCols: Array<{ name: string; scale: number }> = [];
+			for (let i = 0; i < cols.length; i++) {
+				const s = decimalScale(types[i]);
+				if (s >= 0) decimalCols.push({ name: cols[i], scale: s });
+			}
+
 			// Extract rows directly — avoids Arrow version mismatch
 			const rows = result.toArray().map((row: any) => {
-				if (typeof row.toJSON === 'function') return row.toJSON();
-				// Fallback: manually build row object
-				const obj: Record<string, any> = {};
-				for (const col of cols) obj[col] = row[col];
+				const obj: Record<string, any> = typeof row.toJSON === 'function' ? row.toJSON() : {};
+				if (typeof row.toJSON !== 'function') {
+					for (const col of cols) obj[col] = row[col];
+				}
+				for (const { name, scale } of decimalCols) {
+					obj[name] = formatDecimal(obj[name], scale);
+				}
 				return obj;
 			});
 
@@ -416,7 +493,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, sql);
 			}
 
 			// Build geometry expression based on column type:
@@ -518,7 +595,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, source.ref);
 			}
 
 			const result = await conn.query(`DESCRIBE SELECT * FROM ${source.ref}`);
@@ -547,7 +624,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, source.ref);
 			}
 
 			// For Parquet files, try reading row count from file footer metadata first.
@@ -598,7 +675,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, source.ref);
 			}
 
 			// Schema detection
@@ -635,9 +712,18 @@ export class WasmQueryEngine implements QueryEngine {
 		}
 	}
 
-	private async configureStorage(conn: any, connId: string) {
+	private async configureStorage(conn: any, connId: unknown, sourceRef?: string) {
 		try {
-			// Read connection metadata from localStorage
+			// Defensive: callers may pass a destroyed Svelte $derived (returns a
+			// Symbol sentinel) across async boundaries. Template literals below
+			// would throw "can't convert symbol to string" and pollute logs.
+			if (typeof connId !== 'string' || !connId) return;
+
+			// Presigned HTTPS refs are self-authenticating; no S3 SETs needed.
+			if (sourceRef && isHttpsSourceRef(sourceRef)) {
+				log('configureStorage → presigned HTTPS source, skipping S3 config');
+				return;
+			}
 			const stored = localStorage.getItem('obstore-explore-connections');
 			if (!stored) {
 				log('configureStorage → no connections in localStorage');
@@ -673,10 +759,16 @@ export class WasmQueryEngine implements QueryEngine {
 			if (connection.region) {
 				sets.push(`SET s3_region = '${connection.region}'`);
 			}
-			if (connection.endpoint) {
-				const endpoint = connection.endpoint.replace(/^https?:\/\//, '');
-				sets.push(`SET s3_endpoint = '${endpoint}'`);
-				if (connection.endpoint.startsWith('http://')) {
+			// Non-AWS providers with an empty `endpoint` field fall back to the
+			// provider registry's template, otherwise DuckDB routes them to AWS.
+			let endpoint: string = connection.endpoint;
+			if (!endpoint && connection.provider && connection.provider !== 's3') {
+				endpoint = resolveProviderEndpoint(connection.provider, connection.region);
+			}
+			if (endpoint) {
+				const endpointHost = endpoint.replace(/^https?:\/\//, '');
+				sets.push(`SET s3_endpoint = '${endpointHost}'`);
+				if (endpoint.startsWith('http://')) {
 					sets.push(`SET s3_use_ssl = false`);
 				}
 			}
@@ -703,7 +795,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 		try {
 			if (connId) {
-				await this.configureStorage(conn, connId);
+				await this.configureStorage(conn, connId, source.ref);
 			}
 
 			const crs = await this.detectCrsWithConn(conn, source, geomCol);
@@ -830,7 +922,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			try {
 				if (connId) {
-					await this.configureStorage(conn, connId);
+					await this.configureStorage(conn, connId, sql);
 				}
 
 				const tQuery = performance.now();
@@ -840,6 +932,7 @@ export class WasmQueryEngine implements QueryEngine {
 				const rows: Record<string, any>[] = [];
 				let cols: string[] = [];
 				let types: string[] = [];
+				let decimalCols: Array<{ name: string; scale: number }> = [];
 
 				const batches = reader[Symbol.asyncIterator]();
 				let first = true;
@@ -851,6 +944,11 @@ export class WasmQueryEngine implements QueryEngine {
 					if (first && batch.schema) {
 						cols = batch.schema.fields.map((f: any) => f.name);
 						types = batch.schema.fields.map((f: any) => String(f.type));
+						decimalCols = [];
+						for (let i = 0; i < cols.length; i++) {
+							const s = decimalScale(types[i]);
+							if (s >= 0) decimalCols.push({ name: cols[i], scale: s });
+						}
 						first = false;
 					}
 
@@ -865,6 +963,12 @@ export class WasmQueryEngine implements QueryEngine {
 							if (json[key] instanceof Uint8Array) {
 								json[key] = (json[key] as Uint8Array).slice();
 							}
+						}
+						// DECIMAL raw values are BigInt / Uint32Array (unscaled). Convert
+						// to a human-readable string via formatDecimal — also drops the
+						// Uint32Array view, so stale-buffer reuse across batches is moot.
+						for (const { name, scale } of decimalCols) {
+							json[name] = formatDecimal(json[name], scale);
 						}
 						rows.push(json);
 					}
@@ -919,7 +1023,7 @@ export class WasmQueryEngine implements QueryEngine {
 
 			try {
 				if (connId) {
-					await this.configureStorage(conn, connId);
+					await this.configureStorage(conn, connId, sql);
 				}
 
 				// Build geometry expression (same logic as queryForMap)

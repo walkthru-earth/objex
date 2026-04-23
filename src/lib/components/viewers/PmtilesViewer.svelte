@@ -11,7 +11,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPmtiles, type PmtilesMetadata } from '$lib/utils/pmtiles';
-import { buildHttpsUrl } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 
 let { tab }: { tab: Tab } = $props();
@@ -73,7 +73,7 @@ async function load() {
 	error = null;
 
 	try {
-		pmtilesUrl = buildHttpsUrl(tab);
+		pmtilesUrl = await buildHttpsUrlAsync(tab);
 		const result = await loadPmtiles(pmtilesUrl);
 		pmtilesInstance = result.pmtiles;
 		metadata = result.metadata;

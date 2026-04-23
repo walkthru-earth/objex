@@ -1,3 +1,4 @@
+import { presignHttpsUrl } from '../storage/presign.js';
 import {
 	buildProviderBaseUrl,
 	isPubliclyStreamable,
@@ -27,6 +28,16 @@ export function buildHttpsUrl(tab: Tab): string {
 	}
 
 	return `${buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region)}/${cleanPath}`;
+}
+
+/**
+ * Async counterpart of `buildHttpsUrl`. For `signed-s3` connections, returns a
+ * presigned HTTPS URL (SigV4 query-string auth). For public or SAS connections
+ * it returns the same URL as the sync version.
+ */
+export async function buildHttpsUrlAsync(tab: Tab, expiresIn?: number): Promise<string> {
+	const presigned = await tryPresignTab(tab, expiresIn);
+	return presigned ?? buildHttpsUrl(tab);
 }
 
 /**
@@ -61,6 +72,32 @@ export function buildDuckDbUrl(tab: Tab): string {
 	// doesn't double-encode them (%D9%85 → %25D9%2585).
 	const rawPath = safeDecodeURIComponent(tab.path.replace(/^\//, ''));
 	return `s3://${conn.bucket}/${rawPath}`;
+}
+
+/**
+ * Async counterpart of `buildDuckDbUrl`. Returns a presigned HTTPS URL for
+ * `signed-s3` connections so DuckDB httpfs can fetch with `Range` only, no
+ * `Authorization` preflight (which breaks on GCS's S3-compat endpoint when
+ * the bucket CORS `responseHeader` list desyncs from the browser's request).
+ */
+export async function buildDuckDbUrlAsync(tab: Tab, expiresIn?: number): Promise<string> {
+	const presigned = await tryPresignTab(tab, expiresIn);
+	return presigned ?? buildDuckDbUrl(tab);
+}
+
+/** Presign the tab's HTTPS URL for `signed-s3` connections; null otherwise. */
+async function tryPresignTab(tab: Tab, expiresIn?: number): Promise<string | null> {
+	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
+	if (!conn || isPubliclyStreamable(conn)) return null;
+	try {
+		return await presignHttpsUrl(conn, tab.path, expiresIn);
+	} catch (err) {
+		// Silent fallback would route the caller back to `s3://...` + SigV4
+		// header signing — exactly the CORS preflight path presigning was added
+		// to avoid. Surface the failure so it is debuggable.
+		console.warn('[presign] falling back to signed-s3 path:', err);
+		return null;
+	}
 }
 
 /**

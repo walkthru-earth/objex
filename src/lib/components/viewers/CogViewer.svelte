@@ -27,7 +27,7 @@ import {
 	resolveProj4Def,
 	selectCogPipeline
 } from '../../utils/cog.js';
-import { buildHttpsUrl } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/url.js';
 import CogControls from './CogControls.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
@@ -57,6 +57,7 @@ let proj4DefRef: string | null = null;
 let sampleFormatRef = 1;
 let isTiledRef = true;
 let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+let resolvedHttpsUrl: string | null = null;
 // True when the library-default uint pipeline will run. LinearRescale only
 // operates on already-normalized RGB 0..1, so the slider is meaningful only
 // here, and only for non-palette data (palette renders through Colormap).
@@ -104,6 +105,7 @@ $effect(() => {
 		overlayRef = null;
 		geotiffRef = null;
 		proj4DefRef = null;
+		resolvedHttpsUrl = null;
 		loading = true;
 		error = null;
 		cogInfo = null;
@@ -165,7 +167,9 @@ async function loadCog(map: maplibregl.Map) {
 	const signal = abortController.signal;
 
 	try {
-		const url = buildHttpsUrl(tab);
+		const url = await buildHttpsUrlAsync(tab);
+		if (signal.aborted) return;
+		resolvedHttpsUrl = url;
 
 		// Pre-flight: read first IFD to check if tiled (single range request).
 		let isTiled = true;
@@ -187,6 +191,19 @@ async function loadCog(map: maplibregl.Map) {
 			}
 		} catch (preflightErr) {
 			if (signal.aborted) return;
+			// `@developmentseed/geotiff` throws "Only tiff supported version:<n>"
+			// when the first 4 bytes don't match II*\0 / MM\0* / II+\0 / MM\0+.
+			// This happens on files that advertise image/tiff but are corrupt,
+			// encrypted, or a different format entirely (GDAL reports "not
+			// recognized as being in a supported file format" on the same file).
+			// Surface a clear message and bail — COGLayer would re-invoke the
+			// same loader and throw the identical error uncaught during update.
+			const msg = preflightErr instanceof Error ? preflightErr.message : String(preflightErr);
+			if (/Only tiff supported version|not a tiff|Invalid.*magic/i.test(msg)) {
+				error = t('map.cogInvalidTiff');
+				loading = false;
+				return;
+			}
 		}
 
 		// Store refs for pixel inspection and rebuild
@@ -255,7 +272,7 @@ function buildAndAddLayer(
 	// Apply upstream-bug workarounds in place (overview filter, 4326 bbox clamp).
 	if (preflightGeotiff) normalizeCogGeotiff(preflightGeotiff);
 
-	const cogInput = preflightGeotiff ?? buildHttpsUrl(tab);
+	const cogInput = preflightGeotiff ?? resolvedHttpsUrl ?? '';
 
 	const layer = new COGLayer({
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
@@ -384,6 +401,7 @@ function cleanup() {
 	geotiffRef = null;
 	proj4DefRef = null;
 	pixelValue = null;
+	resolvedHttpsUrl = null;
 }
 
 $effect(() => {

@@ -11,8 +11,17 @@
 
 import { buildDuckDbSource } from '../file-icons/index.js';
 import type { Tab } from '../types.js';
-import { buildDuckDbUrl } from '../utils/url.js';
+import { buildDuckDbUrl, buildDuckDbUrlAsync } from '../utils/url.js';
 import type { QuerySource } from './engine.js';
+
+/**
+ * True when a source ref points at a self-authenticating HTTPS URL (e.g. a
+ * presigned `read_parquet('https://...?X-Amz-Signature=...')`). Used to decide
+ * whether DuckDB needs S3 credential config — presigned URLs don't.
+ */
+export function isHttpsSourceRef(ref: string): boolean {
+	return /(?:^|\(\s*['"])https:\/\//.test(ref);
+}
 
 export interface ResolvedTableSource extends QuerySource {
 	/**
@@ -27,12 +36,7 @@ export interface ResolvedTableSource extends QuerySource {
 	label: string;
 }
 
-/**
- * Resolve a tab to its QuerySource. Must be called lazily (inside reactive
- * expressions or functions) because `tab.sourceRef` and `tab.path` can change
- * over a tab's lifetime.
- */
-export function resolveTableSource(tab: Tab): ResolvedTableSource {
+function toResolved(tab: Tab, fileUrl: string | null): ResolvedTableSource {
 	if (tab.sourceRef) {
 		return {
 			ref: tab.sourceRef,
@@ -42,13 +46,29 @@ export function resolveTableSource(tab: Tab): ResolvedTableSource {
 			label: tab.name
 		};
 	}
-	const fileUrl = buildDuckDbUrl(tab);
-	const ref = buildDuckDbSource(tab.path, fileUrl);
 	return {
-		ref,
+		ref: buildDuckDbSource(tab.path, fileUrl ?? ''),
 		filePath: tab.path,
 		isFileSource: true,
 		fileUrl,
 		label: tab.name
 	};
+}
+
+/**
+ * Resolve a tab to its QuerySource. Must be called lazily (inside reactive
+ * expressions or functions) because `tab.sourceRef` and `tab.path` can change
+ * over a tab's lifetime.
+ */
+export function resolveTableSource(tab: Tab): ResolvedTableSource {
+	return toResolved(tab, tab.sourceRef ? null : buildDuckDbUrl(tab));
+}
+
+/**
+ * Async counterpart of `resolveTableSource`. Returns a presigned HTTPS URL
+ * for `signed-s3` connections so DuckDB httpfs can fetch without the
+ * `Authorization` header preflight.
+ */
+export async function resolveTableSourceAsync(tab: Tab): Promise<ResolvedTableSource> {
+	return toResolved(tab, tab.sourceRef ? null : await buildDuckDbUrlAsync(tab));
 }

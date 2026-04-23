@@ -30,4 +30,8 @@ export type {
 	SchemaField
 } from './engine';
 export { QueryCancelledError } from './engine';
-export { type ResolvedTableSource, resolveTableSource } from './source.js';
+export {
+	type ResolvedTableSource,
+	resolveTableSource,
+	resolveTableSourceAsync
+} from './source.js';
