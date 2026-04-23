@@ -356,7 +356,7 @@ async function expandToPath(path: string) {
 				? await findNodeAtRoot(accumulatedPath)
 				: await findNodeInParent(parentNode, accumulatedPath);
 
-		if (!node || !node.entry.is_dir) break;
+		if (!node?.entry.is_dir) break;
 
 		if (node.children.length === 0) {
 			await loadChildren(node);
