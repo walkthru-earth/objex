@@ -1,6 +1,6 @@
 {
 	"name": "@walkthru-earth/objex-utils",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"description": "Pure TypeScript utilities from objex — WKB parser, GeoArrow builder, storage URL parser, file type registry",
 	"author": "Youssef Harby <yharby@walkthru.earth>",
 	"license": "CC-BY-4.0",
