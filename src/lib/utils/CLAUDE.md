@@ -24,7 +24,7 @@ graph TD
     end
     subgraph "Internal only"
         DECK[deck.ts<br/>createGeoArrowOverlay, createGeoArrowLayers]
-        URL[url.ts<br/>buildHttpsUrl, buildDuckDbUrl — re-exports cloud-url]
+        URL[url.ts<br/>buildHttpsUrl/Async, buildDuckDbUrl/Async — re-exports cloud-url]
         US[url-state.ts<br/>syncUrlParam — uses $app]
         ARC[archive.ts<br/>streamZip/Tar]
         PMT[pmtiles.ts<br/>loadPmtiles]
@@ -57,7 +57,7 @@ graph TD
 | `local-storage.ts` | `loadFromStorage()`, `persistToStorage()` | connections.svelte.ts, settings.svelte.ts, query-history.svelte.ts, lib/index.ts |
 | `markdown-sql.ts` | `parseMarkdownDocument()`, `interpolateTemplates()`, `markSqlBlocks()` | MarkdownViewer, lib/index.ts |
 | `deck.ts` | `createGeoArrowOverlay()`, `createGeoArrowLayers()`, `geojsonFillColor()`, `geojsonLineColor()` | FlatGeobufViewer, GeoParquetMapViewer |
-| `url.ts` | `buildHttpsUrl()`, `buildDuckDbUrl()`, `buildStorageUrl()`, `canStreamDirectly()` | TabBar, CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, PmtilesMapView, TableToolbar |
+| `url.ts` | `buildHttpsUrl()`, `buildHttpsUrlAsync()`, `buildDuckDbUrl()`, `buildDuckDbUrlAsync()`, `buildStorageUrl()`, `canStreamDirectly()`. The `Async` variants presign for `signed-s3` via `storage/presign.ts` (SigV4 query-string auth) and share a private `tryPresignTab()` helper; viewers that hand the URL to an external fetcher (iframe, range reader, `<img>`) must `await` them | TabBar, CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, PmtilesMapView, TableToolbar |
 | `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | ArchiveViewer |
 | `pmtiles.ts` | `getPmtilesProtocol()`, `loadPmtiles()`, `buildPmtilesLayers()`, `TILE_TYPE_LABELS`, `COMPRESSION_LABELS`, `VectorLayerInfo`, `PmtilesMetadata` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |
 | `pmtiles-tile.ts` | `decodeMvtTile()`, `tileMimeType()`, `layerHue()`, `DecodedTile`, `DecodedLayer`, `DecodedFeature` | PmtilesTileInspector |

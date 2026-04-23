@@ -16,8 +16,8 @@ Re-exports from `src/lib/`:
 - **constants**: `COPY_FEEDBACK_MS`, `DEFAULT_TARGET_CRS`, `DUCKDB_INIT_TIMEOUT_MS`, `LAYER_HUE_MULTIPLIER`, `MAX_QUERY_HISTORY_ENTRIES`, `SQL_PREVIEW_LENGTH`, `STORAGE_KEYS`, `VIEWER_DIR_EXTENSIONS`, `WGS84_CODES`
 - **storage/adapter**: `StorageAdapter` (interface), `ListPage` (type)
 - **storage/url-adapter**: `UrlAdapter` (class)
-- **storage/providers**: `PROVIDERS`, `PROVIDER_IDS`, `ProviderId` (type), `ProviderDef` (type), `ProviderRegion` (type), `getProvider()`, `buildEndpointFromTemplate()`, `buildProviderBaseUrl()`, `isGcsProvider()`
-- **query/engine**: `QueryEngine` (type), `QueryHandle` (type), `QueryResult` (type), `SchemaField` (type), `MapQueryHandle` (type), `MapQueryResult` (type), `QueryCancelledError` (class)
+- **storage/providers**: `PROVIDERS`, `PROVIDER_IDS`, `ProviderId` (type), `ProviderDef` (type), `ProviderRegion` (type), `AccessMode` (type), `AccessModeInput` (type), `getProvider()`, `buildEndpointFromTemplate()`, `resolveProviderEndpoint()`, `buildProviderBaseUrl()`, `isGcsProvider()`, `getAccessMode()`, `isPubliclyStreamable()`
+- **query/engine**: `QueryEngine` (type), `QueryHandle` (type), `QueryResult` (type), `QuerySource` (type), `SchemaField` (type), `MapQueryHandle` (type), `MapQueryResult` (type), `QueryCancelledError` (class)
 - **file-icons**: `DuckDbReadFn` (type), `FileCategory` (type), `FileTypeInfo` (type), `ViewerKind` (type), `buildDuckDbSource()`, `getDuckDbReadFn()`, `getFileTypeInfo()`, `getMimeType()`, `getViewerKind()`, `isCloudNativeFormat()`, `isQueryable()`
 - **utils/wkb**: `GeoType` (type), `ParsedGeometry` (type), `parseWKB()`, `toBinary()`, `findGeoColumn()`, `findGeoColumnFromRows()`
 - **utils/geoarrow**: `GeoArrowGeomType` (type), `GeoArrowResult` (type), `buildGeoArrowTables()`, `normalizeGeomType()`
@@ -28,10 +28,10 @@ Re-exports from `src/lib/`:
 - **utils/column-types**: `TypeCategory` (type), `classifyType()`, `typeBadgeClass()`, `typeColor()`, `typeLabel()`
 - **utils/cloud-url**: `resolveCloudUrl()`, `getNativeScheme()`, `safeDecodeURIComponent()`
 - **utils/file-sort**: `SortConfig` (type), `SortDirection` (type), `SortField` (type), `sortFileEntries()`, `toggleSortField()`
-- **utils/export**: `serializeToCsv()`, `serializeToJson()`, `escapeCsvField()`
+- **utils/export**: `serializeToCsv()`, `serializeToJson()`, `escapeCsvField()`, `exportToCsv()`, `exportToJson()`
 - **utils/local-storage**: `loadFromStorage()`, `persistToStorage()`
 - **utils/markdown-sql**: `ParsedMarkdownDocument` (type), `SqlBlock` (type), `parseMarkdownDocument()`, `interpolateTemplates()`, `markSqlBlocks()`
-- **utils/cog**: `CogInfo` (type), `GeoBounds` (type), `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`
+- **utils/cog**: `CogInfo` (type), `GeoBounds` (type), `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`. The render-pipeline helpers (`selectCogPipeline`, `createEpsgResolver`, `normalizeCogGeotiff`, `renderNonTiledBitmap`, `fitCogBounds`, etc.) stay in `src/lib/utils/cog.ts` but are **not** re-exported here — they pull `@developmentseed/deck.gl-geotiff` / `@developmentseed/geotiff` / `maplibre-gl` / `proj4` into the import graph. Use the full `@walkthru-earth/objex` package if you need them.
 - **utils/error**: `handleLoadError()`
 
 **Important**: All re-exported source files must use **relative imports** (not `$lib/`). The `$lib` alias is SvelteKit-only and breaks the tsup build.

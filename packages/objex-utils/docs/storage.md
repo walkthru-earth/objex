@@ -154,6 +154,7 @@ const PROVIDER_IDS: ProviderId[];
 ```ts
 function getProvider(id: string): ProviderDef;
 function buildEndpointFromTemplate(id: ProviderId, region: string): string;
+function resolveProviderEndpoint(provider: string, region?: string): string;
 function buildProviderBaseUrl(
   provider: ProviderId,
   endpoint: string,
@@ -167,6 +168,7 @@ function isGcsProvider(provider: string, endpoint: string): boolean;
 |----------|-----------|
 | `getProvider` | Unknown IDs fall back to the S3 entry (never throws). |
 | `buildEndpointFromTemplate` | Substitute `{region}` in the provider's template. |
+| `resolveProviderEndpoint` | Same as `buildEndpointFromTemplate` but accepts an untyped `provider` string and falls back to the provider's `defaultRegion` when `region` is omitted. Returns `''` for providers without a template (plain S3, MinIO). |
 | `buildProviderBaseUrl` | Produce the HTTPS base URL for API requests (endpoint + bucket, correctly interleaved for virtual-host vs path-style). |
 | `isGcsProvider` | `true` when the connection uses the GCS JSON API rather than S3 XML — used to pick adapter implementation. |
 
