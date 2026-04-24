@@ -1,17 +1,22 @@
 <script lang="ts">
+import { MapboxOverlay } from '@deck.gl/mapbox';
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
-import { t } from '$lib/i18n/index.svelte.js';
-import { tabResources } from '$lib/stores/tab-resources.svelte.js';
-import type { Tab } from '$lib/types';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { t } from '../../i18n/index.svelte.js';
+import { tabResources } from '../../stores/tab-resources.svelte.js';
+import type { Tab } from '../../types.js';
+import { createEpsgResolver } from '../../utils/cog.js';
+import { buildHttpsUrlAsync } from '../../utils/url.js';
 import {
+	detectGeoZarr,
 	ensureCodecsRegistered,
 	extractZarrStoreUrl,
+	type GeoZarrInfo,
 	inferDims,
+	type ZarrHierarchy,
 	type ZarrNode
-} from '$lib/utils/zarr.js';
+} from '../../utils/zarr.js';
 import MapContainer from './map/MapContainer.svelte';
 
 /** Enriched selector dimension with coordinate metadata. */
@@ -40,14 +45,31 @@ let {
 	variables,
 	coords = [],
 	spatialRefAttrs,
-	zarrVersion = null
+	zarrVersion = null,
+	hierarchy = null
 }: {
 	tab: Tab;
 	variables: ZarrNode[];
 	coords?: ZarrNode[];
 	spatialRefAttrs: Record<string, any> | null;
 	zarrVersion?: number | null;
+	/**
+	 * Full pre-loaded hierarchy. When present, `detectGeoZarr` can short-circuit
+	 * to the `@developmentseed/deck.gl-zarr` path for GeoZarr-valid stores.
+	 * Non-GeoZarr stores fall through to `@carbonplan/zarr-layer`.
+	 */
+	hierarchy?: ZarrHierarchy | null;
 } = $props();
+
+// GeoZarr detection runs once per hierarchy so the branch decision is stable
+// across selector-slider tweaks. Returns null for non-GeoZarr stores, which
+// sends everything through the existing carbonplan path.
+const geoZarrInfo = $derived<GeoZarrInfo | null>(hierarchy ? detectGeoZarr(hierarchy) : null);
+
+// MapboxOverlay holder for the deck.gl-zarr path. Separate from zarrLayer so
+// the two paths can be cleaned up independently.
+let dsZarrOverlay: MapboxOverlay | null = null;
+const dsZarrEpsg = createEpsgResolver();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -55,6 +77,8 @@ let selectedVar = $state('');
 let zarrLayer: any = null;
 let mapRef: maplibregl.Map | null = null;
 let inspectPopup: maplibregl.Popup | null = null;
+let loadGen = 0;
+let addAbort = new AbortController();
 
 // Extract proj4 from spatial_ref if available
 const proj4String = $derived(extractProj4(spatialRefAttrs));
@@ -359,20 +383,39 @@ async function onMapReady(map: maplibregl.Map) {
 }
 
 async function addZarrLayer(map: maplibregl.Map) {
+	addAbort.abort();
+	addAbort = new AbortController();
+	const signal = addAbort.signal;
+	const gen = ++loadGen;
 	loading = true;
 	error = null;
 
 	try {
-		// Remove existing layer
 		if (zarrLayer && map.getLayer(zarrLayer.id)) {
 			map.removeLayer(zarrLayer.id);
 		}
+		if (dsZarrOverlay) {
+			try {
+				map.removeControl(dsZarrOverlay as unknown as maplibregl.IControl);
+			} catch {
+				/* already removed */
+			}
+			dsZarrOverlay = null;
+		}
 
-		// Ensure numcodecs codecs (shuffle, zlib, etc.) are registered before zarr-layer uses zarrita
+		if (geoZarrInfo) {
+			const used = await tryAddGeoZarrLayer(map, gen, signal);
+			if (gen !== loadGen || signal.aborted) return;
+			if (used) return;
+		}
+
 		await ensureCodecsRegistered();
+		if (gen !== loadGen || signal.aborted) return;
 		const { ZarrLayer } = await import('@carbonplan/zarr-layer');
+		if (gen !== loadGen || signal.aborted) return;
 
 		const storeUrl = await buildStoreUrl();
+		if (gen !== loadGen || signal.aborted) return;
 		const selector = buildSelector();
 
 		const opts: any = {
@@ -457,6 +500,97 @@ async function buildStoreUrl(): Promise<string> {
 	return extractZarrStoreUrl(rawUrl) ?? rawUrl;
 }
 
+/**
+ * Attempt to render via `@developmentseed/deck.gl-zarr`. Returns true on
+ * success (carbonplan fallback is skipped), false on any setup error so the
+ * caller can fall through to the legacy path. Errors thrown inside the layer
+ * after setup propagate through the overlay's `onError`.
+ */
+async function tryAddGeoZarrLayer(
+	map: maplibregl.Map,
+	gen: number,
+	signal: AbortSignal
+): Promise<boolean> {
+	if (!geoZarrInfo) return false;
+	try {
+		const zarrita = await import('zarrita');
+		if (gen !== loadGen || signal.aborted) return false;
+		const { ZarrLayer } = await import('@developmentseed/deck.gl-zarr');
+		if (gen !== loadGen || signal.aborted) return false;
+		const storeUrl = await buildStoreUrl();
+		if (gen !== loadGen || signal.aborted) return false;
+		const store = new zarrita.FetchStore(storeUrl);
+		const group = await zarrita.open(store, { kind: 'group' });
+		if (gen !== loadGen || signal.aborted) return false;
+
+		const zarrInfoSnapshot = $state.snapshot(geoZarrInfo) as GeoZarrInfo;
+		const layer = new ZarrLayer({
+			id: `geozarr-${tab.id}`,
+			source: group,
+			variable: zarrInfoSnapshot.variantPath || undefined,
+			selection: {},
+			epsgResolver: dsZarrEpsg,
+			getTileData: async (arr, options) => {
+				const chunk = await zarrita.get(arr, options.sliceSpec);
+				if (gen !== loadGen || signal.aborted) {
+					throw new DOMException('Aborted', 'AbortError');
+				}
+				const data = chunk.data as unknown as ArrayLike<number> & { length: number };
+				return {
+					width: options.width,
+					height: options.height,
+					data,
+					byteLength: data.length
+				};
+			},
+			renderTile: (data) => {
+				const raw = (data as unknown as { data: ArrayLike<number> & { length: number } }).data;
+				if (!raw) return { image: undefined } as never;
+				let clamped: Uint8ClampedArray;
+				const asTyped = raw as unknown as {
+					buffer?: ArrayBufferLike;
+					byteOffset?: number;
+					byteLength?: number;
+				};
+				if (
+					asTyped.buffer &&
+					typeof asTyped.byteOffset === 'number' &&
+					typeof asTyped.byteLength === 'number'
+				) {
+					clamped = new Uint8ClampedArray(asTyped.buffer, asTyped.byteOffset, asTyped.byteLength);
+				} else {
+					clamped = new Uint8ClampedArray(raw as unknown as Uint8Array);
+				}
+				const img = new ImageData(
+					clamped as unknown as Uint8ClampedArray<ArrayBuffer>,
+					data.width,
+					data.height
+				);
+				return { image: img };
+			}
+		});
+
+		const overlay = new MapboxOverlay({
+			interleaved: false,
+			layers: [layer],
+			onError: (err) => {
+				error = err?.message || String(err);
+				loading = false;
+			}
+		});
+		dsZarrOverlay = overlay;
+		map.addControl(overlay as unknown as maplibregl.IControl);
+		loading = false;
+		return true;
+	} catch {
+		// Fall back to carbonplan path on any setup failure (e.g. the store
+		// looked like GeoZarr by shape but zarrita open failed, or the group
+		// attrs don't actually parse). Silent by design, the caller will mount
+		// carbonplan's ZarrLayer which surfaces its own errors.
+		return false;
+	}
+}
+
 // Re-render when selector changes
 async function updateSelector() {
 	if (!zarrLayer) return;
@@ -476,6 +610,7 @@ async function changeVariable() {
 }
 
 function cleanup() {
+	addAbort.abort();
 	inspectPopup?.remove();
 	inspectPopup = null;
 	try {
@@ -483,10 +618,14 @@ function cleanup() {
 		if (zarrLayer && mapRef?.getLayer('zarr-data')) {
 			mapRef.removeLayer('zarr-data');
 		}
+		if (mapRef && dsZarrOverlay) {
+			mapRef.removeControl(dsZarrOverlay as unknown as maplibregl.IControl);
+		}
 	} catch {
 		// map may already be destroyed
 	}
 	zarrLayer = null;
+	dsZarrOverlay = null;
 	mapRef = null;
 }
 

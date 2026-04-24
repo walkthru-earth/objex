@@ -4,9 +4,11 @@
 
 | Package | Version | Role |
 |---------|---------|------|
-| `zarrita` | 0.6.1 | JS Zarr v2/v3 reader (string dtype, sharding, vlen-utf8) |
-| `@carbonplan/zarr-layer` | 0.4.2 | MapLibre custom layer for tiled Zarr rendering |
-| `@zarrita/storage` | 0.1.4 | FetchStore with `getRange` for sharding range requests |
+| `zarrita` | 0.7.1 | JS Zarr v2/v3 reader (string dtype, sharding, vlen-utf8) |
+| `@carbonplan/zarr-layer` | 0.4.3 | MapLibre custom layer for tiled Zarr rendering (legacy path) |
+| `@developmentseed/deck.gl-zarr` | 0.6.0-alpha.1 | deck.gl Zarr layer for GeoZarr-convention stores (new path) |
+| `@developmentseed/geozarr` | 0.6.0-alpha.1 | GeoZarr metadata parser + validator |
+| `@zarrita/storage` | bundled | FetchStore with `getRange` for sharding range requests |
 
 ### Upstream repos
 
@@ -86,6 +88,21 @@ Clicking zarr.json/.zmetadata    → opens in CodeViewer (JSON syntax highlighti
    - Probes each child with `GET {child}/zarr.json`
 3. **Zarr v2 consolidated**: `GET {url}/.zmetadata` → `buildV2Tree()`
 4. **Zarr v2/fallback**: `probeHierarchy()` via zarrita `open()`
+
+## Dual-path Map Rendering
+
+`ZarrMapViewer.svelte` runs two independent rendering paths and picks between them per tab.
+
+1. **GeoZarr path** (`@developmentseed/deck.gl-zarr`). `utils/zarr.ts::detectGeoZarr(hierarchy)` walks the hierarchy looking for a node whose attributes carry `multiscales` + a spatial convention (`spatial`, `spatial:dimensions`, `spatial:shape`) + CRS info (`geo-proj`, `proj:code`, `proj:wkt2`, `proj:projjson`, `crs`, `crs_wkt`). On a non-null return, `tryAddGeoZarrLayer` dynamic-imports `@developmentseed/deck.gl-zarr` and mounts `ZarrLayer` through `MapboxOverlay`. A shared `createEpsgResolver()` instance backs the new layer, matching the single-COG viewer's bundled EPSG database pattern. Errors during GeoZarr setup are caught and the caller falls back to path (2).
+2. **Carbonplan path** (`@carbonplan/zarr-layer`). Unchanged from prior releases, keeps the 10 k-tile guard, proj4 LCC builder, `ensureCodecsRegistered` for `numcodecs.`-prefixed codecs (zlib, shuffle), and `onLoadingStateChange` error propagation.
+
+The selector sliders, variable dropdown, and click-popup behavior are identical across both paths — only the layer implementation differs.
+
+### Version pins
+zarrita bumped `0.6.2 → 0.7.1` as part of the v0.6 family bump. `pnpm.overrides` forces 0.7.1 across the tree so `@carbonplan/zarr-layer@0.4.3` (which declares `zarrita@^0.6.1`) runs on the same major. If carbonplan publishes an update that requires a different zarrita major, remove the override and either dual-install via aliasing or drop the legacy path.
+
+### carbonplan patch (`patches/@carbonplan__zarr-layer@0.4.3.patch`)
+zarrita 0.7 removed `tryWithConsolidated`. `@carbonplan/zarr-layer@0.4.3` calls it from `_ZarrStore` during `_onAddAsync`, which under the 0.7 override throws `(void 0) is not a function`. The patch replaces both call sites with `Promise.resolve(baseStore)`. The library's own `_loadV2` fetches `.zmetadata` manually on the next tick, so behavior for consolidated v2 stores is preserved, and v3 stores never took that branch.
 
 ## Map View
 

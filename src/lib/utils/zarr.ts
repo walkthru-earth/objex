@@ -151,6 +151,122 @@ export interface ZarrHierarchy {
 }
 
 // ---------------------------------------------------------------------------
+// GeoZarr detection (new deck.gl-zarr path)
+// ---------------------------------------------------------------------------
+
+export interface GeoZarrInfo {
+	/** Relative path within the store to the group carrying GeoZarr attrs. */
+	variantPath: string;
+	/** Raw attributes object that parses as GeoZarr (for caller re-use). */
+	attrs: Record<string, any>;
+}
+
+/**
+ * Walk the hierarchy looking for a node whose attributes satisfy the core
+ * GeoZarr convention: `multiscales` + a spatial convention (`spatial` /
+ * `spatial:dimensions`) + CRS info (`geo-proj`, `proj:code`, or `crs_wkt`).
+ *
+ * Check is shape-only (no zarrita I/O), so it's safe to call synchronously
+ * after `fetchHierarchy`. A non-null return indicates the store should be
+ * rendered via `@developmentseed/deck.gl-zarr`; a null return sends the
+ * caller to the `@carbonplan/zarr-layer` fallback.
+ */
+export function detectGeoZarr(hierarchy: ZarrHierarchy): GeoZarrInfo | null {
+	const candidate = findGeoZarrNode(hierarchy.root);
+	if (candidate) return candidate;
+	// Also check the top-level storeAttrs — some stores put GeoZarr metadata on
+	// the outer zarr.json where the root node wasn't re-attrs'd.
+	if (isGeoZarrAttrs(hierarchy.storeAttrs)) {
+		return { variantPath: '', attrs: hierarchy.storeAttrs };
+	}
+	return null;
+}
+
+function findGeoZarrNode(node: ZarrNode): GeoZarrInfo | null {
+	if (isGeoZarrAttrs(node.attributes)) {
+		return {
+			variantPath: node.path === '/' ? '' : node.path.replace(/^\//, ''),
+			attrs: node.attributes
+		};
+	}
+	for (const child of node.children) {
+		const match = findGeoZarrNode(child);
+		if (match) return match;
+	}
+	return null;
+}
+
+function isGeoZarrAttrs(attrs: Record<string, any> | undefined): boolean {
+	if (!attrs) return false;
+	const hasMultiscales = Array.isArray(attrs.multiscales) || Boolean(attrs.multiscales?.layout);
+	const hasSpatial =
+		Boolean(attrs.spatial) ||
+		Boolean(attrs['spatial:dimensions']) ||
+		Boolean(attrs['spatial:shape']);
+	const hasCrs =
+		Boolean(attrs['geo-proj']) ||
+		Boolean(attrs['proj:code']) ||
+		Boolean(attrs['proj:wkt2']) ||
+		Boolean(attrs['proj:projjson']) ||
+		Boolean(attrs.crs) ||
+		Boolean(attrs.crs_wkt);
+	return hasMultiscales && hasSpatial && hasCrs;
+}
+
+/**
+ * Convert a decoded GeoZarr tile (band-planar or packed RGB) into RGBA
+ * `ImageData` for deck.gl-zarr's `renderTile` callback. Input is expected to
+ * be a Uint8 or Uint16 typed array with either 3 interleaved bytes per pixel
+ * or 3 planar bands of width*height values.
+ *
+ * For 16-bit data the caller supplies the rescale range so the CPU
+ * normalization matches what the GPU `LinearRescale` module would produce.
+ */
+export function zarrTileToImageData(
+	raw: ArrayLike<number> & { length: number },
+	width: number,
+	height: number,
+	opts: {
+		layout?: 'packed' | 'planar';
+		bands?: 1 | 3;
+		rescaleMin?: number;
+		rescaleMax?: number;
+	} = {}
+): ImageData {
+	const bands = opts.bands ?? 3;
+	const layout = opts.layout ?? 'packed';
+	const min = opts.rescaleMin ?? 0;
+	const max = opts.rescaleMax ?? 255;
+	const range = max - min || 1;
+	const pixelCount = width * height;
+	const rgba = new Uint8ClampedArray(pixelCount * 4);
+	for (let i = 0; i < pixelCount; i++) {
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		if (bands === 1) {
+			const v = Number(raw[i]);
+			r = g = b = (v - min) / range;
+		} else if (layout === 'planar') {
+			r = (Number(raw[i]) - min) / range;
+			g = (Number(raw[pixelCount + i]) - min) / range;
+			b = (Number(raw[2 * pixelCount + i]) - min) / range;
+		} else {
+			const base = i * 3;
+			r = (Number(raw[base]) - min) / range;
+			g = (Number(raw[base + 1]) - min) / range;
+			b = (Number(raw[base + 2]) - min) / range;
+		}
+		const idx = i * 4;
+		rgba[idx] = Math.round(Math.max(0, Math.min(1, r)) * 255);
+		rgba[idx + 1] = Math.round(Math.max(0, Math.min(1, g)) * 255);
+		rgba[idx + 2] = Math.round(Math.max(0, Math.min(1, b)) * 255);
+		rgba[idx + 3] = 255;
+	}
+	return new ImageData(rgba, width, height);
+}
+
+// ---------------------------------------------------------------------------
 // Kept helpers
 // ---------------------------------------------------------------------------
 

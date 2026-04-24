@@ -474,6 +474,7 @@ function selectStoreAttrs() {
 					coords={coordArrays}
 					spatialRefAttrs={hierarchy?.spatialRefAttrs ?? null}
 					zarrVersion={hierarchy?.zarrVersion}
+					hierarchy={hierarchy ?? null}
 				/>
 			{/await}
 		{/key}
