@@ -334,6 +334,7 @@ export const ar: Record<string, string> = {
 	'code.stacCatalog': 'كتالوج STAC',
 	'code.stacCollection': 'مجموعة STAC',
 	'code.stacItem': 'عنصر STAC',
+	'code.stacGeoparquet': 'stac-geoparquet',
 	'code.browseStac': 'تصفح',
 	'code.keplerGl': 'Kepler.gl',
 	'code.openKepler': 'فتح الخريطة',
@@ -424,6 +425,31 @@ export const ar: Record<string, string> = {
 	'mapInfo.columns': 'الأعمدة',
 	'mapInfo.size': 'الحجم',
 	'mapInfo.bands': 'النطاقات',
+
+	'map.mosaicEmpty': 'كتالوج STAC لا يحتوي على عناصر بها أصول COG.',
+	'map.mosaicNoAssets': 'لا تحتوي عناصر STAC على عنوان URL صالح لأصل COG.',
+	'map.multiCogMissingBands': 'عنصر STAC هذا ينقصه نطاقات الأحمر والأخضر والأزرق اللازمة للتركيب.',
+	'map.multiCogPreset.label': 'الإعداد المسبق',
+	'map.multiCogPreset.trueColor': 'ألوان طبيعية',
+	'map.multiCogPreset.falseColorIR': 'أشعة تحت حمراء كاذبة اللون',
+	'map.multiCogPreset.swir': 'الأشعة تحت الحمراء قصيرة الموجة',
+	'map.multiCogPreset.vegetation': 'الغطاء النباتي',
+	'map.multiCogPreset.agriculture': 'الزراعة',
+
+	// تبديل عرض STAC (StacTabViewer)
+	'stac.viewMosaic': 'خريطة',
+	'stac.viewMultiCog': 'خريطة (نطاقات)',
+	'stac.viewStacMap': 'stac-map',
+	'stac.viewBrowser': 'متصفح STAC',
+	'stac.viewJson': 'JSON',
+	'stac.viewTable': 'جدول',
+	'stac.stacBrowserJsonOnly': 'متصفح STAC يدعم كتالوجات JSON فقط. استخدم stac-map لملفات parquet.',
+	'stac.iframeDisabledPrivate':
+		'معطل للبكتات الخاصة، الإطار الخارجي لا يستطيع توقيع طلباته. استخدم الخريطة أو JSON بدلاً من ذلك.',
+	'stac.iframePrivateBucketWarning':
+		'بكت خاص، الإطار الخارجي لا يستطيع توقيع طلباته، لذا ستفشل طلبات العناصر الفرعية بـ 403. لكن المانيفست الجذري سيعمل.',
+	'stac.mosaicSourcesOne': 'فسيفساء، {count} مصدر',
+	'stac.mosaicSourcesOther': 'فسيفساء، {count} مصادر',
 
 	// COG Controls
 	'cog.style': 'النمط',

@@ -335,6 +335,7 @@ export const en: Record<string, string> = {
 	'code.stacCatalog': 'STAC Catalog',
 	'code.stacCollection': 'STAC Collection',
 	'code.stacItem': 'STAC Item',
+	'code.stacGeoparquet': 'stac-geoparquet',
 	'code.browseStac': 'Browse',
 	'code.keplerGl': 'Kepler.gl',
 	'code.openKepler': 'Open Map',
@@ -425,6 +426,32 @@ export const en: Record<string, string> = {
 	'mapInfo.columns': 'Columns',
 	'mapInfo.size': 'Size',
 	'mapInfo.bands': 'Bands',
+
+	'map.mosaicEmpty': 'STAC catalog has no items with COG assets.',
+	'map.mosaicNoAssets': 'None of the STAC items expose a usable COG asset URL.',
+	'map.multiCogMissingBands':
+		'This STAC item is missing the red/green/blue bands required for a composite.',
+	'map.multiCogPreset.label': 'Preset',
+	'map.multiCogPreset.trueColor': 'True Color',
+	'map.multiCogPreset.falseColorIR': 'False-Color IR',
+	'map.multiCogPreset.swir': 'SWIR',
+	'map.multiCogPreset.vegetation': 'Vegetation',
+	'map.multiCogPreset.agriculture': 'Agriculture',
+
+	// STAC tab toggle (StacTabViewer)
+	'stac.viewMosaic': 'Map',
+	'stac.viewMultiCog': 'Map (Bands)',
+	'stac.viewStacMap': 'stac-map',
+	'stac.viewBrowser': 'STAC Browser',
+	'stac.viewJson': 'JSON',
+	'stac.viewTable': 'Table',
+	'stac.stacBrowserJsonOnly': 'STAC Browser supports JSON catalogs only. Use stac-map for parquet.',
+	'stac.iframeDisabledPrivate':
+		'Disabled for private buckets, the external iframe cannot sign its own crawl. Use Map or JSON instead.',
+	'stac.iframePrivateBucketWarning':
+		'Private bucket, the external iframe cannot sign its own crawl, so child items will 403. The top manifest still renders.',
+	'stac.mosaicSourcesOne': 'Mosaic, {count} source',
+	'stac.mosaicSourcesOther': 'Mosaic, {count} sources',
 
 	// COG Controls
 	'cog.style': 'Style',
