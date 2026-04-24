@@ -7,6 +7,7 @@ Shared constants live in `src/lib/constants.ts` (imported by stores, query, and 
 graph TD
     subgraph "Published (npm)"
         WKB[wkb.ts<br/>parseWKB, findGeoColumn]
+        SGP[stac-geoparquet.ts<br/>isStacGeoparquetSchema, stacRowToItem]
         GA[geoarrow.ts<br/>buildGeoArrowTables]
         SU[storage-url.ts<br/>parseStorageUrl]
         PM[parquet-metadata.ts<br/>readParquetMetadata]
@@ -45,9 +46,10 @@ graph TD
 | File | Key Exports | Used by |
 |------|-------------|---------|
 | `wkb.ts` | `parseWKB()`, `toBinary()`, `findGeoColumn()`, `findGeoColumnFromRows()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
+| `stac-geoparquet.ts` | `STAC_GEOPARQUET_REQUIRED_COLUMNS`, `isStacGeoparquetSchema()`, `flattenStacBbox()`, `resolveStacAssetHref()`, `pickStacPrimaryAsset()`, `stacRowToItem()` + types | ViewerRouter (schema sniff), query/stac-geoparquet (per-row → Item), objex-utils (re-export) |
 | `geoarrow.ts` | `buildGeoArrowTables()`, `normalizeGeomType()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
 | `storage-url.ts` | `parseStorageUrl()`, `looksLikeUrl()`, `Defaults` | ConnectionDialog, Sidebar, lib/index.ts |
-| `parquet-metadata.ts` | `readParquetMetadata()`, `extractEpsgFromGeoMeta()`, `extractBounds()` | TableViewer, lib/index.ts |
+| `parquet-metadata.ts` | `readParquetMetadata()` (returns `{ schema, topLevelColumns, geo, ... }` — `schema` is leaves only, `topLevelColumns` includes struct parents like `assets`/`bbox` for stac-geoparquet sniffing), `extractEpsgFromGeoMeta()`, `extractBounds()` | TableViewer, ViewerRouter (stac-geoparquet detect), lib/index.ts |
 | `format.ts` | `formatFileSize()`, `formatDate()`, `getFileExtension()`, `formatValue()`, `jsonReplacerBigInt()` | StatusBar, FileRow, ArchiveViewer, RawViewer, PmtilesTileInspector, PmtilesArchiveView, AttributeTable, TableGrid, export.ts, lib/index.ts |
 | `hex.ts` | `generateHexDump()` | RawViewer, lib/index.ts |
 | `column-types.ts` | `classifyType()`, `typeColor()`, `typeLabel()` | TableGrid, lib/index.ts |
@@ -71,6 +73,7 @@ graph TD
 | `markdown.ts` | `renderMarkdown()`, `detectRTL()` | MarkdownViewer |
 | `map-selection.ts` | `setupSelectionLayer()`, `updateSelection()` | PmtilesMapView, MapViewer |
 | `host-detection.ts` | `detectHostBucket()` | stores/connections, Sidebar |
+| `connection-identity.ts` | `connectionIdentityKey()`, `isSameConnectionIdentity()`, `normalizeEndpoint()`, `normalizeProvider()`, `ConnectionIdentityInput` | stores/connections, lib/index.ts |
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
 | `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
 | `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo`, `GeoBounds`, `BandConfig`, `PixelValue`, `ColorRampId`, `COLOR_RAMP_STOPS`, `interpolateRamp()`, `rampToGradientCss()`, `defaultBandConfig()`, `isDefaultBandConfig()`, `needsCustomPipelineForConfig()`, `createConfigurableGetTileData()`, `readPixelAtLngLat()`, `resolveProj4Def()`, `createEpsgResolver()`, `RescaleConfig`, `DEFAULT_RESCALE`, `isRescaleActive()`, `createRescaledPipeline()`, `CogTagInfo`, `inspectCogTags()`, `normalizeCogGeotiff()`, `ResolvedCogPipeline`, `SelectCogPipelineOptions`, `selectCogPipeline()` | CogViewer, CogControls, lib/index.ts |

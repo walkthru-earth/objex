@@ -1,7 +1,7 @@
 import type { GetTileDataOptions, MinimalDataT } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
-import type { RenderTileResult } from '@developmentseed/deck.gl-raster';
-import { LinearRescale } from '@developmentseed/deck.gl-raster/gpu-modules';
+import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
+import { FilterNoDataVal, LinearRescale } from '@developmentseed/deck.gl-raster/gpu-modules';
 import loadEpsg from '@developmentseed/epsg/all';
 import epsgCsvUrl from '@developmentseed/epsg/all.csv.gz?url';
 import type { GeoTIFF as GeoTIFFType, Overview } from '@developmentseed/geotiff';
@@ -131,7 +131,7 @@ export interface BandConfig {
 
 /** Create a sensible default band config based on COG metadata. */
 export function defaultBandConfig(bandCount: number, sampleFormat: number): BandConfig {
-	if (bandCount >= 3) {
+	if (bandCount >= 3 && bandCount <= 4) {
 		return {
 			mode: 'rgb',
 			rBand: 0,
@@ -208,6 +208,11 @@ export function needsCustomPipelineForConfig(geotiff: GeoTIFFType, config: BandC
 	const tags = geotiff.cachedTags;
 	const sf = tags.sampleFormat;
 	const isUint = sf !== null && sf[0] === 1;
+	// GPU textures accept 1-4 channels; COGs with more samples per pixel (embeddings,
+	// hyperspectral, multi-band features) must route through the CPU pipeline which
+	// reads selected band indices and bakes RGBA. Otherwise the library throws
+	// "Unsupported SamplesPerPixel N" in verifySamplesPerPixel.
+	if (geotiff.count > 4) return true;
 	if (!isUint) return true;
 	// Palette-indexed uint COGs with an embedded ColorMap tag are auto-rendered
 	// by the library via its Colormap GPU module. Defer to the default pipeline
@@ -301,6 +306,35 @@ export function createRescaledPipeline(
 			};
 		}
 	};
+}
+
+export interface BandRenderPipelineOptions {
+	/** Value treated as "no-data" and zeroed out by `FilterNoDataVal`. */
+	noDataVal?: number | null;
+	/** Linear rescale applied after no-data masking. Omit for no rescaling. */
+	rescale?: RescaleConfig;
+}
+
+/**
+ * Build a `renderPipeline` array for `MultiCOGLayer` / raster mosaics.
+ * Combines optional `FilterNoDataVal` + `LinearRescale` stages in the order
+ * the GPU expects (no-data mask first, then rescale).
+ */
+export function buildBandRenderPipeline(opts: BandRenderPipelineOptions = {}): RasterModule[] {
+	const modules: RasterModule[] = [];
+	if (opts.noDataVal !== undefined && opts.noDataVal !== null) {
+		modules.push({
+			module: FilterNoDataVal,
+			props: { noDataVal: opts.noDataVal }
+		});
+	}
+	if (opts.rescale && isRescaleActive(opts.rescale)) {
+		modules.push({
+			module: LinearRescale,
+			props: { rescaleMin: opts.rescale.min, rescaleMax: opts.rescale.max }
+		});
+	}
+	return modules;
 }
 
 // ─── GeoTIFF normalization for COGLayer ──────────────────────────

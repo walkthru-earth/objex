@@ -25,8 +25,14 @@ export interface GeoParquetMeta {
 export interface ParquetFileMetadata {
 	/** Total number of rows across all row groups. */
 	rowCount: number;
-	/** Column schema (name + type). */
+	/** Column schema (name + type). Leaf columns only (structs flattened to children). */
 	schema: { name: string; type: string }[];
+	/**
+	 * Top-level column names as written. Includes struct/group parents (e.g.
+	 * `assets`, `bbox`) that `schema` flattens away. Required for stac-geoparquet
+	 * detection, which looks up struct columns by their parent name.
+	 */
+	topLevelColumns: string[];
 	/** GeoParquet "geo" metadata if present. */
 	geo: GeoParquetMeta | null;
 	/** True when file has legacy GeoParquet metadata (schema_version 0.x without "version" field). */
@@ -123,6 +129,19 @@ export async function readParquetMetadata(url: string): Promise<ParquetFileMetad
 			type: mapParquetType(col)
 		}));
 
+	// Walk depth-first to collect top-level column names (including struct parents).
+	// hyparquet serializes the schema as a flat depth-first array where the root
+	// carries `num_children` and each group element claims the next N siblings.
+	const topLevelColumns: string[] = [];
+	const root = metadata.schema[0];
+	const rootChildren = root?.num_children ?? 0;
+	let cursor = 1;
+	for (let i = 0; i < rootChildren && cursor < metadata.schema.length; i++) {
+		const el = metadata.schema[cursor];
+		if (el?.name) topLevelColumns.push(el.name);
+		cursor += countSubtree(metadata.schema, cursor);
+	}
+
 	// GeoParquet "geo" key-value metadata
 	let geo: GeoParquetMeta | null = null;
 	let legacyGeoParquet = false;
@@ -179,7 +198,28 @@ export async function readParquetMetadata(url: string): Promise<ParquetFileMetad
 		}
 	}
 
-	return { rowCount, schema, geo, legacyGeoParquet, createdBy, numRowGroups, compression };
+	return {
+		rowCount,
+		schema,
+		topLevelColumns,
+		geo,
+		legacyGeoParquet,
+		createdBy,
+		numRowGroups,
+		compression
+	};
+}
+
+/** Count how many schema elements belong to the subtree rooted at `start` (inclusive). */
+function countSubtree(schema: any[], start: number): number {
+	const el = schema[start];
+	if (!el) return 0;
+	const n = el.num_children ?? 0;
+	let cursor = start + 1;
+	for (let i = 0; i < n; i++) {
+		cursor += countSubtree(schema, cursor);
+	}
+	return cursor - start;
 }
 
 /**
