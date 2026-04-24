@@ -1,5 +1,15 @@
 # @walkthru-earth/objex-utils
 
+## 1.3.1
+
+### Patch Changes
+
+- [`4c3bb6a`](https://github.com/walkthru-earth/objex/commit/4c3bb6af81acc9cdfd5d94496c3467dae64e1609) Thanks [@yharby](https://github.com/yharby)! - fix(objex-utils): stop leaking `@developmentseed/epsg/all`, `@developmentseed/geotiff`, `@developmentseed/proj`, `proj4`, and `maplibre-gl` into the published bundle.
+
+  Splits the dependency-free COG helpers (`SF_LABELS`, `safeClamp`, `clampBounds`, `buildDataTypeLabel`, `CogInfo`, `GeoBounds`) into `src/lib/utils/cog-pure.ts`. `objex-utils` now re-exports from the pure module, so the bundle no longer carries bare side-effect imports for the heavy COG stack. Unblocks consumer Vite dev servers that were throwing `Failed to resolve import "@developmentseed/epsg/all"` on every version past 1.1.0. `cog.ts` re-exports the same bindings, so every in-repo caller and the `@walkthru-earth/objex` public API are unchanged.
+
+  Fixes #11.
+
 ## 1.3.0
 
 ### Minor Changes
