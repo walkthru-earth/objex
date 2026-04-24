@@ -460,6 +460,7 @@ export const ar: Record<string, string> = {
 	'cog.band': 'النطاق',
 	'cog.singleBand': 'نطاق واحد',
 	'cog.colorRamp': 'تدرج الألوان',
+	'cog.colorRampSearch': 'بحث في التدرجات…',
 	'cog.pixelValue': 'قيمة البكسل',
 	'cog.reading': 'قراءة البكسل...',
 	'cog.rescale': 'إعادة القياس',

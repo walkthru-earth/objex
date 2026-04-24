@@ -42,7 +42,10 @@ let showControls = $state(false);
 let sourceCount = $state(0);
 let bounds = $state<[number, number, number, number] | undefined>();
 let bandConfig = $state<BandConfig | null>(null);
+let histogram = $state.raw<Uint32Array | null>(null);
 let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
+let detectedBandCount = $state<number>(3);
+let probedBandCount = false;
 
 let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
@@ -100,9 +103,12 @@ function resetViewer(): void {
 	sourceCount = 0;
 	bounds = undefined;
 	bandConfig = null;
+	histogram = null;
 	rescale = { ...DEFAULT_RESCALE };
 	hasFittedOnce = false;
 	showControls = false;
+	detectedBandCount = 3;
+	probedBandCount = false;
 }
 
 function onMapReady(map: maplibregl.Map): void {
@@ -267,7 +273,7 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 					hasFittedOnce = true;
 				}
 
-				if (!bandConfig) bandConfig = defaultBandConfig(3, 1);
+				if (!bandConfig) bandConfig = defaultBandConfig(detectedBandCount, 1);
 				scheduleLayerRebuild(map, signal);
 				loading = false;
 			}
@@ -347,13 +353,29 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 			const geotiff = await GeoTIFF.fromUrl(url);
 			normalizeCogGeotiff(geotiff);
 			if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+			// Seed band config from the first COG that resolves so the UI and
+			// the pipeline match the actual raster (e.g. 4-band NAIP RGB+NIR),
+			// rather than the hardcoded 3-band default. Subsequent sources are
+			// assumed to share structure within a mosaic.
+			if (!probedBandCount) {
+				probedBandCount = true;
+				const count = geotiff.count ?? 3;
+				const sf = geotiff.cachedTags.sampleFormat?.[0] ?? 1;
+				detectedBandCount = count;
+				const nextConfig = defaultBandConfig(count, sf);
+				bandConfig = nextConfig;
+				if (mapRef) scheduleLayerRebuild(mapRef, signal);
+			}
 			return geotiff;
 		},
 		renderSource: (source, { data }) => {
 			if (!data) return null;
 			const customProps = selectCogPipeline(data, {
 				bandConfig: bc,
-				rescale: rs
+				rescale: rs,
+				onHistogram: (bins) => {
+					histogram = new Uint32Array(bins);
+				}
 			});
 			return new COGLayer({
 				id: `mosaic-${tab.id}-v${version}-${source.id}`,
@@ -483,12 +505,13 @@ onDestroy(cleanup);
 
 		{#if showControls}
 			<CogControls
-				bandCount={3}
+				bandCount={detectedBandCount}
 				{bandConfig}
 				onConfigChange={handleConfigChange}
 				{rescale}
 				rescaleApplicable={true}
 				onRescaleChange={handleRescaleChange}
+				{histogram}
 			/>
 		{/if}
 	{/if}

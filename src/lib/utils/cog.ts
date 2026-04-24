@@ -1,7 +1,11 @@
 import type { GetTileDataOptions, MinimalDataT } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
 import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
-import { FilterNoDataVal, LinearRescale } from '@developmentseed/deck.gl-raster/gpu-modules';
+import {
+	Colormap,
+	FilterNoDataVal,
+	LinearRescale
+} from '@developmentseed/deck.gl-raster/gpu-modules';
 import loadEpsg from '@developmentseed/epsg/all';
 import epsgCsvUrl from '@developmentseed/epsg/all.csv.gz?url';
 import type { GeoTIFF as GeoTIFFType, Overview } from '@developmentseed/geotiff';
@@ -11,8 +15,30 @@ import { parseWkt } from '@developmentseed/proj';
 import type { Device } from '@luma.gl/core';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
+import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
 
 // ─── Constants ───────────────────────────────────────────────────
+
+/**
+ * Patches a GLSL ES 3.00 compile error in `@developmentseed/deck.gl-raster`
+ * v0.6.0-alpha.1. The `Colormap` shader module injects
+ * `uniform sampler2DArray colormapTexture;` without a precision qualifier,
+ * which the Apple-GPU path of luma.gl's WebGL2 backend rejects with
+ * `ERROR: 'sampler2DArray' : No precision specified`. In GLSL ES 3.00,
+ * every sampler type other than `sampler2D`/`samplerCube` needs explicit
+ * precision in fragment shaders.
+ *
+ * Chain this module immediately BEFORE `Colormap` in the renderPipeline so
+ * the combined `fs:#decl` inject emits the precision declaration first,
+ * then the sampler uniform. Remove once upstream ships the precision fix.
+ */
+const Sampler2DArrayPrecision = {
+	name: 'sampler2darray-precision',
+	fs: '',
+	inject: {
+		'fs:#decl': 'precision highp sampler2DArray;\n'
+	}
+} as const;
 
 /** SampleFormat tag value → human label. */
 export const SF_LABELS: Record<number, string> = {
@@ -26,95 +52,22 @@ export const SF_LABELS: Record<number, string> = {
 
 // ─── Color ramps ─────────────────────────────────────────────────
 
-export type ColorRampId = 'grayscale' | 'terrain' | 'viridis' | 'magma' | 'turbo' | 'spectral';
+/**
+ * Any of the 107 named ramps shipped in `@developmentseed/deck.gl-raster`'s
+ * `colormaps.png` sprite (matplotlib + rio-tiler + cmocean). Rendering is
+ * GPU-side via the `Colormap` shader module; switching ramps is a uniform
+ * update, no tile re-decode.
+ */
+export type ColorRampId = ColormapName;
 
-export const COLOR_RAMP_STOPS: Record<ColorRampId, [number, number, number][]> = {
-	grayscale: [
-		[0, 0, 0],
-		[255, 255, 255]
-	],
-	terrain: [
-		[0, 0, 128],
-		[0, 100, 200],
-		[0, 154, 80],
-		[120, 180, 50],
-		[200, 170, 60],
-		[180, 120, 50],
-		[140, 90, 40],
-		[200, 200, 200],
-		[255, 255, 255]
-	],
-	viridis: [
-		[68, 1, 84],
-		[72, 36, 117],
-		[64, 67, 135],
-		[52, 94, 141],
-		[33, 145, 140],
-		[43, 176, 127],
-		[95, 201, 97],
-		[186, 222, 39],
-		[253, 231, 37]
-	],
-	magma: [
-		[0, 0, 4],
-		[22, 11, 57],
-		[67, 15, 98],
-		[114, 24, 114],
-		[161, 48, 104],
-		[206, 82, 83],
-		[237, 132, 62],
-		[251, 192, 75],
-		[252, 253, 191]
-	],
-	turbo: [
-		[48, 18, 59],
-		[31, 82, 188],
-		[23, 158, 227],
-		[47, 212, 161],
-		[121, 238, 104],
-		[193, 241, 57],
-		[245, 206, 27],
-		[253, 141, 31],
-		[213, 47, 24]
-	],
-	spectral: [
-		[158, 1, 66],
-		[213, 62, 79],
-		[244, 109, 67],
-		[253, 174, 97],
-		[254, 224, 139],
-		[255, 255, 191],
-		[230, 245, 152],
-		[171, 221, 164],
-		[94, 79, 162]
-	]
-};
-
-/** Interpolate a normalized value (0..1) into an RGB color from a ramp. */
-export function interpolateRamp(
-	stops: [number, number, number][],
-	t: number
-): [number, number, number] {
-	const n = stops.length - 1;
-	const idx = Math.max(0, Math.min(n, t * n));
-	const lo = Math.floor(idx);
-	const hi = Math.min(lo + 1, n);
-	const f = idx - lo;
-	return [
-		Math.round(stops[lo][0] + f * (stops[hi][0] - stops[lo][0])),
-		Math.round(stops[lo][1] + f * (stops[hi][1] - stops[lo][1])),
-		Math.round(stops[lo][2] + f * (stops[hi][2] - stops[lo][2]))
-	];
-}
-
-/** Generate a CSS linear-gradient string for a color ramp. */
-export function rampToGradientCss(id: ColorRampId): string {
-	const stops = COLOR_RAMP_STOPS[id];
-	const colors = stops.map(
-		(s, i) => `rgb(${s[0]},${s[1]},${s[2]}) ${((i / (stops.length - 1)) * 100).toFixed(0)}%`
-	);
-	return `linear-gradient(to right, ${colors.join(', ')})`;
-}
+// Previously this file hosted a handcoded `COLOR_RAMP_STOPS` table plus
+// `interpolateRamp` / `rampToGradientCss` helpers used by both the CPU
+// single-band baker and the CogControls UI preview. All three callers
+// migrated to the shipped `colormaps.png` sprite (107 ramps, GPU-sampled
+// via the `Colormap` shader module), so previews are now CSS backgrounds
+// sliced from the sprite — no handcoded stops needed. See
+// `utils/colormap-sprite.ts::spriteBackgroundStyle` and
+// `components/viewers/CogControls.svelte::rampBg`.
 
 // ─── Band configuration ─────────────────────────────────────────
 
@@ -227,6 +180,11 @@ export function needsCustomPipelineForConfig(geotiff: GeoTIFFType, config: BandC
 	}
 	if (config.mode === 'single') return true;
 	if (config.rBand !== 0 || config.gBand !== 1 || config.bBand !== 2) return true;
+	// 4-band uint (e.g. NAIP RGB+NIR) must route through the CPU pipeline.
+	// The library default maps all 4 samples to RGBA, turning the extra band
+	// into a variable alpha channel even when it is not an alpha declaration.
+	// The custom pipeline explicitly picks 3 bands and bakes alpha=255.
+	if (geotiff.count === 4) return true;
 	return false;
 }
 
@@ -398,6 +356,11 @@ export interface SelectCogPipelineOptions {
 	bandConfig?: BandConfig | null;
 	/** Linear rescale GPU module values. No-op when omitted or at defaults. */
 	rescale?: RescaleConfig;
+	/**
+	 * Forwarded to the CPU bake factories in single-band mode; receives a
+	 * 64-bin histogram of normalized data after each tile for slider UI.
+	 */
+	onHistogram?: (bins: Uint32Array) => void;
 }
 
 /**
@@ -427,14 +390,20 @@ export function selectCogPipeline(
 
 	if (useCustom && bandConfig) {
 		return {
-			getTileData: createConfigurableGetTileData(geotiff, bandConfig),
-			renderTile: customRenderTile
+			getTileData: createConfigurableGetTileData(geotiff, bandConfig, {
+				onHistogram: opts.onHistogram
+			}),
+			renderTile: buildCustomRenderTile(bandConfig, rescale)
 		};
 	}
 	if (useCustom) {
+		// Synthesize a single-band config so the GPU Colormap path still
+		// applies when a non-uint COG renders without a user-chosen ramp.
+		const fallbackSf = geotiff.cachedTags.sampleFormat?.[0] ?? 1;
+		const fallbackConfig = defaultBandConfig(geotiff.count, fallbackSf);
 		return {
-			getTileData: createCustomGetTileData(geotiff),
-			renderTile: customRenderTile
+			getTileData: createCustomGetTileData(geotiff, { onHistogram: opts.onHistogram }),
+			renderTile: buildCustomRenderTile(fallbackConfig, rescale)
 		};
 	}
 	if (rescale && isRescaleActive(rescale)) {
@@ -821,7 +790,28 @@ export interface CustomTileData {
 	imageData: ImageData;
 	width: number;
 	height: number;
+	/**
+	 * `sampler2DArray` colormap texture for single-band renders. Set by
+	 * `createConfigurableGetTileData` / `createCustomGetTileData` when the
+	 * first tile resolves the device-bound sprite texture; `undefined` for
+	 * RGB-mode tiles (no colormap needed). Passed through to `renderTile`
+	 * so the Colormap shader module can bind it on every layer.
+	 */
+	colormapTexture?: Texture;
+	/**
+	 * Normalized `color.r` sentinel value for nodata pixels in single-band
+	 * mode. The `Colormap` shader module overwrites all 4 output channels
+	 * from the 1D ramp sample, destroying the α=0 flag, so we reserve
+	 * `r = 0` for nodata and renormalize valid data into `(0, 1]`.
+	 * `FilterNoDataVal` then discards matching fragments before the ramp
+	 * lookup. `undefined` for RGB tiles.
+	 */
+	nodataSentinel?: number;
 }
+
+// Avoid pulling in the @luma.gl/core Texture type at the top of the file via
+// a value import; the existing top-level `Device` import is `type`-only.
+type Texture = import('@luma.gl/core').Texture;
 
 /**
  * Check whether a GeoTIFF needs a custom render pipeline.
@@ -835,12 +825,29 @@ export function needsCustomPipeline(geotiff: GeoTIFFType): boolean {
 	return sf === null || sf[0] !== 1;
 }
 
+/** Shared options for the CPU tile-baking factories. */
+export interface CustomGetTileDataOptions {
+	/**
+	 * Called after each baked tile with a 64-bin histogram of normalized
+	 * single-band values (0..1, nodata excluded). Bins accumulate across
+	 * tiles; receivers should treat the array as monotonically growing and
+	 * debounce UI updates. Never invoked in RGB mode.
+	 */
+	onHistogram?: (bins: Uint32Array) => void;
+}
+
+/** Number of histogram buckets produced by the CPU bake. */
+export const HISTOGRAM_BIN_COUNT = 64;
+
 /**
  * Create custom getTileData for non-uint COGs.
  * Reads band 0, normalizes using GDAL statistics / per-tile adaptive stretch,
- * applies terrain color ramp for single-band data.
+ * bakes a grayscale `r`-channel image so the GPU `Colormap` shader module
+ * (wired downstream by `selectCogPipeline`) can apply the ramp by sampling
+ * `colormaps.png`. Reserves `r = 0` for nodata so `FilterNoDataVal` can
+ * discard those fragments before the ramp sample.
  */
-export function createCustomGetTileData(geotiff: GeoTIFFType) {
+export function createCustomGetTileData(geotiff: GeoTIFFType, opts: CustomGetTileDataOptions = {}) {
 	// Read Scale/Offset TIFF tags (GDAL convention for scaled datasets like DEMs)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const tags = geotiff.cachedTags as Record<string, any>;
@@ -871,7 +878,6 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 	}
 
 	const bandCount = geotiff.count;
-	const sf = tags.sampleFormat?.[0] ?? 1;
 	const isSingleBand = bandCount === 1;
 
 	// Shared range across all tiles — when no GDAL stats exist, the first
@@ -880,16 +886,27 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 	let sharedMin = globalMin;
 	let sharedMax = globalMax;
 
+	// Resolve the sprite texture from the first tile's device; reuse per-device.
+	let texturePromise: Promise<Texture> | null = null;
+	const histogram = isSingleBand ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
+
 	return async (
 		image: GeoTIFFType | Overview,
-		options: { x: number; y: number; pool: unknown; signal?: AbortSignal }
+		options: { x: number; y: number; pool: unknown; signal?: AbortSignal; device: Device }
 	): Promise<CustomTileData> => {
-		const tile = await image.fetchTile(options.x, options.y, {
-			boundless: false,
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			pool: options.pool as any,
-			signal: options.signal
-		});
+		if (isSingleBand && !texturePromise) {
+			texturePromise = getColormapTexture(options.device);
+		}
+
+		const [tile, colormapTexture] = await Promise.all([
+			image.fetchTile(options.x, options.y, {
+				boundless: false,
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				pool: options.pool as any,
+				signal: options.signal
+			}),
+			texturePromise ?? Promise.resolve<Texture | undefined>(undefined)
+		]);
 
 		const arr = tile.array;
 		const { width, height, nodata } = arr;
@@ -923,7 +940,10 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 		const rangeMax = sharedMax!;
 		const range = rangeMax - rangeMin || 1;
 
-		// Render to RGBA
+		// Render to RGBA. For single-band we bake normalized value into the
+		// `r` channel and reserve `r = 0` for nodata (see CustomTileData
+		// docs). Multi-band non-uint keeps the plain grayscale + α=255
+		// output so the default library pipeline consumes it unchanged.
 		const rgba = new Uint8ClampedArray(pixelCount * 4);
 		for (let i = 0; i < pixelCount; i++) {
 			const raw = bandData[i];
@@ -938,14 +958,17 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 			}
 			const v = hasScaleOffset ? raw * scale + offset : raw;
 			const t = Math.max(0, Math.min(1, (v - rangeMin) / range));
-			if (isSingleBand && (sf === 2 || sf === 3)) {
-				// Terrain color ramp for single-band int/float (likely elevation/DEM)
-				const [r, g, b] = terrainColor(t);
-				rgba[idx] = r;
-				rgba[idx + 1] = g;
-				rgba[idx + 2] = b;
+			if (isSingleBand) {
+				// Reserve r=0 for nodata; valid data maps to [1, 255].
+				const gray = 1 + Math.round(t * 254);
+				rgba[idx] = gray;
+				rgba[idx + 1] = 0;
+				rgba[idx + 2] = 0;
+				if (histogram) {
+					const bin = Math.min(HISTOGRAM_BIN_COUNT - 1, Math.floor(t * HISTOGRAM_BIN_COUNT));
+					histogram[bin]++;
+				}
 			} else {
-				// Grayscale for multi-band or other types
 				const gray = Math.round(t * 255);
 				rgba[idx] = gray;
 				rgba[idx + 1] = gray;
@@ -954,22 +977,67 @@ export function createCustomGetTileData(geotiff: GeoTIFFType) {
 			rgba[idx + 3] = 255;
 		}
 
+		if (histogram && opts.onHistogram) opts.onHistogram(histogram);
+
 		return {
 			imageData: new ImageData(rgba, width, height),
 			width,
-			height
+			height,
+			colormapTexture: isSingleBand ? colormapTexture : undefined,
+			nodataSentinel: isSingleBand ? 0 : undefined
 		};
 	};
 }
 
 /**
- * Custom renderTile for non-uint COGs.
- * v0.5 RasterLayer requires a RenderTileResult with `image` or `renderPipeline`.
- * We produce an ImageData and pass it through the `image` slot. deck.gl manages
- * the texture lifecycle and prepends a CreateTexture module automatically.
+ * Custom renderTile for COGs that use the CPU pipeline. For RGB mode (and
+ * legacy multi-band non-uint), the `image` slot carries a fully-baked RGBA
+ * `ImageData` and there is nothing to append on the GPU. For single-band
+ * mode, the image carries a normalized `r`-channel and this function
+ * appends `FilterNoDataVal` (to discard r=0 nodata sentinels), optional
+ * `LinearRescale` (brightness/contrast slider), and the sprite-based
+ * `Colormap` module so switching ramps is a uniform update — no tile
+ * re-decode required. The `colormapTexture` is stashed on `data` by the
+ * corresponding `getTileData` factory; if the sprite failed to resolve we
+ * fall back to the plain grayscale image.
  */
-export function customRenderTile(data: CustomTileData): { image: ImageData } {
-	return { image: data.imageData };
+export function buildCustomRenderTile(
+	config: BandConfig,
+	rescale?: RescaleConfig
+): (data: CustomTileData) => RenderTileResult {
+	return (data) => {
+		if (config.mode === 'rgb' || !data.colormapTexture) {
+			return { image: data.imageData };
+		}
+		const colormapIndex = COLORMAP_INDEX[config.colorRamp] ?? COLORMAP_INDEX.viridis;
+		const pipeline: RasterModule[] = [
+			{
+				module: FilterNoDataVal,
+				props: { value: (data.nodataSentinel ?? 0) / 255 }
+			}
+		];
+		if (rescale && isRescaleActive(rescale)) {
+			pipeline.push({
+				module: LinearRescale,
+				props: { rescaleMin: rescale.min, rescaleMax: rescale.max }
+			});
+		}
+		pipeline.push(
+			// Precision shim must come before Colormap, its `fs:#decl` inject
+			// declares `precision highp sampler2DArray;` so the subsequent
+			// sampler uniform compiles on WebGL2 / Apple GPU.
+			{ module: Sampler2DArrayPrecision, props: {} },
+			{
+				module: Colormap,
+				props: {
+					colormapTexture: data.colormapTexture,
+					colormapIndex,
+					reversed: false
+				}
+			}
+		);
+		return { image: data.imageData, renderPipeline: pipeline };
+	};
 }
 
 // ─── Configurable custom pipeline ────────────────────────────────
@@ -1042,25 +1110,42 @@ function computeBandRanges(
 
 /**
  * Create a configurable getTileData that respects BandConfig.
- * Supports both RGB mode (multi-band → R,G,B) and single-band mode (color ramp).
+ * Supports RGB mode (multi-band → R,G,B with alpha=255, fully baked) and
+ * single-band mode (band N normalized into the `r` channel; the ramp is
+ * applied downstream by the GPU `Colormap` module via `buildCustomRenderTile`).
  */
-export function createConfigurableGetTileData(geotiff: GeoTIFFType, config: BandConfig) {
+export function createConfigurableGetTileData(
+	geotiff: GeoTIFFType,
+	config: BandConfig,
+	opts: CustomGetTileDataOptions = {}
+) {
 	const bandCount = geotiff.count;
 
 	// Shared per-band ranges across tiles (seeded on first tile, widened by subsequent)
 	const sharedMins = new Map<number, number>();
 	const sharedMaxs = new Map<number, number>();
 
+	// Resolve the sprite texture from the first tile's device; reuse per-device.
+	let texturePromise: Promise<Texture> | null = null;
+	const histogram = config.mode === 'single' ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
+
 	return async (
 		image: GeoTIFFType | Overview,
-		options: { x: number; y: number; pool: unknown; signal?: AbortSignal }
+		options: { x: number; y: number; pool: unknown; signal?: AbortSignal; device: Device }
 	): Promise<CustomTileData> => {
-		const tile = await image.fetchTile(options.x, options.y, {
-			boundless: false,
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			pool: options.pool as any,
-			signal: options.signal
-		});
+		if (config.mode === 'single' && !texturePromise) {
+			texturePromise = getColormapTexture(options.device);
+		}
+
+		const [tile, colormapTexture] = await Promise.all([
+			image.fetchTile(options.x, options.y, {
+				boundless: false,
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				pool: options.pool as any,
+				signal: options.signal
+			}),
+			texturePromise ?? Promise.resolve<Texture | undefined>(undefined)
+		]);
 
 		const arr = tile.array;
 		const { width, height, nodata } = arr;
@@ -1115,7 +1200,9 @@ export function createConfigurableGetTileData(geotiff: GeoTIFFType, config: Band
 				}
 			}
 		} else {
-			// Single-band mode: normalize + color ramp
+			// Single-band mode: normalize the selected band into the `r`
+			// channel and reserve `r = 0` as a nodata sentinel that
+			// `FilterNoDataVal` discards before the `Colormap` GPU lookup.
 			const bi = config.band;
 			const bandData = bands[bi];
 			if (!sharedMins.has(bi) && bandData) {
@@ -1126,7 +1213,6 @@ export function createConfigurableGetTileData(geotiff: GeoTIFFType, config: Band
 			const rangeMin = sharedMins.get(bi) ?? 0;
 			const rangeMax = sharedMaxs.get(bi) ?? 1;
 			const range = rangeMax - rangeMin || 1;
-			const rampStops = COLOR_RAMP_STOPS[config.colorRamp];
 
 			for (let i = 0; i < pixelCount; i++) {
 				const raw = bandData?.[i] ?? 0;
@@ -1139,16 +1225,26 @@ export function createConfigurableGetTileData(geotiff: GeoTIFFType, config: Band
 					rgba[idx + 3] = 0;
 				} else {
 					const t = Math.max(0, Math.min(1, (raw - rangeMin) / range));
-					const [r, g, b] = interpolateRamp(rampStops, t);
-					rgba[idx] = r;
-					rgba[idx + 1] = g;
-					rgba[idx + 2] = b;
+					rgba[idx] = 1 + Math.round(t * 254);
+					rgba[idx + 1] = 0;
+					rgba[idx + 2] = 0;
 					rgba[idx + 3] = 255;
+					if (histogram) {
+						const bin = Math.min(HISTOGRAM_BIN_COUNT - 1, Math.floor(t * HISTOGRAM_BIN_COUNT));
+						histogram[bin]++;
+					}
 				}
 			}
+			if (histogram && opts.onHistogram) opts.onHistogram(histogram);
 		}
 
-		return { imageData: new ImageData(rgba, width, height), width, height };
+		return {
+			imageData: new ImageData(rgba, width, height),
+			width,
+			height,
+			colormapTexture: config.mode === 'single' ? colormapTexture : undefined,
+			nodataSentinel: config.mode === 'single' ? 0 : undefined
+		};
 	};
 }
 

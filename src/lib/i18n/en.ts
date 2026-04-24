@@ -462,6 +462,7 @@ export const en: Record<string, string> = {
 	'cog.band': 'Band',
 	'cog.singleBand': 'Single',
 	'cog.colorRamp': 'Color ramp',
+	'cog.colorRampSearch': 'Search ramps…',
 	'cog.pixelValue': 'Pixel Value',
 	'cog.reading': 'Reading pixel...',
 	'cog.rescale': 'Rescale',

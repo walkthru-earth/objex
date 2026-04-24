@@ -41,6 +41,8 @@ let showControls = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let cogInfo = $state<CogInfo | null>(null);
 let bandConfig = $state<BandConfig | null>(null);
+let histogram = $state.raw<Uint32Array | null>(null);
+let histogramTick = $state(0);
 let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
 // Palette-indexed COGs render through the library's Colormap module; a GPU
 // rescale at that stage is cosmetic and would confuse the legend. Keep the
@@ -58,16 +60,19 @@ let sampleFormatRef = 1;
 let isTiledRef = true;
 let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
 let resolvedHttpsUrl: string | null = null;
-// True when the library-default uint pipeline will run. LinearRescale only
-// operates on already-normalized RGB 0..1, so the slider is meaningful only
-// here, and only for non-palette data (palette renders through Colormap).
-// `needsCustomPipelineForConfig` only touches read-only tags on the GeoTIFF,
-// safe to call outside reactive tracking.
+// LinearRescale operates on a 0..1 scalar. Two cases expose a meaningful
+// slider: (1) the library-default uint RGB pipeline (scales `color.rgb`
+// before presentation), and (2) our custom single-band CPU + GPU Colormap
+// path (scales `color.r` before the ramp sample). Palette COGs hide the
+// slider, the embedded ColorMap tag already bakes the display colors.
+// `needsCustomPipelineForConfig` only touches read-only tags, safe to call
+// outside reactive tracking.
 const rescaleApplicable = $derived.by(() => {
 	if (!cogInfo || !bandConfig || isPaletteIndexed) return false;
 	const g = geotiffRef;
 	if (!g) return false;
-	return !needsCustomPipelineForConfig(g, bandConfig);
+	if (!needsCustomPipelineForConfig(g, bandConfig)) return true;
+	return bandConfig.mode === 'single';
 });
 // Tracks whether the camera has already been framed for the current tab.
 // Prevents fitCogBounds from resetting the user's view when the band/style
@@ -110,6 +115,8 @@ $effect(() => {
 		error = null;
 		cogInfo = null;
 		bandConfig = null;
+		histogram = null;
+		histogramTick = 0;
 		rescale = { ...DEFAULT_RESCALE };
 		isPaletteIndexed = false;
 		pixelValue = null;
@@ -266,7 +273,16 @@ function buildAndAddLayer(
 	// Pick the library-default or one of three custom pipelines. Empty when the
 	// library-default uint path runs unchanged.
 	const customProps = preflightGeotiff
-		? selectCogPipeline(preflightGeotiff, { bandConfig, rescale })
+		? selectCogPipeline(preflightGeotiff, {
+				bandConfig,
+				rescale,
+				onHistogram: (bins) => {
+					// Copy once so the derived UI sees an immutable snapshot
+					// and the accumulating worker buffer is not observed mid-mutation.
+					histogram = new Uint32Array(bins);
+					histogramTick++;
+				}
+			})
 		: {};
 
 	// Apply upstream-bug workarounds in place (overview filter, 4326 bbox clamp).
@@ -486,6 +502,7 @@ onDestroy(cleanup);
 				{rescale}
 				rescaleApplicable={rescaleApplicable}
 				onRescaleChange={handleRescaleChange}
+				{histogram}
 			/>
 		{/if}
 
