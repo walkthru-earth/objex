@@ -36,7 +36,14 @@ interface GeoParquetMeta {
 ```ts
 interface ParquetFileMetadata {
   rowCount: number;
+  /** Leaf columns only — struct parents are flattened into their child paths. */
   schema: { name: string; type: string }[];
+  /**
+   * Top-level column names as written, including struct/group parents
+   * (e.g. `assets`, `bbox`) that `schema` flattens away. Required for
+   * stac-geoparquet detection, which keys on the `assets` struct parent.
+   */
+  topLevelColumns: string[];
   geo: GeoParquetMeta | null;      // null for non-geo Parquet
   legacyGeoParquet: boolean;       // true for pre-1.0 (schema_version without "version" field)
   createdBy: string | null;
@@ -121,7 +128,8 @@ const meta = await readParquetMetadata(
 console.log({
   rows: meta.rowCount,
   compression: meta.compression,
-  schema: meta.schema,
+  schema: meta.schema,             // leaf columns only
+  topLevel: meta.topLevelColumns,  // includes struct parents like `assets`, `bbox`
 });
 
 if (meta.geo) {

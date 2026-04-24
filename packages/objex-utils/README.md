@@ -29,6 +29,13 @@ import {
   extractEpsgFromGeoMeta,
   extractBounds,
 
+  // stac-geoparquet (detection + row → STAC Item)
+  isStacGeoparquetSchema,
+  stacRowToItem,
+  flattenStacBbox,
+  pickStacPrimaryAsset,
+  resolveStacAssetHref,
+
   // Storage URLs
   parseStorageUrl,
   resolveCloudUrl,
@@ -67,6 +74,7 @@ Full per-module developer reference lives in [`docs/`](./docs/README.md). Each p
 | [`docs/geometry.md`](./docs/geometry.md) | WKB parser, GeoArrow builder, geometry-column detection |
 | [`docs/cog.md`](./docs/cog.md) | Cloud-Optimized GeoTIFF pipeline helpers, band configs, color ramps |
 | [`docs/parquet-metadata.md`](./docs/parquet-metadata.md) | `readParquetMetadata` + CRS / bounds / geometry-type extractors |
+| [`docs/stac-geoparquet.md`](./docs/stac-geoparquet.md) | stac-geoparquet detection + row → STAC Item transforms |
 | [`docs/storage.md`](./docs/storage.md) | URL parsing, provider registry, `StorageAdapter`, `UrlAdapter` |
 | [`docs/query-engine.md`](./docs/query-engine.md) | `QueryEngine` interface + handle / result types |
 | [`docs/file-types.md`](./docs/file-types.md) | File-type registry: `getFileTypeInfo`, `getViewerKind`, `getDuckDbReadFn`, … |
