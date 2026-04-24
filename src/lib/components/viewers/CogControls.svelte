@@ -15,14 +15,17 @@ let {
 	onConfigChange,
 	rescale,
 	rescaleApplicable,
-	onRescaleChange
+	onRescaleChange,
+	mode = 'single'
 }: {
 	bandCount: number;
-	bandConfig: BandConfig;
+	/** Required when `mode === 'single'`, ignored when `mode === 'multi'`. */
+	bandConfig?: BandConfig;
 	onConfigChange: (config: BandConfig) => void;
 	rescale: RescaleConfig;
 	rescaleApplicable: boolean;
 	onRescaleChange: (rescale: RescaleConfig) => void;
+	mode?: 'single' | 'multi';
 } = $props();
 
 const RAMP_IDS: ColorRampId[] = ['grayscale', 'terrain', 'viridis', 'magma', 'turbo', 'spectral'];
@@ -35,14 +38,17 @@ function bandOptions(count: number): { value: number; label: string }[] {
 }
 
 function setMode(mode: 'rgb' | 'single') {
+	if (!bandConfig) return;
 	onConfigChange({ ...bandConfig, mode });
 }
 
 function setBand(key: 'rBand' | 'gBand' | 'bBand' | 'band', value: number) {
+	if (!bandConfig) return;
 	onConfigChange({ ...bandConfig, [key]: value });
 }
 
 function setRamp(id: ColorRampId) {
+	if (!bandConfig) return;
 	onConfigChange({ ...bandConfig, colorRamp: id });
 }
 
@@ -67,6 +73,7 @@ function resetRescale() {
 <div
 	class="absolute right-2 top-10 z-10 w-52 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
 >
+{#if mode === 'single' && bandConfig}
 	<!-- Mode toggle -->
 	<div class="mb-2 flex gap-1">
 		<button
@@ -150,6 +157,7 @@ function resetRescale() {
 			</div>
 		</div>
 	{/if}
+{/if}
 
 	{#if rescaleApplicable}
 		<!-- GPU LinearRescale slider. Default uint pipeline only. -->

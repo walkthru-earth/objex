@@ -596,6 +596,35 @@ Upgraded from `@developmentseed/deck.gl-geotiff@0.3.0` to `@0.4.0` on 2026-03-26
 
 The `developmentseed/deck.gl-raster/examples/` directory ships six runnable examples that document the supported wiring patterns in v0.5. The set covers `cog-basic`, `land-cover`, `naip-mosaic`, `sentinel-2`, `usgs-topo-cutline`, and `zarr-sentinel2-tci`, each pinning a distinct code path (plain COG, categorical palette, mosaic, multi-band RGB, cutline masking, Zarr). The cheatsheet at [`.claude/skills/deckgl-geotiff-raster/SKILL.md`](../.claude/skills/deckgl-geotiff-raster/SKILL.md) section 11 summarizes the pattern each one demonstrates so contributors can cross-reference an example before adding new viewer logic.
 
+---
+
+## History (v0.5 → v0.6.0-alpha.1)
+
+Upgraded from `@developmentseed/deck.gl-geotiff@0.5.0` to `@0.6.0-alpha.1` on 2026-04-23, along with `deck.gl-raster`, `geotiff`, `proj`, `epsg`, and the new `@developmentseed/deck.gl-zarr`. `zarrita` bumped `0.6.2 → 0.7.1`, pinned via `pnpm.overrides` so `@carbonplan/zarr-layer` (still on `^0.4.3`) runs on the same major.
+
+New in this revision:
+
+- `StacMosaicViewer` (renamed from `SentinelMosaicViewer`) wires v0.6's `MosaicLayer` for STAC Item / FeatureCollection / Collection / Catalog inputs. Uses `utils/stac-hydrate.ts::hydrateStacItems` to walk `links[rel=item|child|next]` with concurrency 12 and a 2000-item cap, progressively extending the layer's source list so the first tiles render after one batch of fetches. Per-scene z-order comes from `sources` order; inner COGs run through `selectCogPipeline` so the single-COG pipeline logic (palette short-circuit, custom non-uint pipeline, LinearRescale) applies uniformly.
+- `MultiCogViewer` wires v0.6's `MultiCOGLayer` with the declarative `composite: { r, g, b, a? }` prop plus a `renderPipeline` that combines `FilterNoDataVal` (nodata=0 for Sentinel-2 L2A edges) and `LinearRescale` (0..0.3 default for reflectance).
+- `ViewerRouter` wraps any STAC-shaped JSON (`Item` / `FeatureCollection` / `Collection` / `Catalog`) in `StacTabViewer`, which exposes a top bar with `Map` / `STAC Browser` / `JSON` buttons. Detection runs on a ≤256 KB adapter peek via `utils/stac.ts::classifyStac`; routing decides `mapKind` via `detectMultiCogCapable` / `detectMosaicCapable`. Falls back to plain `CodeViewer` on parse failure or `mapKind=null`. URL hash (`#map` / `#stac-browser` / `#code`) is shareable.
+- Zarr dual path: `utils/zarr.ts::detectGeoZarr` inspects hierarchy attributes for the GeoZarr convention (`multiscales` + `spatial` + CRS). Positive matches render via `@developmentseed/deck.gl-zarr` `ZarrLayer` mounted on `MapboxOverlay`; non-matches fall through to the existing carbonplan path.
+
+Patches unchanged (still 1 patch, re-attached under the new version name):
+
+- `patches/@developmentseed__deck.gl-geotiff@0.6.0-alpha.1.patch` — proj4 `+over` antimeridian fix + `inferRenderPipeline` re-export.
+
+Both upstream tickets ([#366](https://github.com/developmentseed/deck.gl-raster/issues/366) and [PR #374](https://github.com/developmentseed/deck.gl-raster/pull/374)) are still open in v0.6. Native `inferRenderPipeline` export is not yet exposed; drop that hunk when upstream adds a `renderPipeline` prop or re-exports the helper.
+
+Carry-over workarounds from v0.5 (still required per the sections above):
+
+- Oversized overview filter (`normalizeCogGeotiff`).
+- EPSG:4326 polar bbox clamp.
+- CRS validation for model type 32767 (user-defined).
+- Custom JS pipeline for non-uint COGs + palette-indexed short-circuit.
+- Main-thread `DecoderPool` in Vite dev.
+- Non-tiled bitmap fallback.
+- Local `createEpsgResolver` + `normalizeCrsUnits` to avoid epsg.io runtime fetches and wkt-parser `units: "unknown"` crashes.
+
 ## EPSG resolver regression notes
 
 When we swapped `epsg.io` for `@developmentseed/epsg`'s bundled CSV (see root `CLAUDE.md`), `parseWkt()` from `@developmentseed/proj` started returning `units: "unknown"` for a subset of EPSG codes whose CSV-bundled WKT has a missing or malformed root `UNIT` node. `generateTileMatrixSet` then throws `Unsupported CRS units: unknown when computing metersPerUnit`. The fix is a one-function guard, `normalizeCrsUnits()` in `utils/cog.ts`, wrapped around every `parseWkt()` output. The helper infers `degree` for geographic CRS (`projName === "longlat"`), then maps `to_meter` values of 1, 0.3048, and 1200/3937 to `meter`, `foot`, and `us survey foot` respectively. Any new EPSG resolver added elsewhere in the codebase must reuse `normalizeCrsUnits()` to avoid the same crash.

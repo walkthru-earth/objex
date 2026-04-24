@@ -23,6 +23,7 @@ import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import { resolveCloudUrl } from '$lib/utils/cloud-url.js';
+import { classifyUrl } from '$lib/utils/storage-url.js';
 import {
 	clearUrlState,
 	getUrlPrefix,
@@ -42,7 +43,6 @@ function openUrlTab(rawUrl: string) {
 	// Strip trailing slashes so folder-based formats (Zarr) resolve correctly
 	const url = resolveCloudUrl(rawUrl).replace(/\/+$/, '');
 
-	// Check if URL points to a Zarr marker file — open parent as Zarr store
 	const zarrStore = extractZarrStoreUrl(url);
 	if (zarrStore) {
 		openZarrTab(zarrStore, { source: 'url' });
@@ -51,8 +51,6 @@ function openUrlTab(rawUrl: string) {
 
 	const fileName = url.split('/').pop()?.split('?')[0] || '';
 
-	// If the filename itself is a Zarr marker (e.g. zarr.json with query params that
-	// prevented extractZarrStoreUrl from matching), open the parent path as Zarr
 	if (ZARR_MARKER_FILES.has(fileName)) {
 		const storePath = url.slice(0, url.lastIndexOf('/'));
 		openZarrTab(storePath, { source: 'url' });
@@ -60,9 +58,22 @@ function openUrlTab(rawUrl: string) {
 	}
 
 	const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+	const cls = classifyUrl(url);
 
-	// No extension — might be a directory-style URL (e.g. Zarr store without .zarr suffix).
-	// Probe for zarr.json to detect Zarr stores.
+	// STAC-path detection only fires on hosts that are NOT known object-storage
+	// buckets, so keys like `/items/foo.parquet` don't hijack the tab.
+	if (cls.kind === 'stac-api') {
+		const tabId = eagerUrlTabId(url);
+		tabs.open({
+			id: tabId,
+			name: fileName || 'stac',
+			path: url,
+			source: 'url',
+			extension: ext || 'json'
+		});
+		return;
+	}
+
 	if (!ext) {
 		probeUrlForZarr(url);
 		return;
@@ -142,6 +153,7 @@ const FORMAT_HINTS = [
 	{ ext: '.laz', hash: '', color: 'text-emerald-400' },
 	{ ext: '.json', hash: '#code', color: 'text-yellow-400' },
 	{ ext: '.json', hash: '#maputnik', color: 'text-yellow-400' },
+	{ ext: '.json', hash: '#stac-map', color: 'text-yellow-400' },
 	{ ext: '.json', hash: '#stac-browser', color: 'text-yellow-400' },
 	{ ext: '.json', hash: '#kepler', color: 'text-yellow-400' },
 	{ ext: '.glb', hash: '', color: 'text-orange-400' }

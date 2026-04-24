@@ -2,7 +2,7 @@
 import type { Tab } from '$lib/types';
 import { buildHttpsUrlAsync } from '$lib/utils/url.js';
 
-let { tab }: { tab: Tab } = $props();
+let { tab, variant = 'stac-map' }: { tab: Tab; variant?: 'stac-map' | 'stac-browser' } = $props();
 
 let fileUrl = $state('');
 
@@ -19,9 +19,15 @@ $effect(() => {
 	};
 });
 
-const iframeSrc = $derived(
-	fileUrl ? `https://developmentseed.org/stac-map?href=${encodeURIComponent(fileUrl)}` : ''
-);
+const iframeSrc = $derived.by(() => {
+	if (!fileUrl) return '';
+	if (variant === 'stac-browser') {
+		return `https://radiantearth.github.io/stac-browser/#/external/${encodeURIComponent(fileUrl)}`;
+	}
+	return `https://developmentseed.org/stac-map?href=${encodeURIComponent(fileUrl)}`;
+});
+
+const iframeTitle = $derived(variant === 'stac-browser' ? 'STAC Browser' : 'stac-map');
 </script>
 
 <div class="relative flex h-full overflow-hidden">
@@ -29,7 +35,7 @@ const iframeSrc = $derived(
 		<iframe
 			src={iframeSrc}
 			class="h-full w-full border-0"
-			title="STAC Map"
+			title={iframeTitle}
 			allow="fullscreen"
 		></iframe>
 	{/if}

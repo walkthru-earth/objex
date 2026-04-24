@@ -1,6 +1,6 @@
 # Sentinel-2 MultiCOG Viewer, Design Doc
 
-Status, draft. Not yet implemented. No code changes, no package changes.
+Status, Implemented (v0.6.0-alpha.1). See `src/lib/components/viewers/MultiCogViewer.svelte` and `src/lib/utils/stac.ts`.
 
 ## 1. Goal
 

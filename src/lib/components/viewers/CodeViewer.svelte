@@ -14,15 +14,33 @@ import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/url.js';
 import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
+import { isStacCatalog, isStacCollection, isStacItem } from '../../utils/stac.js';
 
-let { tab }: { tab: Tab } = $props();
+interface CodeActions {
+	toggleFormat: () => Promise<void>;
+	copyCode: () => Promise<void>;
+	canFormat: boolean;
+	formatted: boolean;
+	copied: boolean;
+}
+
+let {
+	tab,
+	nested = false,
+	wordWrap = $bindable(false),
+	actions = $bindable<CodeActions | null>(null)
+}: {
+	tab: Tab;
+	nested?: boolean;
+	wordWrap?: boolean;
+	actions?: CodeActions | null;
+} = $props();
 
 let abortController: AbortController | null = null;
 let html = $state('');
 let rawCode = $state('');
 let loading = $state(true);
 let error = $state<string | null>(null);
-let wordWrap = $state(false);
 let copied = $state(false);
 let formatted = $state(false);
 const urlView = getUrlView();
@@ -73,9 +91,9 @@ function detectJsonKind(code: string): JsonKind {
 		if (obj && typeof obj === 'object') {
 			if (obj.version === 8 && obj.sources && obj.layers) return 'maplibre-style';
 			if (obj.tilejson && obj.tiles) return 'tilejson';
-			if (obj.type === 'Catalog' && obj.stac_version) return 'stac-catalog';
-			if (obj.type === 'Collection' && obj.stac_version) return 'stac-collection';
-			if (obj.type === 'Feature' && obj.stac_version) return 'stac-item';
+			if (isStacCatalog(obj)) return 'stac-catalog';
+			if (isStacCollection(obj)) return 'stac-collection';
+			if (isStacItem(obj)) return 'stac-item';
 			if (obj.info?.app === 'kepler.gl' && obj.config) return 'kepler';
 			if (obj.zarr_format === 3) return 'zarr-v3';
 			if (obj.zarr_format === 2) return 'zarr-v2';
@@ -176,9 +194,24 @@ const language = $derived(languageMap[ext] ?? 'Plain Text');
 /** File types that support native formatting */
 const canFormat = $derived(['.json', '.sql', '.css', '.html', '.xml'].includes(ext));
 
-// Auto-switch to STAC Browser when STAC JSON is detected (unless URL explicitly set #code)
+// Expose imperative actions to the parent so a shared outer toolbar (e.g. the
+// one rendered by StacTabViewer when nested) can invoke Format/Wrap/Copy
+// without duplicating the text state.
+$effect(() => {
+	actions = {
+		toggleFormat,
+		copyCode,
+		canFormat,
+		formatted,
+		copied
+	};
+});
+
+// Auto-switch to STAC Browser when STAC JSON is detected (unless URL explicitly set #code).
+// Skipped when nested in StacTabViewer since the outer wrapper owns the view toggle.
 let stacAutoSwitched = false;
 $effect(() => {
+	if (nested) return;
 	if (isStacJson && !stacAutoSwitched && viewMode === 'code' && urlView !== 'code') {
 		stacAutoSwitched = true;
 		viewMode = 'stac-browser';
@@ -327,6 +360,7 @@ async function copyCode() {
 </script>
 
 <div class="flex h-full flex-col">
+	{#if !nested}
 	<div
 		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
 	>
@@ -354,14 +388,16 @@ async function copyCode() {
 				<Badge variant="outline" class="hidden border-emerald-200 text-emerald-600 sm:inline-flex dark:border-emerald-800 dark:text-emerald-300">
 					{t(stacBadgeKey[jsonKind] ?? 'code.stacItem')}
 				</Badge>
-				<Button
-					variant={viewMode === 'stac-browser' ? 'default' : 'outline'}
-					size="sm"
-					class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac-browser' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
-					onclick={() => setViewMode('stac-browser')}
-				>
-					{viewMode === 'stac-browser' ? t('code.code') : t('code.browseStac')}
-				</Button>
+				{#if !nested}
+					<Button
+						variant={viewMode === 'stac-browser' ? 'default' : 'outline'}
+						size="sm"
+						class="h-7 gap-1 px-2 text-xs {viewMode !== 'stac-browser' ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950' : ''}"
+						onclick={() => setViewMode('stac-browser')}
+					>
+						{viewMode === 'stac-browser' ? t('code.code') : t('code.browseStac')}
+					</Button>
+				{/if}
 			{:else if jsonKind === 'kepler'}
 				<Badge variant="outline" class="hidden border-violet-200 text-violet-600 sm:inline-flex dark:border-violet-800 dark:text-violet-300">
 					{t('code.keplerGl')}
@@ -496,6 +532,7 @@ async function copyCode() {
 			</div>
 		</div>
 	</div>
+	{/if}
 
 	{#if viewMode === 'stac-browser' && styleUrl}
 		<div class="flex-1 overflow-hidden">

@@ -1,8 +1,8 @@
 # Mosaic Layer, STAC-driven Design Doc
 
-Status, Draft
+Status, Implemented (v0.6.0-alpha.1, extended with Collection/Catalog hydration). See `src/lib/components/viewers/StacMosaicViewer.svelte`, `src/lib/components/viewers/StacTabViewer.svelte`, `src/lib/utils/stac.ts`, `src/lib/utils/stac-hydrate.ts`.
 Owner, TBD
-Related, `docs/cog-viewer-architecture.md`, `src/lib/components/viewers/CogViewer.svelte`, `src/lib/utils/cog.ts`
+Related, `docs/cog-viewer-architecture.md`, `src/lib/components/viewers/CogViewer.svelte`, `src/lib/utils/cog.ts`, `src/lib/utils/stac.ts`
 
 ## 1. Goal
 
