@@ -11,12 +11,14 @@ import {
 	type BandConfig,
 	buildDataTypeLabel,
 	type CogInfo,
+	type CustomTileData,
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
+	HISTOGRAM_BIN_COUNT,
 	inspectCogTags,
 	needsCustomPipelineForConfig,
 	normalizeCogGeotiff,
@@ -273,16 +275,7 @@ function buildAndAddLayer(
 	// Pick the library-default or one of three custom pipelines. Empty when the
 	// library-default uint path runs unchanged.
 	const customProps = preflightGeotiff
-		? selectCogPipeline(preflightGeotiff, {
-				bandConfig,
-				rescale,
-				onHistogram: (bins) => {
-					// Copy once so the derived UI sees an immutable snapshot
-					// and the accumulating worker buffer is not observed mid-mutation.
-					histogram = new Uint32Array(bins);
-					histogramTick++;
-				}
-			})
+		? selectCogPipeline(preflightGeotiff, { bandConfig, rescale })
 		: {};
 
 	// Apply upstream-bug workarounds in place (overview filter, 4326 bbox clamp).
@@ -290,7 +283,10 @@ function buildAndAddLayer(
 
 	const cogInput = preflightGeotiff ?? resolvedHttpsUrl ?? '';
 
-	const layer = new COGLayer({
+	// Cast: `onViewportLoad` is forwarded by our pnpm patch to the inner
+	// TileLayer, but COGLayer's generated .d.ts does not expose it.
+	// biome-ignore lint/suspicious/noExplicitAny: upstream prop not yet in types
+	const cogProps: any = {
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
 		// to treat this as a brand-new layer and drop cached tile state.
 		id: `cog-layer-${tab.id}`,
@@ -299,6 +295,15 @@ function buildAndAddLayer(
 		epsgResolver,
 		signal,
 		...customProps,
+		// COG-native histogram: sum `content.histogram` over tiles currently
+		// visible in the viewport. Fires after every pan/zoom settles and
+		// reuses deck.gl's tile cache for free, cached tiles still carry
+		// their per-tile histogram so no rebake is needed on revisit.
+		onViewportLoad: (visibleTiles: unknown) => {
+			aggregateVisibleHistogram(
+				visibleTiles as ReadonlyArray<{ content?: unknown } | null | undefined>
+			);
+		},
 		onGeoTIFFLoad: (
 			loadedTiff: GeoTIFF,
 			{
@@ -345,7 +350,8 @@ function buildAndAddLayer(
 			}
 			loading = false;
 		}
-	});
+	};
+	const layer = new COGLayer(cogProps);
 
 	const overlay = new MapboxOverlay({
 		interleaved: false,
@@ -362,10 +368,54 @@ function buildAndAddLayer(
 	map.addControl(overlay as unknown as maplibregl.IControl);
 }
 
+// ─── Viewport-scoped histogram aggregation ───────────────────────
+
+/**
+ * Sum per-tile histograms from tiles currently visible in the viewport. COG
+ * pyramid semantics map cleanly: zoomed out → a handful of low-res overview
+ * tiles cover the whole scene; zoomed in → only the tiles intersecting the
+ * AOI are decoded. deck.gl reuses its tile cache on revisits so each cached
+ * tile still carries `content.histogram`, no rebake needed.
+ */
+function aggregateVisibleHistogram(
+	visibleTiles: ReadonlyArray<{ content?: unknown } | null | undefined>
+): void {
+	if (!visibleTiles || visibleTiles.length === 0) {
+		histogram = null;
+		histogramTick++;
+		return;
+	}
+	const summed = new Uint32Array(HISTOGRAM_BIN_COUNT);
+	let found = false;
+	for (const tile of visibleTiles) {
+		// COGLayer wraps our baker's return as `{data, forwardTransform,
+		// inverseTransform}` in `_getTileData`, so the histogram lives at
+		// `content.data.histogram`. MosaicLayer's sub-COGs follow the same
+		// shape. Fall back to `content.histogram` for future-proofing if
+		// upstream ever stops wrapping.
+		const content = tile?.content as
+			| { data?: CustomTileData; histogram?: Uint32Array }
+			| null
+			| undefined;
+		const bins = content?.data?.histogram ?? content?.histogram;
+		if (!bins || bins.length !== HISTOGRAM_BIN_COUNT) continue;
+		for (let i = 0; i < HISTOGRAM_BIN_COUNT; i++) summed[i] += bins[i];
+		found = true;
+	}
+	histogram = found ? summed : null;
+	histogramTick++;
+}
+
 // ─── Rebuild layer on band config change ─────────────────────────
 
 function handleConfigChange(newConfig: BandConfig) {
 	bandConfig = newConfig;
+	// Only the single-band CPU baker emits `onHistogram`. Clear the buffer on
+	// every mode/band change so (a) switching back to RGB hides stale bars
+	// that the rescale slider would otherwise draw on top of, and (b) picking
+	// a different single band starts a fresh distribution.
+	histogram = null;
+	histogramTick = 0;
 	if (!mapRef || !geotiffRef || !isTiledRef) return;
 
 	// Remove old overlay

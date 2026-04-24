@@ -356,11 +356,6 @@ export interface SelectCogPipelineOptions {
 	bandConfig?: BandConfig | null;
 	/** Linear rescale GPU module values. No-op when omitted or at defaults. */
 	rescale?: RescaleConfig;
-	/**
-	 * Forwarded to the CPU bake factories in single-band mode; receives a
-	 * 64-bin histogram of normalized data after each tile for slider UI.
-	 */
-	onHistogram?: (bins: Uint32Array) => void;
 }
 
 /**
@@ -390,9 +385,7 @@ export function selectCogPipeline(
 
 	if (useCustom && bandConfig) {
 		return {
-			getTileData: createConfigurableGetTileData(geotiff, bandConfig, {
-				onHistogram: opts.onHistogram
-			}),
+			getTileData: createConfigurableGetTileData(geotiff, bandConfig),
 			renderTile: buildCustomRenderTile(bandConfig, rescale)
 		};
 	}
@@ -402,7 +395,7 @@ export function selectCogPipeline(
 		const fallbackSf = geotiff.cachedTags.sampleFormat?.[0] ?? 1;
 		const fallbackConfig = defaultBandConfig(geotiff.count, fallbackSf);
 		return {
-			getTileData: createCustomGetTileData(geotiff, { onHistogram: opts.onHistogram }),
+			getTileData: createCustomGetTileData(geotiff),
 			renderTile: buildCustomRenderTile(fallbackConfig, rescale)
 		};
 	}
@@ -807,6 +800,16 @@ export interface CustomTileData {
 	 * lookup. `undefined` for RGB tiles.
 	 */
 	nodataSentinel?: number;
+	/**
+	 * Per-tile 64-bin normalized histogram (0..1, nodata excluded) baked during
+	 * single-band CPU decoding. `undefined` for RGB tiles. deck.gl's TileLayer
+	 * caches the returned tile object, so this array is retained alongside the
+	 * bitmap without a rebake on pan/zoom revisits. Summing the histograms of
+	 * currently-visible tiles, via the TileLayer `onViewportLoad` hook, gives a
+	 * cloud-native "histogram of what COG tiles the viewport currently shows at
+	 * the active overview level", matching COG pyramid behavior.
+	 */
+	histogram?: Uint32Array;
 }
 
 // Avoid pulling in the @luma.gl/core Texture type at the top of the file via
@@ -825,16 +828,18 @@ export function needsCustomPipeline(geotiff: GeoTIFFType): boolean {
 	return sf === null || sf[0] !== 1;
 }
 
-/** Shared options for the CPU tile-baking factories. */
-export interface CustomGetTileDataOptions {
-	/**
-	 * Called after each baked tile with a 64-bin histogram of normalized
-	 * single-band values (0..1, nodata excluded). Bins accumulate across
-	 * tiles; receivers should treat the array as monotonically growing and
-	 * debounce UI updates. Never invoked in RGB mode.
-	 */
-	onHistogram?: (bins: Uint32Array) => void;
-}
+/**
+ * Shared options for the CPU tile-baking factories.
+ *
+ * The previous `onHistogram` callback accumulated a single closure-owned buffer
+ * across every tile ever baked, which grew unbounded on pan/zoom and never
+ * reflected "what the viewport currently shows". Histograms are now attached
+ * per tile to `CustomTileData.histogram` and aggregated by the viewer from
+ * TileLayer's `onViewportLoad(visibleTiles)` hook, matching COG overview-level
+ * behavior (few big tiles when zoomed out, small AOI-scoped tiles when zoomed
+ * in) and reusing deck.gl's tile cache for free.
+ */
+export type CustomGetTileDataOptions = Record<string, never>;
 
 /** Number of histogram buckets produced by the CPU bake. */
 export const HISTOGRAM_BIN_COUNT = 64;
@@ -847,7 +852,10 @@ export const HISTOGRAM_BIN_COUNT = 64;
  * `colormaps.png`. Reserves `r = 0` for nodata so `FilterNoDataVal` can
  * discard those fragments before the ramp sample.
  */
-export function createCustomGetTileData(geotiff: GeoTIFFType, opts: CustomGetTileDataOptions = {}) {
+export function createCustomGetTileData(
+	geotiff: GeoTIFFType,
+	_opts: CustomGetTileDataOptions = {}
+) {
 	// Read Scale/Offset TIFF tags (GDAL convention for scaled datasets like DEMs)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const tags = geotiff.cachedTags as Record<string, any>;
@@ -888,7 +896,6 @@ export function createCustomGetTileData(geotiff: GeoTIFFType, opts: CustomGetTil
 
 	// Resolve the sprite texture from the first tile's device; reuse per-device.
 	let texturePromise: Promise<Texture> | null = null;
-	const histogram = isSingleBand ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
 
 	return async (
 		image: GeoTIFFType | Overview,
@@ -915,6 +922,11 @@ export function createCustomGetTileData(geotiff: GeoTIFFType, opts: CustomGetTil
 		const pixelCount = width * height;
 		const scale = gdalScale ?? 1;
 		const offset = gdalOffset ?? 0;
+
+		// Allocate per-tile histogram so deck.gl's tile cache retains it with
+		// the tile object. The viewer sums histograms of visible tiles from
+		// TileLayer's `onViewportLoad` hook, no shared accumulator needed.
+		const histogram = isSingleBand ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
 
 		// When no global stats, scan this tile and widen the shared range
 		if (sharedMin === null || sharedMax === null) {
@@ -977,14 +989,13 @@ export function createCustomGetTileData(geotiff: GeoTIFFType, opts: CustomGetTil
 			rgba[idx + 3] = 255;
 		}
 
-		if (histogram && opts.onHistogram) opts.onHistogram(histogram);
-
 		return {
 			imageData: new ImageData(rgba, width, height),
 			width,
 			height,
 			colormapTexture: isSingleBand ? colormapTexture : undefined,
-			nodataSentinel: isSingleBand ? 0 : undefined
+			nodataSentinel: isSingleBand ? 0 : undefined,
+			histogram: histogram ?? undefined
 		};
 	};
 }
@@ -1117,7 +1128,7 @@ function computeBandRanges(
 export function createConfigurableGetTileData(
 	geotiff: GeoTIFFType,
 	config: BandConfig,
-	opts: CustomGetTileDataOptions = {}
+	_opts: CustomGetTileDataOptions = {}
 ) {
 	const bandCount = geotiff.count;
 
@@ -1127,7 +1138,6 @@ export function createConfigurableGetTileData(
 
 	// Resolve the sprite texture from the first tile's device; reuse per-device.
 	let texturePromise: Promise<Texture> | null = null;
-	const histogram = config.mode === 'single' ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
 
 	return async (
 		image: GeoTIFFType | Overview,
@@ -1153,6 +1163,12 @@ export function createConfigurableGetTileData(
 		const bands = extractBands(arr, bandCount, pixelCount);
 
 		const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+		// Per-tile histogram, cached by deck.gl's tile cache with the tile
+		// object. Cloud-native by construction: at each zoom level, COG only
+		// decodes the overview tiles that cover the viewport, so the summed
+		// histogram naturally reflects "what the user is looking at right now".
+		const histogram = config.mode === 'single' ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
 
 		if (config.mode === 'rgb') {
 			// RGB mode: map 3 bands to R, G, B
@@ -1235,7 +1251,6 @@ export function createConfigurableGetTileData(
 					}
 				}
 			}
-			if (histogram && opts.onHistogram) opts.onHistogram(histogram);
 		}
 
 		return {
@@ -1243,7 +1258,8 @@ export function createConfigurableGetTileData(
 			width,
 			height,
 			colormapTexture: config.mode === 'single' ? colormapTexture : undefined,
-			nodataSentinel: config.mode === 'single' ? 0 : undefined
+			nodataSentinel: config.mode === 'single' ? 0 : undefined,
+			histogram: histogram ?? undefined
 		};
 	};
 }

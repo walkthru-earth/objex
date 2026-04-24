@@ -1,5 +1,5 @@
 diff --git a/dist/cog-layer.js b/dist/cog-layer.js
-index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..ba313dc586d974ebaa422449cfa18f5dd91f6014 100644
+index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..cabcbbadb8c19349b7a153950b5c579fae0be1d8 100644
 --- a/dist/cog-layer.js
 +++ b/dist/cog-layer.js
 @@ -70,12 +70,16 @@ export class COGLayer extends CompositeLayer {
@@ -21,6 +21,26 @@ index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..ba313dc586d974ebaa422449cfa18f5d
          const forwardTo3857 = makeClampedForwardTo3857((x, y) => converter3857.forward([x, y], false), forwardTo4326);
          const inverseFrom3857 = (x, y) => converter3857.inverse([x, y], false);
          if (this.props.onGeoTIFFLoad) {
+@@ -251,7 +255,7 @@ export class COGLayer extends CompositeLayer {
+                 });
+             }
+         }
+-        const { maxRequests, maxCacheSize, maxCacheByteSize, debounceTime, refinementStrategy, } = this.props;
++        const { maxRequests, maxCacheSize, maxCacheByteSize, debounceTime, refinementStrategy, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
+         return new TileLayer({
+             id: `cog-tile-layer-${this.id}`,
+             TilesetClass: TileMatrixSetTilesetFactory,
+@@ -262,6 +266,10 @@ export class COGLayer extends CompositeLayer {
+             maxCacheSize,
+             maxRequests,
+             refinementStrategy,
++            ...(typeof onViewportLoad === "function" && { onViewportLoad }),
++            ...(typeof onTileLoad === "function" && { onTileLoad }),
++            ...(typeof onTileError === "function" && { onTileError }),
++            ...(typeof onTileUnload === "function" && { onTileUnload }),
+         });
+     }
+     renderLayers() {
 diff --git a/dist/index.d.ts b/dist/index.d.ts
 index fe6d5a8d773e5d22500deb6a9d7814ea0dd01e9a..7577a0186c61f95c6775b603bcd0781d02c877be 100644
 --- a/dist/index.d.ts
@@ -46,3 +66,28 @@ index bd207d158f794e2956b46dc7c30be80f21ab7848..5ade2dbc3e79cce33146b6d5644b8850
 +// helper yet. Track if upstream adds a `renderPipeline` prop to COGLayer.
 +export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
  //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/mosaic-layer/mosaic-layer.js b/dist/mosaic-layer/mosaic-layer.js
+index 13109e9f4baebd00631c065f9956bcccb8b85e99..4e2f09ff44647465901dfb05e876fcf9cb7b612f 100644
+--- a/dist/mosaic-layer/mosaic-layer.js
++++ b/dist/mosaic-layer/mosaic-layer.js
+@@ -12,7 +12,7 @@ export class MosaicLayer extends CompositeLayer {
+     static layerName = "MosaicLayer";
+     static defaultProps = defaultProps;
+     renderTileLayer(mosaicSources, renderSource) {
+-        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, } = this.props;
++        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
+         class MosaicTileset2DFactory extends MosaicTileset2D {
+             constructor(opts) {
+                 super(mosaicSources, opts);
+@@ -46,6 +46,10 @@ export class MosaicLayer extends CompositeLayer {
+                 const { source, signal, data: userData } = data;
+                 return renderSource(source, { data: userData, signal });
+             },
++            ...(typeof onViewportLoad === "function" && { onViewportLoad }),
++            ...(typeof onTileLoad === "function" && { onTileLoad }),
++            ...(typeof onTileError === "function" && { onTileError }),
++            ...(typeof onTileUnload === "function" && { onTileUnload }),
+         });
+     }
+     renderLayers() {

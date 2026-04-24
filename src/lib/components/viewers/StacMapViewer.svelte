@@ -22,7 +22,15 @@ $effect(() => {
 const iframeSrc = $derived.by(() => {
 	if (!fileUrl) return '';
 	if (variant === 'stac-browser') {
-		return `https://radiantearth.github.io/stac-browser/#/external/${encodeURIComponent(fileUrl)}`;
+		// Radiant Earth STAC Browser is a Vue Router SPA. Its
+		// `#/external/<url>` route takes the catalog URL verbatim, splitting on
+		// `/`. Feeding it an `encodeURIComponent`-encoded URL makes the router
+		// hand `https%3A%2F%2F…` to `new URL()`, which reads the collapsed
+		// authority as a malformed port and throws
+		// `Port "%2F%2Fstorage.googleapis.com%2F…" is not a valid port`.
+		// Only escape the `#` character (which would otherwise terminate the
+		// hash route) so the rest of the URL flows through intact.
+		return `https://radiantearth.github.io/stac-browser/#/external/${fileUrl.replace(/#/g, '%23')}`;
 	}
 	return `https://developmentseed.org/stac-map?href=${encodeURIComponent(fileUrl)}`;
 });

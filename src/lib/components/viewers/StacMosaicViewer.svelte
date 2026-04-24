@@ -11,15 +11,18 @@ import { buildProviderBaseUrl, type ProviderId } from '../../storage/providers.j
 import { connectionStore } from '../../stores/connections.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
+import { resolveCloudUrl } from '../../utils/cloud-url.js';
 import {
 	type BandConfig,
 	buildDataTypeLabel,
+	type CustomTileData,
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
+	HISTOGRAM_BIN_COUNT,
 	normalizeCogGeotiff,
 	type PixelValue,
 	type RescaleConfig,
@@ -72,6 +75,11 @@ let lastRebuildAt = 0;
 let layerVersion = 0;
 let presignCache = new Map<string, Promise<string>>();
 let loadGen = 0;
+// Per-source visible-tile histograms. Each sub-COGLayer's `onViewportLoad`
+// writes its own summed-visible histogram here, and the outer aggregator
+// sums across all sources currently contributing. Cleared on resetViewer
+// and on band/config changes to avoid leaking stale distributions.
+let sourceHistograms = new Map<string, Uint32Array>();
 
 // MosaicLayer builds a Flatbush spatial index at construction; deck.gl reuses
 // the existing internal tileset when only props change, so the index never
@@ -114,6 +122,7 @@ function resetViewer(): void {
 	itemsRef = [];
 	presignCache = new Map();
 	geotiffCache = new Map();
+	sourceHistograms = new Map();
 	loading = true;
 	error = null;
 	sourceCount = 0;
@@ -222,19 +231,24 @@ function extractConnectionKey(href: string): string | null {
 function presignHref(href: string): Promise<string> {
 	let cached = presignCache.get(href);
 	if (!cached) {
-		if (/^https?:\/\//i.test(href)) {
+		// Convert cloud-protocol hrefs (s3://, gs://) to HTTPS before anything
+		// else. stac-geoparquet catalogs like source.coop's aef_index store
+		// absolute `s3://...` asset hrefs, and GeoTIFF.fromUrl / fetch cannot
+		// reach them. `resolveCloudUrl` is a no-op for already-https URLs.
+		const normalized = resolveCloudUrl(href);
+		if (/^https?:\/\//i.test(normalized)) {
 			// Absolute URLs that belong to the tab's own bucket still need SigV4
-			// presigning on private buckets (GCS/S3) — `new URL(rel, base)` strips
+			// presigning on private buckets (GCS/S3), `new URL(rel, base)` strips
 			// the base's query string when absolutizing asset hrefs, so the
 			// signature is lost and the bare URL 403s.
-			const key = extractConnectionKey(href);
+			const key = extractConnectionKey(normalized);
 			if (key !== null) {
-				cached = buildHttpsUrlAsync({ ...tab, path: key } as Tab).catch(() => href);
+				cached = buildHttpsUrlAsync({ ...tab, path: key } as Tab).catch(() => normalized);
 			} else {
-				cached = Promise.resolve(href);
+				cached = Promise.resolve(normalized);
 			}
 		} else {
-			cached = buildHttpsUrlAsync({ ...tab, path: href } as Tab).catch(() => href);
+			cached = buildHttpsUrlAsync({ ...tab, path: normalized } as Tab).catch(() => normalized);
 		}
 		presignCache.set(href, cached);
 	}
@@ -441,7 +455,7 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 			// (version bumps) and pixel-click handlers; otherwise every layer
 			// rebuild would re-fetch every source's header.
 			const cached = geotiffCache.get(source.id);
-			if (cached) return cached;
+			if (cached) return cached.catch(() => undefined as unknown as GeoTIFF);
 			const promise = (async () => {
 				const url = await presignHref(source.href);
 				const geotiff = await GeoTIFF.fromUrl(url);
@@ -449,7 +463,17 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 				return geotiff;
 			})();
 			geotiffCache.set(source.id, promise);
-			const geotiff = await promise;
+			let geotiff: GeoTIFF;
+			try {
+				geotiff = await promise;
+			} catch {
+				// Swallow per-source fetch/decode failures so deck.gl's TileLayer
+				// gets `data: undefined` (renderSource returns null for it) instead
+				// of a rejected promise, which surfaces as "v is null" during the
+				// TileLayer update when a mosaic covers hundreds of unreachable
+				// sources (e.g. the 302k-item aef_index global catalog).
+				return undefined as unknown as GeoTIFF;
+			}
 			if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 			// Seed band config from the first COG that resolves so the UI and
 			// the pipeline match the actual raster (e.g. 4-band NAIP RGB+NIR),
@@ -470,21 +494,30 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 		},
 		renderSource: (source, { data }) => {
 			if (!data) return null;
-			const customProps = selectCogPipeline(data, {
-				bandConfig: bc,
-				rescale: rs,
-				onHistogram: (bins) => {
-					histogram = new Uint32Array(bins);
-				}
-			});
-			return new COGLayer({
+			const customProps = selectCogPipeline(data, { bandConfig: bc, rescale: rs });
+			// Cast: `onViewportLoad` is forwarded by our pnpm patch to the
+			// inner TileLayer, but COGLayer's generated .d.ts does not expose
+			// it in `COGLayerProps`. Use `any` for the constructor arg so we
+			// can pass the extra prop without polluting the library types.
+			// biome-ignore lint/suspicious/noExplicitAny: upstream prop not yet in types
+			const cogProps: any = {
 				id: `mosaic-${tab.id}-v${version}-${source.id}`,
 				geotiff: data,
 				pool: pool ?? undefined,
 				epsgResolver,
 				signal,
-				...customProps
-			});
+				...customProps,
+				// Viewport-scoped histogram per sub-COG. Sub-COGLayer fires this
+				// with the currently-visible tiles of THIS source at the active
+				// overview. We sum across all sources in `aggregateSources`.
+				onViewportLoad: (visibleTiles: unknown) => {
+					recordSourceHistogram(
+						source.id,
+						visibleTiles as ReadonlyArray<{ content?: unknown } | null | undefined>
+					);
+				}
+			};
+			return new COGLayer(cogProps);
 		}
 	});
 
@@ -511,8 +544,61 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 
 function handleConfigChange(next: BandConfig): void {
 	bandConfig = next;
+	// Histogram is only emitted by the single-band CPU baker. Reset on every
+	// mode/band change so (a) switching to RGB hides stale bars under the
+	// rescale slider and (b) a new single-band selection does not paint on
+	// top of the previous band's distribution.
+	histogram = null;
+	sourceHistograms.clear();
 	if (!mapRef) return;
 	scheduleLayerRebuild(mapRef, abortController.signal);
+}
+
+/**
+ * Record one sub-COG's viewport-scoped histogram and re-sum across all
+ * sources currently contributing. COG-native: each source only decodes the
+ * overview tiles covering its part of the viewport, so the union across
+ * sources is exactly the pixels the viewer sees at this zoom.
+ */
+function recordSourceHistogram(
+	sourceId: string,
+	visibleTiles: ReadonlyArray<{ content?: unknown } | null | undefined>
+): void {
+	if (!visibleTiles || visibleTiles.length === 0) {
+		if (sourceHistograms.delete(sourceId)) aggregateSources();
+		return;
+	}
+	const summed = new Uint32Array(HISTOGRAM_BIN_COUNT);
+	let found = false;
+	for (const tile of visibleTiles) {
+		// COGLayer's `_getTileData` wraps our baker output as `{data, forward-
+		// Transform, inverseTransform}`, so the per-tile histogram lives at
+		// `content.data.histogram`. Fall back to `content.histogram` if the
+		// library ever stops wrapping.
+		const content = tile?.content as
+			| { data?: CustomTileData; histogram?: Uint32Array }
+			| null
+			| undefined;
+		const bins = content?.data?.histogram ?? content?.histogram;
+		if (!bins || bins.length !== HISTOGRAM_BIN_COUNT) continue;
+		for (let i = 0; i < HISTOGRAM_BIN_COUNT; i++) summed[i] += bins[i];
+		found = true;
+	}
+	if (found) sourceHistograms.set(sourceId, summed);
+	else sourceHistograms.delete(sourceId);
+	aggregateSources();
+}
+
+function aggregateSources(): void {
+	if (sourceHistograms.size === 0) {
+		histogram = null;
+		return;
+	}
+	const summed = new Uint32Array(HISTOGRAM_BIN_COUNT);
+	for (const bins of sourceHistograms.values()) {
+		for (let i = 0; i < HISTOGRAM_BIN_COUNT; i++) summed[i] += bins[i];
+	}
+	histogram = summed;
 }
 
 function handleRescaleChange(next: RescaleConfig): void {
@@ -623,7 +709,7 @@ onDestroy(cleanup);
 				{bandConfig}
 				onConfigChange={handleConfigChange}
 				{rescale}
-				rescaleApplicable={true}
+				rescaleApplicable={bandConfig?.mode === 'single'}
 				onRescaleChange={handleRescaleChange}
 				{histogram}
 			/>
