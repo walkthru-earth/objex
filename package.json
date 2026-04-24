@@ -185,11 +185,12 @@
 		"@deck.gl/layers": "^9.3.1",
 		"@deck.gl/mapbox": "^9.3.1",
 		"@deck.gl/mesh-layers": "^9.3.1",
-		"@developmentseed/deck.gl-geotiff": "^0.5.0",
-		"@developmentseed/deck.gl-raster": "^0.5.0",
-		"@developmentseed/epsg": "^0.5.0",
-		"@developmentseed/geotiff": "^0.5.0",
-		"@developmentseed/proj": "^0.5.0",
+		"@developmentseed/deck.gl-geotiff": "^0.6.0-alpha.1",
+		"@developmentseed/deck.gl-raster": "^0.6.0-alpha.1",
+		"@developmentseed/deck.gl-zarr": "^0.6.0-alpha.1",
+		"@developmentseed/epsg": "^0.6.0-alpha.1",
+		"@developmentseed/geotiff": "^0.6.0-alpha.1",
+		"@developmentseed/proj": "^0.6.0-alpha.1",
 		"@duckdb/duckdb-wasm": "1.33.1-dev53.0",
 		"@geoarrow/deck.gl-layers": "^0.3.2",
 		"@luma.gl/core": "^9.3.3",
@@ -217,6 +218,11 @@
 		"shiki": "^3.23.0",
 		"sql-formatter": "^15.7.3",
 		"yaml": "^2.8.3",
-		"zarrita": "^0.6.2"
+		"zarrita": "^0.7.1"
+	},
+	"pnpm": {
+		"overrides": {
+			"zarrita": "^0.7.1"
+		}
 	}
 }

@@ -10,4 +10,5 @@ onlyBuiltDependencies:
   - protobufjs
 
 patchedDependencies:
-  '@developmentseed/deck.gl-geotiff@0.5.0': patches/@developmentseed__deck.gl-geotiff@0.5.0.patch
+  '@developmentseed/deck.gl-geotiff@0.6.0-alpha.1': patches/@developmentseed__deck.gl-geotiff@0.6.0-alpha.1.patch
+  '@carbonplan/zarr-layer@0.4.3': patches/@carbonplan__zarr-layer@0.4.3.patch

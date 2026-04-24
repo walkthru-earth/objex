@@ -84,13 +84,17 @@ export default defineConfig({
 		include: [
 			'@developmentseed/deck.gl-geotiff',
 			'@developmentseed/geotiff',
+			'@developmentseed/deck.gl-zarr',
 			'@developmentseed/deck.gl-geotiff > @developmentseed/deck.gl-raster',
 			'@developmentseed/deck.gl-geotiff > @developmentseed/raster-reproject',
 			'@developmentseed/deck.gl-geotiff > @developmentseed/morecantile',
 			'@developmentseed/deck.gl-geotiff > @developmentseed/affine',
+			'@developmentseed/deck.gl-zarr > @developmentseed/geozarr',
+			'@developmentseed/deck.gl-zarr > @developmentseed/raster-reproject',
 			'@developmentseed/geotiff > @cogeotiff/core',
 			'@developmentseed/deck.gl-geotiff > proj4',
-			'@developmentseed/deck.gl-geotiff > wkt-parser'
+			'@developmentseed/deck.gl-geotiff > wkt-parser',
+			'zarrita'
 		]
 	},
 	resolve: {
