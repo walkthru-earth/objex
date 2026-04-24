@@ -13,6 +13,7 @@ import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
 import {
 	type BandConfig,
+	buildDataTypeLabel,
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
@@ -20,7 +21,10 @@ import {
 	defaultBandConfig,
 	fitCogBounds,
 	normalizeCogGeotiff,
+	type PixelValue,
 	type RescaleConfig,
+	readPixelAtLngLat,
+	resolveProj4Def,
 	selectCogPipeline
 } from '../../utils/cog.js';
 import {
@@ -39,13 +43,24 @@ let { tab, classified }: { tab: Tab; classified?: StacRoutableKind } = $props();
 let loading = $state(true);
 let error = $state<string | null>(null);
 let showControls = $state(false);
+let showInfo = $state(false);
 let sourceCount = $state(0);
 let bounds = $state<[number, number, number, number] | undefined>();
 let bandConfig = $state<BandConfig | null>(null);
 let histogram = $state.raw<Uint32Array | null>(null);
 let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
 let detectedBandCount = $state<number>(3);
+let detectedDataType = $state<string>('');
 let probedBandCount = false;
+
+// ─── Pixel inspection ───────────────────────────────────────────
+let pixelValue = $state<PixelValue | null>(null);
+let pixelSourceId = $state<string | null>(null);
+let inspecting = $state(false);
+let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+// Reuse GeoTIFFs resolved by MosaicLayer's `getSource` callback so click
+// handlers don't trigger a second HTTP fetch. Keyed by `source.id`.
+let geotiffCache = new Map<string, Promise<GeoTIFF>>();
 
 let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
@@ -98,6 +113,7 @@ function resetViewer(): void {
 	overlayRef = null;
 	itemsRef = [];
 	presignCache = new Map();
+	geotiffCache = new Map();
 	loading = true;
 	error = null;
 	sourceCount = 0;
@@ -107,12 +123,84 @@ function resetViewer(): void {
 	rescale = { ...DEFAULT_RESCALE };
 	hasFittedOnce = false;
 	showControls = false;
+	showInfo = false;
 	detectedBandCount = 3;
+	detectedDataType = '';
 	probedBandCount = false;
+	pixelValue = null;
+	pixelSourceId = null;
+	inspecting = false;
+	if (mapRef) removeClickHandler();
+}
+
+function removeClickHandler(): void {
+	if (mapRef && clickHandlerRef) {
+		mapRef.off('click', clickHandlerRef);
+		clickHandlerRef = null;
+	}
+}
+
+function setupClickHandler(map: maplibregl.Map): void {
+	removeClickHandler();
+	clickHandlerRef = async (e: maplibregl.MapMouseEvent) => {
+		// Find the topmost source whose bbox contains the click. `itemsRef`
+		// is z-ordered by the mosaic so the last matching entry wins, matching
+		// MosaicLayer's tile compositing order.
+		const lng = e.lngLat.lng;
+		const lat = e.lngLat.lat;
+		const items = itemsRef;
+		let hit: MosaicSourceMeta | undefined;
+		for (let i = items.length - 1; i >= 0; i--) {
+			const [w, s, east, n] = items[i].bbox;
+			if (lng >= w && lng <= east && lat >= s && lat <= n) {
+				hit = items[i];
+				break;
+			}
+		}
+		if (!hit) {
+			pixelValue = null;
+			pixelSourceId = null;
+			return;
+		}
+		inspecting = true;
+		try {
+			// Pull from cache; if absent (user clicked before any tile fetched
+			// this source), kick off a fresh load and cache it for later.
+			let geotiffPromise = geotiffCache.get(hit.id);
+			if (!geotiffPromise) {
+				geotiffPromise = (async () => {
+					const url = await presignHref(hit.href);
+					const g = await GeoTIFF.fromUrl(url);
+					normalizeCogGeotiff(g);
+					return g;
+				})();
+				geotiffCache.set(hit.id, geotiffPromise);
+			}
+			const geotiff = await geotiffPromise;
+			const proj4Def = await resolveProj4Def(geotiff.crs, abortController.signal);
+			const result = await readPixelAtLngLat(
+				geotiff,
+				lng,
+				lat,
+				proj4Def,
+				pool,
+				abortController.signal
+			);
+			pixelValue = result;
+			pixelSourceId = hit.id;
+		} catch {
+			pixelValue = null;
+			pixelSourceId = null;
+		} finally {
+			inspecting = false;
+		}
+	};
+	map.on('click', clickHandlerRef);
 }
 
 function onMapReady(map: maplibregl.Map): void {
 	mapRef = map;
+	setupClickHandler(map);
 	void loadMosaic(map);
 }
 
@@ -349,9 +437,19 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 		sources: snapshotSources,
 		maxCacheSize: 8,
 		getSource: async (source, opts) => {
-			const url = await presignHref(source.href);
-			const geotiff = await GeoTIFF.fromUrl(url);
-			normalizeCogGeotiff(geotiff);
+			// Reuse in-flight / resolved GeoTIFFs across MosaicLayer rebuilds
+			// (version bumps) and pixel-click handlers; otherwise every layer
+			// rebuild would re-fetch every source's header.
+			const cached = geotiffCache.get(source.id);
+			if (cached) return cached;
+			const promise = (async () => {
+				const url = await presignHref(source.href);
+				const geotiff = await GeoTIFF.fromUrl(url);
+				normalizeCogGeotiff(geotiff);
+				return geotiff;
+			})();
+			geotiffCache.set(source.id, promise);
+			const geotiff = await promise;
 			if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 			// Seed band config from the first COG that resolves so the UI and
 			// the pipeline match the actual raster (e.g. 4-band NAIP RGB+NIR),
@@ -361,7 +459,9 @@ function buildOrUpdateLayer(map: maplibregl.Map, signal: AbortSignal): void {
 				probedBandCount = true;
 				const count = geotiff.count ?? 3;
 				const sf = geotiff.cachedTags.sampleFormat?.[0] ?? 1;
+				const bps = geotiff.cachedTags.bitsPerSample?.[0] ?? 8;
 				detectedBandCount = count;
+				detectedDataType = buildDataTypeLabel(sf, bps);
 				const nextConfig = defaultBandConfig(count, sf);
 				bandConfig = nextConfig;
 				if (mapRef) scheduleLayerRebuild(mapRef, signal);
@@ -427,6 +527,7 @@ function cleanup(): void {
 		clearTimeout(rebuildTimer);
 		rebuildTimer = null;
 	}
+	if (mapRef) removeClickHandler();
 	if (mapRef && overlayRef) {
 		try {
 			mapRef.removeControl(overlayRef as unknown as maplibregl.IControl);
@@ -439,6 +540,7 @@ function cleanup(): void {
 	overlayRef = null;
 	itemsRef = [];
 	presignCache.clear();
+	geotiffCache.clear();
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
 		try {
@@ -497,9 +599,21 @@ onDestroy(cleanup);
 				class:ring-primary={showControls}
 				onclick={() => {
 					showControls = !showControls;
+					if (showControls) showInfo = false;
 				}}
 			>
 				{t('cog.style')}
+			</button>
+			<button
+				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class:ring-1={showInfo}
+				class:ring-primary={showInfo}
+				onclick={() => {
+					showInfo = !showInfo;
+					if (showInfo) showControls = false;
+				}}
+			>
+				{t('map.info')}
 			</button>
 		</div>
 
@@ -514,5 +628,72 @@ onDestroy(cleanup);
 				{histogram}
 			/>
 		{/if}
+
+		{#if showInfo}
+			<div
+				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+			>
+				<h3 class="mb-2 font-medium">{t('stac.mosaicInfo')}</h3>
+				<dl class="space-y-1.5">
+					<dt class="text-muted-foreground">{t('stac.mosaicSourcesLabel')}</dt>
+					<dd class="tabular-nums">{sourceCount}</dd>
+					<dt class="text-muted-foreground">{t('mapInfo.bands')}</dt>
+					<dd>
+						{detectedBandCount}{detectedDataType ? ` (${detectedDataType})` : ''}
+					</dd>
+					{#if bounds}
+						<dt class="text-muted-foreground">{t('mapInfo.bounds')}</dt>
+						<dd>
+							W {bounds[0].toFixed(4)}, S {bounds[1].toFixed(4)}<br />
+							E {bounds[2].toFixed(4)}, N {bounds[3].toFixed(4)}
+						</dd>
+					{/if}
+				</dl>
+			</div>
+		{/if}
+	{/if}
+
+	{#if pixelValue}
+		<div
+			class="absolute bottom-2 left-2 z-10 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
+		>
+			<div class="mb-1 flex items-center justify-between gap-3">
+				<span class="font-medium">{t('cog.pixelValue')}</span>
+				<button
+					class="text-muted-foreground hover:text-card-foreground"
+					onclick={() => {
+						pixelValue = null;
+						pixelSourceId = null;
+					}}
+				>
+					&times;
+				</button>
+			</div>
+			<div class="space-y-0.5 text-muted-foreground">
+				<div>{pixelValue.lat.toFixed(6)}&deg;, {pixelValue.lng.toFixed(6)}&deg;</div>
+				<div class="text-[10px]">px ({pixelValue.col}, {pixelValue.row})</div>
+				{#if pixelSourceId}
+					<div class="truncate text-[10px]" title={pixelSourceId}>{pixelSourceId}</div>
+				{/if}
+			</div>
+			<div class="mt-1.5 space-y-0.5">
+				{#each pixelValue.values as val, i}
+					<div class="flex justify-between gap-2">
+						<span class="text-muted-foreground">{t('cog.band')} {i + 1}</span>
+						<span class="font-mono tabular-nums">
+							{Number.isInteger(val) ? val : val.toFixed(4)}
+						</span>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	{#if inspecting}
+		<div
+			class="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+		>
+			{t('cog.reading')}
+		</div>
 	{/if}
 </div>

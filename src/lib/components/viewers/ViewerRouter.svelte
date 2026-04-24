@@ -111,12 +111,17 @@ async function detectStac(current: Tab, signal: AbortSignal): Promise<StacRoute>
 	// STAC Items with detailed asset metadata + dense footprint coordinates
 	// frequently blow past that, so on a parse failure we fall back to the
 	// full file. Network errors (403, CORS) short-circuit to `none`.
+	// `classifyStac` already returns `{ kind: 'none' }` for any JSON that
+	// isn't a STAC Item/Collection/Catalog/ItemCollection — propagate that
+	// so plain JSON files don't route through StacTabViewer (which exposes
+	// the stac-map / STAC Browser buttons).
 	try {
 		const peek = await adapter.read(current.path, 0, MAX_STAC_PEEK, signal);
 		if (signal.aborted) return { kind: 'none' };
 		try {
 			const parsed = JSON.parse(decoder.decode(peek));
 			const classified = classifyStac(parsed);
+			if (classified.kind === 'none') return { kind: 'none' };
 			return { kind: 'stac', mapKind: pickMapKind(classified), classified };
 		} catch {
 			if (peek.byteLength < MAX_STAC_PEEK) return { kind: 'none' };
@@ -130,6 +135,7 @@ async function detectStac(current: Tab, signal: AbortSignal): Promise<StacRoute>
 		if (signal.aborted) return { kind: 'none' };
 		const parsed = JSON.parse(decoder.decode(full));
 		const classified = classifyStac(parsed);
+		if (classified.kind === 'none') return { kind: 'none' };
 		return { kind: 'stac', mapKind: pickMapKind(classified), classified };
 	} catch {
 		return { kind: 'none' };

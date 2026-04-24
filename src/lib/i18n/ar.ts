@@ -454,6 +454,8 @@ export const ar: Record<string, string> = {
 		'بكت خاص، الإطار الخارجي لا يستطيع توقيع طلباته، لذا ستفشل طلبات العناصر الفرعية بـ 403. لكن المانيفست الجذري سيعمل.',
 	'stac.mosaicSourcesOne': 'فسيفساء، {count} مصدر',
 	'stac.mosaicSourcesOther': 'فسيفساء، {count} مصادر',
+	'stac.mosaicInfo': 'معلومات الفسيفساء',
+	'stac.mosaicSourcesLabel': 'المصادر',
 
 	// COG Controls
 	'cog.style': 'النمط',

@@ -456,6 +456,8 @@ export const en: Record<string, string> = {
 		'Private bucket, the external iframe cannot sign its own crawl, so child items will 403. The top manifest still renders.',
 	'stac.mosaicSourcesOne': 'Mosaic, {count} source',
 	'stac.mosaicSourcesOther': 'Mosaic, {count} sources',
+	'stac.mosaicInfo': 'Mosaic info',
+	'stac.mosaicSourcesLabel': 'Sources',
 
 	// COG Controls
 	'cog.style': 'Style',
