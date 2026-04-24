@@ -1,5 +1,72 @@
 # @walkthru-earth/objex-utils
 
+## 1.3.0
+
+### Minor Changes
+
+- [`676c792`](https://github.com/walkthru-earth/objex/commit/676c79298b3171333be8e0752002c434404dde43) Thanks [@yharby](https://github.com/yharby)! - Bump the `@developmentseed/deck.gl-geotiff` family to `0.6.0-alpha.1` and add two new viewers plus a dual-path Zarr renderer. No breaking changes to existing tabs, and CogViewer behavior is unchanged.
+
+  ### What's new
+
+  - **StacMosaicViewer** (renamed from SentinelMosaicViewer, wrapped in a new `StacTabViewer`). `ViewerRouter` now detects STAC Items / FeatureCollections / Collections / Catalogs via a 256 KB adapter peek (`utils/stac.ts::classifyStac`) and mounts a tab wrapper with `Map` / `STAC Browser` / `JSON` buttons (URL hash `#map` / `#stac-browser` / `#code`, shareable). The user can always toggle back to the third-party stac-browser iframe. For Collection / Catalog inputs, `utils/stac-hydrate.ts::hydrateStacItems` walks `links[rel=item|child|next]` with a 12-way concurrency pool and a 2000-item cap, emitting progressive batches so the MosaicLayer starts rendering after ~1–2s. Each inner COG still runs through `selectCogPipeline`, so palette-indexed short-circuits, non-uint custom pipelines, LinearRescale, and `normalizeCogGeotiff` (overview strip + polar bbox clamp) all apply per scene. Shared `DecoderPool` and `createEpsgResolver` across every inner source.
+  - **MultiCogViewer.** STAC Item JSON routes here when `eo:bands.common_name` or MPC/Element 84/AWS asset-key heuristics identify at least the red/green/blue Sentinel-2 bands. Preset dropdown (True Color / False-Color IR / SWIR / Vegetation / Agriculture) drives the v0.6 `MultiCOGLayer.composite` prop, and a `FilterNoDataVal` + `LinearRescale` pipeline (0..0.3 default for L2A reflectance) mask scene edges and stretch contrast.
+  - **Zarr dual path.** `utils/zarr.ts::detectGeoZarr` inspects hierarchy attributes for the GeoZarr convention (`multiscales` + spatial + CRS). Matching stores render via `@developmentseed/deck.gl-zarr` `ZarrLayer` on `MapboxOverlay`; anything else falls through to the existing `@carbonplan/zarr-layer` path with its 10 k-tile guard and numcodecs codec aliases.
+  - **New utilities.** `utils/stac.ts` (STAC item/FeatureCollection shape checks, Sentinel band extraction, bbox helper). `utils/cog.ts` gains `buildMosaicSourceMeta`, `buildBandRenderPipeline` (composes `FilterNoDataVal` + `LinearRescale` in GPU-correct order). `utils/zarr.ts` gains `detectGeoZarr` and `zarrTileToImageData`.
+  - **CogControls `mode` prop.** Accepts `'single'` (default, full band + color-ramp UI) or `'multi'` (rescale slider only). MultiCogViewer uses the new mode; existing CogViewer is unchanged.
+
+  ### Package bumps
+
+  `@developmentseed/deck.gl-geotiff`, `deck.gl-raster`, `geotiff`, `proj`, `epsg`: `^0.5.0 → ^0.6.0-alpha.1`. New deps: `@developmentseed/deck.gl-zarr@^0.6.0-alpha.1` (pulls in `@developmentseed/geozarr` transitively). `zarrita` bumped `^0.6.2 → ^0.7.1`, forced across the tree via `pnpm.overrides` so `@carbonplan/zarr-layer@^0.4.3` runs on the same major.
+
+  ### Patches
+
+  `patches/@developmentseed__deck.gl-geotiff@0.5.0.patch` renamed and re-attached as `@0.6.0-alpha.1.patch`. Both hunks (proj4 `+over` antimeridian fix, `inferRenderPipeline` re-export) still apply unchanged, upstream tickets [#366](https://github.com/developmentseed/deck.gl-raster/issues/366) and [PR #374](https://github.com/developmentseed/deck.gl-raster/pull/374) remain open.
+
+  New patch `patches/@carbonplan__zarr-layer@0.4.3.patch` replaces two calls to `zarr.tryWithConsolidated()` with `Promise.resolve(baseStore)`. The helper was removed in zarrita 0.7, and the override above forces 0.7 across the tree, which otherwise surfaced as a runtime `(void 0) is not a function` inside `_onAddAsync` when mounting the legacy ZarrLayer. Consolidated metadata (`.zmetadata`) is still fetched manually by the library's own `_loadV2`, so skipping the helper is behavior-preserving.
+
+  ### Vite config
+
+  `optimizeDeps.include` extended with `@developmentseed/deck.gl-zarr` and its `geozarr` + `raster-reproject` leaves, plus `zarrita` itself.
+
+- [`4cf01c5`](https://github.com/walkthru-earth/objex/commit/4cf01c5d40f165e0273da4cffe197edd767734bf) Thanks [@yharby](https://github.com/yharby)! - GPU colormap sprite, histogram slider, and 4-band COG fix.
+
+  ### GPU `Colormap` sprite with 107 ramps
+
+  Single-band COGs and mosaics now render through the v0.6 `Colormap` shader module sampling `@developmentseed/deck.gl-raster/gpu-modules/colormaps.png` (256x107 RGBA, matplotlib + rio-tiler + cmocean). Switching ramps is a uniform update on `colormapIndex`, no tile re-decode. The CPU baker normalizes band N into `color.r` with `r = 1 + round(t * 254)` and reserves `r = 0` as a nodata sentinel so `FilterNoDataVal({ value: 0 })` discards those fragments before the ramp sample.
+
+  New helper module `utils/colormap-sprite.ts` decodes the sprite once per session and caches the uploaded `sampler2DArray` texture per luma.gl `Device` via a `WeakMap`. Exports `COLORMAP_INDEX` (all 107 names), `COLORMAP_NAMES` (sorted), `loadColormapSprite()`, `getColormapTexture(device)`, and `spriteBackgroundStyle(name, heightPx)` for CSS previews.
+
+  `CogControls.svelte` previews every ramp by slicing the sprite as a CSS background-image. Curated 10-ramp "pinned" grid (gray, terrain, viridis, magma, turbo, spectral, inferno, plasma, cividis, rdylgn), plus a search field and a scrollable full list of all 107.
+
+  ### Histogram behind the rescale slider
+
+  `selectCogPipeline` now accepts an `onHistogram?: (bins: Uint32Array) => void` callback. The CPU baker emits a 64-bin histogram (`HISTOGRAM_BIN_COUNT`) built over the tile's valid samples, stored in `CogViewer` / `StacMosaicViewer` as `$state.raw<Uint32Array>` and rendered by `CogControls` as an SVG bar chart behind the rescale sliders. The active `[min, max]` window draws as a translucent band so the slider visualizes what it is actually clipping.
+
+  `rescaleApplicable` now returns `true` when `bandConfig.mode === 'single'` in addition to the legacy uint-RGB case. The single-band path builds its pipeline as `[Sampler2DArrayPrecision, FilterNoDataVal, LinearRescale?, Colormap]`, so the slider stretches `color.r` before the ramp lookup.
+
+  ### NAIP 4-band opacity fix + dynamic band detection
+
+  `needsCustomPipelineForConfig` now forces the CPU path for `geotiff.count === 4` in RGB mode, so the 4th NAIP band is no longer silently interpreted as alpha by the library-default RGBA pipeline.
+
+  `StacMosaicViewer` detects band count + `SampleFormat` dynamically on the first COG that `MosaicLayer.getSource` resolves (via `geotiff.count` and `cachedTags.sampleFormat`), reseeds `bandConfig` via `defaultBandConfig(count, sf)`, and updates `<CogControls bandCount=...>` so 4-band imagery exposes all four bands in the picker. Previously the mosaic hard-coded 3 bands.
+
+  ### `Sampler2DArrayPrecision` shim
+
+  `@developmentseed/deck.gl-raster@0.6.0-alpha.1`'s `Colormap` module injects `uniform sampler2DArray colormapTexture;` without a precision qualifier, which the Apple-GPU path of luma.gl's WebGL2 backend rejects with `ERROR: 'sampler2DArray' : No precision specified`. Local shim `Sampler2DArrayPrecision` (in `utils/cog.ts`) injects `precision highp sampler2DArray;` at `fs:#decl` and is chained immediately before `Colormap` in `buildCustomRenderTile`. Remove once upstream fixes.
+
+  ### Dead code removed
+
+  Retired `COLOR_RAMP_STOPS`, `ColorRampId`, `interpolateRamp`, `rampToGradientCss`, and `customRenderTile` from `utils/cog.ts`. All superseded by the sprite path. `ColorRampId` is now a type alias for `ColormapName` (all 107 entries).
+
+  ### `objex-utils`
+
+  Bump coordinated with the main package via the `fixed` changeset config. No new re-exports, `colormap-sprite.ts` is not published because it depends on luma.gl `Device` / WebGL2. Consumers who want GPU colormap rendering should depend on the full `@walkthru-earth/objex` package.
+
+- [`439dfd7`](https://github.com/walkthru-earth/objex/commit/439dfd7049ad602a3871e9da6a5612e92c2e51cc) Thanks [@yharby](https://github.com/yharby)! - Add stac-geoparquet support.
+
+  - `objex-utils`: new `stac-geoparquet` module with pure transforms that any consumer can use: `isStacGeoparquetSchema`, `stacRowToItem`, `flattenStacBbox`, `resolveStacAssetHref`, `pickStacPrimaryAsset`, plus `StacGeoparquetRow` / `StacBboxStruct` / `StacGeoparquetSchemaColumn` / `StacRowToItemOptions` types.
+  - `objex` Svelte lib: `ViewerRouter` detects stac-geoparquet via hyparquet schema sniff and routes matching `.parquet` / `.geoparquet` files to `StacTabViewer`. A new `query/stac-geoparquet.ts` helper uses the existing DuckDB engine (presigned URL, single worker, cancellable) to materialize a STAC FeatureCollection in one shot; `StacMosaicViewer` consumes it through the same `buildMosaicSourceMeta` + MosaicLayer path as JSON catalogs. `StacTabViewer` now shows a "Parquet" badge, relabels the last tab as "Table" (mounting `TableViewer`), and disables the `STAC Browser` iframe button with a tooltip since Radiant Earth stac-browser is JSON-only. The `stac-map` DevSeed iframe handles parquet on its own, so its button is unchanged.
+
 ## 1.2.1
 
 ### Patch Changes
