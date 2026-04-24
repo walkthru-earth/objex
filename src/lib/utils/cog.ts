@@ -15,7 +15,17 @@ import { parseWkt } from '@developmentseed/proj';
 import type { Device } from '@luma.gl/core';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
+import {
+	buildDataTypeLabel,
+	type CogInfo,
+	clampBounds,
+	type GeoBounds,
+	SF_LABELS,
+	safeClamp
+} from './cog-pure.js';
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
+
+export { buildDataTypeLabel, type CogInfo, clampBounds, type GeoBounds, SF_LABELS, safeClamp };
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -40,15 +50,8 @@ const Sampler2DArrayPrecision = {
 	}
 } as const;
 
-/** SampleFormat tag value → human label. */
-export const SF_LABELS: Record<number, string> = {
-	1: 'uint',
-	2: 'int',
-	3: 'float',
-	4: 'void',
-	5: 'complex int',
-	6: 'complex float'
-};
+// `SF_LABELS` moved to `./cog-pure.ts` (re-exported above) so that
+// `objex-utils` can consume it without pulling in heavy COG deps.
 
 // ─── Color ramps ─────────────────────────────────────────────────
 
@@ -412,48 +415,9 @@ export function selectCogPipeline(
 const BITMAP_SOURCE = 'geotiff-bitmap-src';
 const BITMAP_LAYER = 'geotiff-bitmap-layer';
 
-// ─── Types ───────────────────────────────────────────────────────
-
-export interface GeoBounds {
-	west: number;
-	south: number;
-	east: number;
-	north: number;
-}
-
-export interface CogInfo {
-	width: number;
-	height: number;
-	bandCount: number;
-	dataType: string;
-	bounds: GeoBounds;
-	downsampled?: boolean;
-}
-
-// ─── Pure helpers ────────────────────────────────────────────────
-
-/** Safely clamp a number to a range, treating NaN/Infinity as the fallback. */
-export function safeClamp(v: number, lo: number, hi: number, fallback: number): number {
-	return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
-}
-
-/** Clamp geographic bounds to valid MapLibre web-Mercator range. */
-export function clampBounds(b: GeoBounds): GeoBounds {
-	return {
-		west: safeClamp(b.west, -180, 180, -180),
-		south: safeClamp(b.south, -85.051129, 85.051129, -85.051129),
-		east: safeClamp(b.east, -180, 180, 180),
-		north: safeClamp(b.north, -85.051129, 85.051129, 85.051129)
-	};
-}
-
-/**
- * Build a data-type label from GeoTIFF sample format and bits per sample.
- * e.g. "uint8", "float32", "int16"
- */
-export function buildDataTypeLabel(sampleFormat: number, bitsPerSample: number): string {
-	return `${SF_LABELS[sampleFormat] ?? `sf${sampleFormat}`}${bitsPerSample ?? ''}`;
-}
+// ─── Types & pure helpers ────────────────────────────────────────
+// `GeoBounds`, `CogInfo`, `safeClamp`, `clampBounds`, `buildDataTypeLabel`
+// live in `./cog-pure.ts` and are re-exported at the top of this file.
 
 // ─── Map helpers (depend on maplibre-gl) ─────────────────────────
 

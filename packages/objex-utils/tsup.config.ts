@@ -8,17 +8,5 @@ export default defineConfig({
 	clean: true,
 	splitting: false,
 	treeshake: true,
-	external: [
-		'apache-arrow',
-		'hyparquet',
-		'hyparquet-compressors',
-		'yaml',
-		'@developmentseed/geotiff',
-		'@developmentseed/epsg',
-		'@developmentseed/epsg/all',
-		'@developmentseed/epsg/all.csv.gz?url',
-		'@developmentseed/proj',
-		'maplibre-gl',
-		'proj4'
-	]
+	external: ['apache-arrow', 'hyparquet', 'hyparquet-compressors', 'yaml']
 });

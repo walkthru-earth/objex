@@ -32,13 +32,14 @@ Re-exports from `src/lib/`:
 - **utils/export**: `serializeToCsv()`, `serializeToJson()`, `escapeCsvField()`, `exportToCsv()`, `exportToJson()`
 - **utils/local-storage**: `loadFromStorage()`, `persistToStorage()`
 - **utils/markdown-sql**: `ParsedMarkdownDocument` (type), `SqlBlock` (type), `parseMarkdownDocument()`, `interpolateTemplates()`, `markSqlBlocks()`
-- **utils/cog**: `CogInfo` (type), `GeoBounds` (type), `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`. The render-pipeline helpers (`selectCogPipeline`, `createEpsgResolver`, `normalizeCogGeotiff`, `renderNonTiledBitmap`, `fitCogBounds`, etc.) stay in `src/lib/utils/cog.ts` but are **not** re-exported here — they pull `@developmentseed/deck.gl-geotiff` / `@developmentseed/geotiff` / `maplibre-gl` / `proj4` into the import graph. Use the full `@walkthru-earth/objex` package if you need them.
+- **utils/cog-pure**: `CogInfo` (type), `GeoBounds` (type), `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`. MUST import from `utils/cog-pure.ts`, NEVER from `utils/cog.ts`. tsup marks `@developmentseed/*` / `proj4` / `maplibre-gl` as external when they appear in the graph and preserves bare side-effect imports for them even after tree-shaking, which breaks consumer Vite pre-bundles on `@developmentseed/epsg/all.csv.gz?url` (see walkthru-earth/objex#11). Keeping the re-export anchored on `cog-pure.ts` guarantees zero heavy imports land in `dist/`. The render-pipeline helpers (`selectCogPipeline`, `createEpsgResolver`, `normalizeCogGeotiff`, `renderNonTiledBitmap`, `fitCogBounds`, etc.) stay in `src/lib/utils/cog.ts` and are **not** re-exported here. Use the full `@walkthru-earth/objex` package if you need them.
 - **utils/error**: `handleLoadError()`
 
 **Important**: All re-exported source files must use **relative imports** (not `$lib/`). The `$lib` alias is SvelteKit-only and breaks the tsup build.
 
-- External (not bundled): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`, `@developmentseed/geotiff`, `@developmentseed/epsg`, `@developmentseed/proj`, `maplibre-gl`, `proj4`
+- External (not bundled, declared in `tsup.config.ts`): `apache-arrow`, `hyparquet`, `hyparquet-compressors`, `yaml`. These appear as optional peer-deps so consumers can BYO versions.
 - `yaml` is loaded lazily via dynamic `import()` inside `parseMarkdownDocument` so the bundle loads without it installed. Keep it this way.
+- `@developmentseed/geotiff`, `@developmentseed/epsg`, `@developmentseed/proj`, `maplibre-gl`, `proj4` MUST NOT appear in the import graph. If a new re-export needs them, split the dependency-free surface into a `*-pure.ts` sibling module (same pattern as `cog-pure.ts`) and re-export from there. Never add them to the `external` list, that only hides the problem, tsup emits bare side-effect imports for externalized modules and breaks consumer Vite pre-bundles (see walkthru-earth/objex#11).
 - `tsconfig.json` has `rootDir: "../.."` to allow DTS generation across monorepo
 - `package.json` `files` must include `dist` and `docs` so the published tarball carries the reference docs.
 

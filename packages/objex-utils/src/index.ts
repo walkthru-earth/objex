@@ -74,14 +74,22 @@ export {
 	resolveCloudUrl,
 	safeDecodeURIComponent
 } from '../../../src/lib/utils/cloud-url.js';
-// COG utilities (pure helpers only — no maplibre dependency)
-export type { CogInfo, GeoBounds } from '../../../src/lib/utils/cog.js';
+// COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
+// MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
+// imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,
+// `@developmentseed/proj`, `maplibre-gl`, and `proj4`, which tsup preserves
+// as bare side-effect imports in the bundled output even when all named
+// bindings are tree-shaken away. That breaks consumer Vite pre-bundles on
+// `@developmentseed/epsg/all.csv.gz?url` (Vite loader query) and would force
+// every downstream project to install the full COG stack just to use the
+// pure TS utilities. See walkthru-earth/objex#11.
+export type { CogInfo, GeoBounds } from '../../../src/lib/utils/cog-pure.js';
 export {
 	buildDataTypeLabel,
 	clampBounds,
 	SF_LABELS,
 	safeClamp
-} from '../../../src/lib/utils/cog.js';
+} from '../../../src/lib/utils/cog-pure.js';
 // Column type classification
 export type { TypeCategory } from '../../../src/lib/utils/column-types.js';
 export {

@@ -2,9 +2,9 @@
 
 Pure, framework-agnostic helpers for working with Cloud-Optimized GeoTIFF metadata and bounds. No Svelte, MapLibre, deck.gl, or GeoTIFF library dependency.
 
-Source: `src/lib/utils/cog.ts`.
+Source: `src/lib/utils/cog-pure.ts` (dependency-free subset). The full `cog.ts` re-exports these same bindings for in-repo consumers.
 
-> The render-pipeline helpers (`selectCogPipeline`, `createConfigurableGetTileData`, `normalizeCogGeotiff`, `createEpsgResolver`, `fitCogBounds`, `renderNonTiledBitmap`, etc.) live in the same source file but are **not** re-exported from `@walkthru-earth/objex-utils` because they pull in `@developmentseed/deck.gl-geotiff`, `@developmentseed/geotiff`, `@developmentseed/proj`, `proj4`, and `maplibre-gl`. If you need them, depend on the full Svelte package [`@walkthru-earth/objex`](https://www.npmjs.com/package/@walkthru-earth/objex) (they are re-exported from `src/lib/index.ts`) and install those optional peers yourself.
+> The render-pipeline helpers (`selectCogPipeline`, `createConfigurableGetTileData`, `normalizeCogGeotiff`, `createEpsgResolver`, `fitCogBounds`, `renderNonTiledBitmap`, etc.) live in `src/lib/utils/cog.ts` but are **not** re-exported from `@walkthru-earth/objex-utils` because they pull in `@developmentseed/deck.gl-geotiff`, `@developmentseed/geotiff`, `@developmentseed/proj`, `proj4`, and `maplibre-gl`. If you need them, depend on the full Svelte package [`@walkthru-earth/objex`](https://www.npmjs.com/package/@walkthru-earth/objex) (they are re-exported from `src/lib/index.ts`) and install those optional peers yourself.
 
 ## Types
 
