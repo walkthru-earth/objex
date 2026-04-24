@@ -20,7 +20,7 @@ graph LR
 
 - **Browse** cloud storage (S3, GCS, Azure, R2, B2, DigitalOcean, Wasabi, Storj, Hetzner, Contabo, Linode, OVHcloud, MinIO, direct URLs)
 - **Query** Parquet, CSV, JSONL with SQL (DuckDB-WASM, cancellable queries)
-- **Visualize** GeoParquet, GeoJSON, COG, PMTiles, FlatGeobuf, Zarr on maps (MapLibre + deck.gl)
+- **Visualize** GeoParquet, GeoJSON, COG, PMTiles, FlatGeobuf, Zarr (incl. GeoZarr), STAC catalogs, and stac-geoparquet on maps (MapLibre + deck.gl)
 - **View** 100+ file formats: code (30+ languages), Jupyter notebooks, PDF, 3D models, archives, media
 - **Share** via URL -- `?url=<storage-url>#<view>` encodes full viewer state
 - **i18n** -- English + Arabic with automatic RTL layout
@@ -32,7 +32,8 @@ graph LR
 |----------|---------|
 | Tabular | Parquet, CSV, TSV, JSONL, NDJSON |
 | Geo vector | GeoParquet, GeoJSON, Shapefile, GeoPackage, FlatGeobuf |
-| Geo raster | COG, PMTiles, Zarr v2/v3 |
+| Geo raster | COG, PMTiles, Zarr v2/v3, GeoZarr |
+| Geo catalog | STAC Item / Collection / Catalog / FeatureCollection (JSON), stac-geoparquet |
 | Point cloud | COPC, LAZ, LAS |
 | Notebooks | Jupyter (.ipynb), marimo |
 | Code | 30+ languages (Python, TS, Rust, Go, SQL...) |
@@ -79,6 +80,8 @@ import {
   parseWKB,
   buildGeoArrowTables,
   readParquetMetadata,
+  isStacGeoparquetSchema,
+  stacRowToItem,
   getFileTypeInfo,
   formatFileSize,
   generateHexDump,
@@ -105,7 +108,7 @@ Full per-module reference docs: [`packages/objex-utils/docs/`](packages/objex-ut
 | `./file-icons` | `getFileTypeInfo`, `getDuckDbReadFn`, `getViewerKind` |
 | `./types` | `FileEntry`, `Connection`, `Tab`, `WriteResult`, `Theme` |
 
-The main export also includes `copyToClipboard`, `handleLoadError`, and shared constants (`WGS84_CODES`, `STORAGE_KEYS`, `DEFAULT_TARGET_CRS`, etc.).
+The main export also includes `copyToClipboard`, `handleLoadError`, the stac-geoparquet helpers (`isStacGeoparquetSchema`, `stacRowToItem`, `flattenStacBbox`, `pickStacPrimaryAsset`, `resolveStacAssetHref`), and shared constants (`WGS84_CODES`, `STORAGE_KEYS`, `DEFAULT_TARGET_CRS`, etc.).
 
 ## Quick Start (Development)
 
