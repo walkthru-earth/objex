@@ -32,8 +32,10 @@ graph TD
         PMTT[pmtiles-tile.ts<br/>decodeMvtTile]
         SHIKI[shiki.ts<br/>highlightCode]
         NB[notebook.ts<br/>renderNotebook]
-        ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl]
+        ZARR[zarr.ts<br/>detectZarrMarkers, extractZarrStoreUrl, detectGeoZarr]
         ZTAB[zarr-tab.ts<br/>openZarrTab]
+        STAC[stac.ts<br/>classifyStac, buildMosaicSourceMeta]
+        STACH[stac-hydrate.ts<br/>hydrateStacItems]
     end
     WKB --> GA
     PM --> GA
@@ -48,7 +50,7 @@ graph TD
 | `wkb.ts` | `parseWKB()`, `toBinary()`, `findGeoColumn()`, `findGeoColumnFromRows()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
 | `stac-geoparquet.ts` | `STAC_GEOPARQUET_REQUIRED_COLUMNS`, `isStacGeoparquetSchema()`, `flattenStacBbox()`, `resolveStacAssetHref()`, `pickStacPrimaryAsset()`, `stacRowToItem()` + types | ViewerRouter (schema sniff), query/stac-geoparquet (per-row → Item), objex-utils (re-export) |
 | `geoarrow.ts` | `buildGeoArrowTables()`, `normalizeGeomType()` | TableViewer, GeoParquetMapViewer, lib/index.ts |
-| `storage-url.ts` | `parseStorageUrl()`, `looksLikeUrl()`, `Defaults` | ConnectionDialog, Sidebar, lib/index.ts |
+| `storage-url.ts` | `parseStorageUrl()`, `looksLikeUrl()`, `describeParseResult()`, `classifyUrl()`, `isKnownBucketHost()`, `STAC_API_PATH_RE`, `Defaults`, `ParsedStorageUrl`, `StorageProvider`, `UrlClassification` | ConnectionDialog, Sidebar, host-detection (isKnownBucketHost), +page.svelte (classifyUrl for STAC API path routing), lib/index.ts |
 | `parquet-metadata.ts` | `readParquetMetadata()` (returns `{ schema, topLevelColumns, geo, ... }` — `schema` is leaves only, `topLevelColumns` includes struct parents like `assets`/`bbox` for stac-geoparquet sniffing), `extractEpsgFromGeoMeta()`, `extractBounds()` | TableViewer, ViewerRouter (stac-geoparquet detect), lib/index.ts |
 | `format.ts` | `formatFileSize()`, `formatDate()`, `getFileExtension()`, `formatValue()`, `jsonReplacerBigInt()` | StatusBar, FileRow, ArchiveViewer, RawViewer, PmtilesTileInspector, PmtilesArchiveView, AttributeTable, TableGrid, export.ts, lib/index.ts |
 | `hex.ts` | `generateHexDump()` | RawViewer, lib/index.ts |
@@ -65,7 +67,9 @@ graph TD
 | `pmtiles-tile.ts` | `decodeMvtTile()`, `tileMimeType()`, `layerHue()`, `DecodedTile`, `DecodedLayer`, `DecodedFeature` | PmtilesTileInspector |
 | `shiki.ts` | `highlightCode()`, `highlightCodeReversed()`, `extensionToShikiLang()`, `getTheme()`, `getReversedTheme()` | PmtilesArchiveView, NotebookViewer, CodeViewer, MarkdownViewer |
 | `notebook.ts` | `renderNotebook()` | NotebookViewer |
-| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `discoverV3Children()` (internal), `listS3Children()` (internal), `ensureCodecsRegistered()`, `ZarrNode`, `ZarrHierarchy`, `DIM_LIKE_NAMES`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `discoverV3Children()` (internal), `listS3Children()` (internal), `ensureCodecsRegistered()`, `detectGeoZarr()`, `zarrTileToImageData()`, `ZarrNode`, `ZarrHierarchy`, `GeoZarrInfo`, `DIM_LIKE_NAMES`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `inferDims()`, `formatShape()` | ZarrViewer, ZarrMapViewer, FileBrowser, +page.svelte |
+| `stac.ts` | `classifyStac()`, `isStacItem()`, `isStacFeatureCollection()`, `isStacCollection()`, `isStacCatalog()`, `detectMosaicCapable()`, `detectMultiCogCapable()`, `pickCogAssetHref()`, `stacItemBbox()`, `buildMosaicSourceMeta()`, `extractSentinelBandAssets()`, `hasRgbBands()`, `STAC_COG_ASSET_KEYS`, types (`StacItem`, `StacFeatureCollection`, `StacCollection`, `StacCatalog`, `StacAsset`, `StacLink`, `StacRoutableKind`, `MosaicSourceMeta`, `BandSlot`, `BandMap`) | ViewerRouter, StacTabViewer, StacMosaicViewer, MultiCogViewer, CodeViewer (STAC JSON kind detection) |
+| `stac-hydrate.ts` | `hydrateStacItems()`, `absolutizeHref()`, `HydrateOptions`, `HydrateResult` | StacMosaicViewer (Catalog / Collection / FC link-walking with 12-way concurrency, 2000-item cap, progressive onBatch emission, urlToKey route-through for private-bucket catalogs) |
 | `zarr-tab.ts` | `openZarrTab()` | FileBrowser, FileTreeSidebar, +page.svelte |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()`, `getUrlView()`, `getUrlPrefix()`, `hasUrlParam()`, `setRawUrlParam()`, `clearUrlState()`, `buildUrlParam()` | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, +page.svelte |
 | `pdf.ts` | `loadPdfDocument()` | PdfViewer |
@@ -76,6 +80,6 @@ graph TD
 | `connection-identity.ts` | `connectionIdentityKey()`, `isSameConnectionIdentity()`, `normalizeEndpoint()`, `normalizeProvider()`, `ConnectionIdentityInput` | stores/connections, lib/index.ts |
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
 | `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
-| `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo`, `GeoBounds`, `BandConfig`, `PixelValue`, `ColorRampId`, `COLOR_RAMP_STOPS`, `interpolateRamp()`, `rampToGradientCss()`, `defaultBandConfig()`, `isDefaultBandConfig()`, `needsCustomPipelineForConfig()`, `createConfigurableGetTileData()`, `readPixelAtLngLat()`, `resolveProj4Def()`, `createEpsgResolver()`, `RescaleConfig`, `DEFAULT_RESCALE`, `isRescaleActive()`, `createRescaledPipeline()`, `CogTagInfo`, `inspectCogTags()`, `normalizeCogGeotiff()`, `ResolvedCogPipeline`, `SelectCogPipelineOptions`, `selectCogPipeline()` | CogViewer, CogControls, lib/index.ts |
+| `cog.ts` | `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `SF_LABELS`, `CogInfo`, `GeoBounds`, `BandConfig`, `PixelValue`, `ColorRampId`, `COLOR_RAMP_STOPS`, `interpolateRamp()`, `rampToGradientCss()`, `defaultBandConfig()` (caps RGB defaults at bandCount ≤ 4), `isDefaultBandConfig()`, `needsCustomPipelineForConfig()` (forces CPU path when `geotiff.count > 4`), `createConfigurableGetTileData()`, `readPixelAtLngLat()`, `resolveProj4Def()`, `createEpsgResolver()`, `RescaleConfig`, `DEFAULT_RESCALE`, `isRescaleActive()`, `createRescaledPipeline()`, `buildBandRenderPipeline()` (FilterNoDataVal + LinearRescale composer for MultiCOGLayer/mosaic callers), `BandRenderPipelineOptions`, `CogTagInfo`, `inspectCogTags()`, `normalizeCogGeotiff()`, `ResolvedCogPipeline`, `SelectCogPipelineOptions`, `selectCogPipeline()` | CogViewer, CogControls, StacMosaicViewer, MultiCogViewer, lib/index.ts |
 | `geometry-type.ts` | `parseGeometryTypeCrs()`, `isWgs84Crs()`, `buildTransformExpr()`, `wrapWkbWithCrs()`, `GeometryTypeInfo` | query/wasm.ts, TableViewer |
 | `error.ts` | `handleLoadError()` | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer, lib/index.ts |
