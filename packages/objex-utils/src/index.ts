@@ -141,6 +141,21 @@ export {
 	extractGeometryTypes,
 	readParquetMetadata
 } from '../../../src/lib/utils/parquet-metadata.js';
+// stac-geoparquet (detection + row → Item transform)
+export type {
+	StacBboxStruct,
+	StacGeoparquetRow,
+	StacGeoparquetSchemaColumn,
+	StacRowToItemOptions
+} from '../../../src/lib/utils/stac-geoparquet.js';
+export {
+	flattenStacBbox,
+	isStacGeoparquetSchema,
+	pickStacPrimaryAsset,
+	resolveStacAssetHref,
+	STAC_GEOPARQUET_REQUIRED_COLUMNS,
+	stacRowToItem
+} from '../../../src/lib/utils/stac-geoparquet.js';
 // Storage URL parsing
 export type {
 	Defaults,

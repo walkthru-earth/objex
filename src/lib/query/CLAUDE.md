@@ -16,6 +16,7 @@ graph TD
 | `engine.ts` | `QueryEngine`, `QueryResult`, `MapQueryResult`, `SchemaField`, `QueryHandle`, `MapQueryHandle`, `QueryCancelledError` | TableViewer, GeoParquetMapViewer, FileInfo, evidence-context, lib/index.ts |
 | `wasm.ts` | `WasmQueryEngine` | index.ts (lazy import) |
 | `source.ts` | `resolveTableSource()`, `resolveTableSourceAsync()`, `isHttpsSourceRef()`, `ResolvedTableSource`, `QuerySource` bridge | TableViewer, DatabaseViewer, wasm.ts |
+| `stac-geoparquet.ts` | `queryStacGeoparquetFeatureCollection(tab, connId, opts?)` → `StacFeatureCollection` | StacMosaicViewer (parquet ingestion path). Projects required STAC columns plus optional `proj:*`/`raster:*`/`bands` (sniffed from schema), runs through `queryCancellable`, maps each row via `stacRowToItem` from `utils/stac-geoparquet.ts` with `parseWKB` as the geometry decoder. Asset hrefs are resolved per-row against `{parquet_dir}/{item.id}/` (stactools item-subfolder layout) rather than the parquet URL, so relative hrefs like `./foo.tif` land on the real COG at `{parquet_dir}/{item.id}/foo.tif`. |
 | `index.ts` | `getQueryEngine()`, re-exports all types | TableViewer, DatabaseViewer, SqlEditor, evidence-context |
 
 - `conn.send()` for data queries (non-blocking, cancellable)

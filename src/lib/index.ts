@@ -64,6 +64,14 @@ export type { CogInfo, GeoBounds } from './utils/cog.js';
 export { buildDataTypeLabel, clampBounds, SF_LABELS, safeClamp } from './utils/cog.js';
 export type { TypeCategory } from './utils/column-types.js';
 export { classifyType, typeBadgeClass, typeColor, typeLabel } from './utils/column-types.js';
+// Connection identity (dedup)
+export type { ConnectionIdentityInput } from './utils/connection-identity.js';
+export {
+	connectionIdentityKey,
+	isSameConnectionIdentity,
+	normalizeEndpoint,
+	normalizeProvider
+} from './utils/connection-identity.js';
 // Error handling
 export { handleLoadError } from './utils/error.js';
 // Data export / serialization
@@ -102,6 +110,20 @@ export {
 	extractGeometryTypes,
 	readParquetMetadata
 } from './utils/parquet-metadata.js';
+export type {
+	StacBboxStruct,
+	StacGeoparquetRow,
+	StacGeoparquetSchemaColumn,
+	StacRowToItemOptions
+} from './utils/stac-geoparquet.js';
+export {
+	flattenStacBbox,
+	isStacGeoparquetSchema,
+	pickStacPrimaryAsset,
+	resolveStacAssetHref,
+	STAC_GEOPARQUET_REQUIRED_COLUMNS,
+	stacRowToItem
+} from './utils/stac-geoparquet.js';
 export type { Defaults, ParsedStorageUrl, StorageProvider } from './utils/storage-url.js';
 export { describeParseResult, looksLikeUrl, parseStorageUrl } from './utils/storage-url.js';
 export type { GeoType, ParsedGeometry } from './utils/wkb.js';
