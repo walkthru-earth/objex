@@ -168,7 +168,7 @@ async function handleAutoDetection() {
 }
 
 async function loadDemoConnection() {
-	const id = await connections.save({
+	const { id } = await connections.save({
 		name: 'Source Cooperative',
 		provider: 's3',
 		endpoint: '',
@@ -176,7 +176,6 @@ async function loadDemoConnection() {
 		region: 'us-west-2',
 		anonymous: true
 	});
-	if (!id) return;
 	const conn = connections.getById(id);
 	if (conn) {
 		browser.browse(conn);

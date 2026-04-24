@@ -46,6 +46,10 @@ export const ar: Record<string, string> = {
 	'connection.readOnlyCliTitle': 'تقييد عبر سطر الأوامر',
 	'connection.testSuccess': 'الاتصال ناجح',
 	'connection.testFail': 'فشل الاتصال. تحقق من الإعدادات وحاول مرة أخرى.',
+	'connection.duplicateMerged':
+		'تم العثور على اتصال موجود ("{name}") لهذه الحاوية. تم تحديث بيانات الاعتماد.',
+	'connection.duplicateBlocked':
+		'يوجد بالفعل اتصال آخر ("{name}") يستخدم هذه الحاوية. عدّله بدلاً من ذلك.',
 	'connection.testButton': 'اختبار الاتصال',
 	'connection.testing': 'جارٍ الاختبار...',
 	'connection.cancel': 'إلغاء',

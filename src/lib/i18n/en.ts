@@ -46,6 +46,10 @@ export const en: Record<string, string> = {
 	'connection.readOnlyCliTitle': 'Restrict via CLI',
 	'connection.testSuccess': 'Connection successful',
 	'connection.testFail': 'Connection failed. Check your settings and try again.',
+	'connection.duplicateMerged':
+		'Matched an existing connection ("{name}") for this bucket. Credentials were updated.',
+	'connection.duplicateBlocked':
+		'Another connection ("{name}") already uses this bucket. Edit that one instead.',
 	'connection.testButton': 'Test Connection',
 	'connection.testing': 'Testing...',
 	'connection.cancel': 'Cancel',

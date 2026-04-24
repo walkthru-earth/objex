@@ -31,7 +31,7 @@ import {
 	type ProviderId,
 	READ_ONLY_HELP
 } from '$lib/storage/providers.js';
-import { connections } from '$lib/stores/connections.svelte.js';
+import { connections, DuplicateConnectionError } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
 import { describeParseResult, looksLikeUrl, parseStorageUrl } from '$lib/utils/storage-url.js';
 
@@ -65,6 +65,7 @@ let sasToken = $state('');
 let saving = $state(false);
 let testing = $state(false);
 let testResult = $state<'success' | 'error' | null>(null);
+let duplicateNotice = $state<{ kind: 'merged' | 'blocked'; name: string } | null>(null);
 let parsedHint = $state<string | null>(null);
 let endpointAutoFilled = $state(false);
 
@@ -109,6 +110,7 @@ function resetForm(conn: Connection | null | undefined) {
 	testResult = null;
 	parsedHint = null;
 	endpointAutoFilled = false;
+	duplicateNotice = null;
 }
 
 function selectProvider(id: ProviderId) {
@@ -225,17 +227,33 @@ $effect(() => {
 async function handleSave() {
 	if (!canSave) return;
 	saving = true;
+	duplicateNotice = null;
 	try {
 		const config = buildConfig();
 		if (isEditMode && editConnection) {
 			await connections.update(editConnection.id, config);
 		} else {
-			await connections.save(config);
+			const result = await connections.save(config);
+			if (result.existed) {
+				const existing = connections.getById(result.id);
+				duplicateNotice = { kind: 'merged', name: existing?.name ?? config.name };
+				// Keep the dialog open briefly so the user sees the notice, then close.
+				saving = false;
+				setTimeout(() => {
+					onSaved();
+					open = false;
+				}, 1200);
+				return;
+			}
 		}
 		onSaved();
 		open = false;
 	} catch (err) {
-		console.error('Failed to save connection:', err);
+		if (err instanceof DuplicateConnectionError) {
+			duplicateNotice = { kind: 'blocked', name: err.existingName };
+		} else {
+			console.error('Failed to save connection:', err);
+		}
 	} finally {
 		saving = false;
 	}
@@ -530,6 +548,20 @@ async function handleTestConnection() {
 						{/if}
 					</div>
 				</details>
+			{/if}
+
+			<!-- Duplicate-connection notice -->
+			{#if duplicateNotice}
+				<div
+					class="flex items-start gap-2 rounded-md border px-3 py-2 text-sm {duplicateNotice.kind === 'merged' ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'border-destructive/30 bg-destructive/10 text-destructive'}"
+				>
+					<CloudIcon class="mt-0.5 size-4 shrink-0" />
+					<span>
+						{duplicateNotice.kind === 'merged'
+							? t('connection.duplicateMerged', { name: duplicateNotice.name })
+							: t('connection.duplicateBlocked', { name: duplicateNotice.name })}
+					</span>
+				</div>
 			{/if}
 
 			<!-- Test Connection Result -->
