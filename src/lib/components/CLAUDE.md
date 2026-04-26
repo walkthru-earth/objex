@@ -35,6 +35,7 @@ graph TD
 | `layout/` | 8 | Sidebar, tabs, status bar, toggles, about sheet | +page.svelte, +layout.svelte |
 | `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |
 | `viewers/map/` | 2 | MapContainer, AttributeTable | GeoParquetMapViewer, PmtilesMapView, MapViewer |
+| `viewers/stac/` | 5 | StacItemStrip (bottom-anchored cards with thumbnails + hover-sync), StacItemInspector (right-side slide-over with metadata + assets + raw JSON), StacDatetimeBar (compact datetime histogram + range scrubber, writes back to `filterState.datetime`), StacFilterPanel (auto-faceted filter sheet with footer slot for fetch-options snippet), StacRangeSlider (dual-thumb numeric slider primitive used by the filter panel) | StacMosaicViewer (Phase 2/3 UI) |
 | `ui/` | 73 | bits-ui primitives (https://bits-ui.com/llms.txt) | Used across all components |
 
 See `viewers/CLAUDE.md` for viewer-specific details.
