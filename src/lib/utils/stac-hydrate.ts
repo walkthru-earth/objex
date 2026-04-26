@@ -37,6 +37,22 @@ export interface HydrateOptions {
 	 * of a raw cross-origin `fetch`, so private-bucket catalogs can be walked.
 	 */
 	urlToKey?: (absoluteUrl: string) => string | null;
+	/**
+	 * Optional native STAC API filters appended to the `rel="items"` endpoint
+	 * (and applied to `links[rel=next]` pages). Lets callers narrow a
+	 * collection by spatial / temporal extent before hydration.
+	 */
+	itemsQuery?: StacItemsQuery;
+}
+
+/** Native filters supported by OGC API Features / STAC API on `/items`. */
+export interface StacItemsQuery {
+	/** WGS84 bbox `[west, south, east, north]`. */
+	bbox?: [number, number, number, number];
+	/** RFC 3339 instant or interval `start/end` (use `..` for open ends). */
+	datetime?: string;
+	/** Per-page item count hint, the server may cap this. */
+	limit?: number;
 }
 
 export interface HydrateResult {
@@ -79,6 +95,7 @@ export async function hydrateStacItems(
 			limit,
 			followPagination,
 			urlToKey,
+			itemsQuery: opts.itemsQuery,
 			onAccept: (batch) => emit(batch),
 			stopCheck: () => items.length >= limit,
 			onTruncate: () => {
@@ -94,6 +111,13 @@ export async function hydrateStacItems(
 			root.kind === 'catalog' || itemLinks.length === 0
 				? collectChildLinks(root.payload, baseHref)
 				: [];
+		// OGC API Features convention used by STAC API endpoints (earth-search,
+		// planetary-computer, pgstac, ...): a Collection advertises a single
+		// `rel="items"` link pointing at a paginated FeatureCollection. Static
+		// "self-contained" catalogs use `rel="item"` per item file instead, so
+		// only walk the items endpoint when no static item links are present.
+		const itemsEndpoint =
+			itemLinks.length === 0 ? collectItemsEndpoint(root.payload, baseHref, opts.itemsQuery) : null;
 
 		if (itemLinks.length > 0) {
 			await fetchItems(itemLinks, adapter, baseHref, {
@@ -106,6 +130,27 @@ export async function hydrateStacItems(
 					truncated = true;
 				}
 			});
+		} else if (itemsEndpoint) {
+			try {
+				const json = await fetchJson(adapter, itemsEndpoint, baseHref, signal, urlToKey);
+				if (isStacFeatureCollection(json)) {
+					await consumeFeatureCollection(json, itemsEndpoint, adapter, {
+						signal,
+						concurrency,
+						limit,
+						followPagination,
+						urlToKey,
+						itemsQuery: opts.itemsQuery,
+						onAccept: (batch) => emit(batch),
+						stopCheck: () => items.length >= limit,
+						onTruncate: () => {
+							truncated = true;
+						}
+					});
+				}
+			} catch {
+				// Endpoint unreachable, fall through to childLinks below.
+			}
 		}
 
 		if (!truncated && items.length < limit && childLinks.length > 0) {
@@ -170,6 +215,52 @@ function collectChildLinks(payload: StacCollection | StacCatalog, baseHref: stri
 		.map((l) => absolutizeHref(l.href, baseHref));
 }
 
+/**
+ * True when the payload exposes a `rel="items"` link (OGC API Features /
+ * STAC API convention). Lets callers switch to viewport-scoped fetching
+ * instead of walking every page.
+ */
+export function hasStacItemsEndpoint(payload: StacCollection | StacCatalog): boolean {
+	return (payload.links ?? []).some((l) => !!l && typeof l.href === 'string' && l.rel === 'items');
+}
+
+function collectItemsEndpoint(
+	payload: StacCollection | StacCatalog,
+	baseHref: string,
+	query: StacItemsQuery | undefined
+): string | null {
+	const link = (payload.links ?? []).find(
+		(l): l is StacLink => !!l && typeof l.href === 'string' && l.rel === 'items'
+	);
+	if (!link) return null;
+	return applyItemsQuery(absolutizeHref(link.href, baseHref), query);
+}
+
+/**
+ * Stamp `bbox` / `datetime` / `limit` onto a STAC items URL. Called both for
+ * the first-page endpoint and for every server-emitted `rel=next` href, since
+ * some custom STAC API implementations issue cursor URLs that drop the
+ * caller's filters and would otherwise return unbounded results on page 2+.
+ */
+function applyItemsQuery(absolute: string, query: StacItemsQuery | undefined): string {
+	if (!query) return absolute;
+	try {
+		const url = new URL(absolute);
+		if (query.bbox && query.bbox.length === 4 && !url.searchParams.has('bbox')) {
+			url.searchParams.set('bbox', query.bbox.join(','));
+		}
+		if (query.datetime && !url.searchParams.has('datetime')) {
+			url.searchParams.set('datetime', query.datetime);
+		}
+		if (typeof query.limit === 'number' && query.limit > 0 && !url.searchParams.has('limit')) {
+			url.searchParams.set('limit', String(Math.floor(query.limit)));
+		}
+		return url.toString();
+	} catch {
+		return absolute;
+	}
+}
+
 async function consumeFeatureCollection(
 	fc: StacFeatureCollection,
 	baseHref: string,
@@ -180,6 +271,7 @@ async function consumeFeatureCollection(
 		limit: number;
 		followPagination: boolean;
 		urlToKey?: (absoluteUrl: string) => string | null;
+		itemsQuery?: StacItemsQuery;
 		onAccept: (items: StacItem[]) => void;
 		stopCheck: () => boolean;
 		onTruncate: () => void;
@@ -198,7 +290,7 @@ async function consumeFeatureCollection(
 	const next = (fc.links ?? []).find((l) => l && l.rel === 'next' && typeof l.href === 'string');
 	if (!next) return;
 
-	const nextHref = absolutizeHref(next.href, baseHref);
+	const nextHref = applyItemsQuery(absolutizeHref(next.href, baseHref), ctx.itemsQuery);
 	if (ctx.signal.aborted) return;
 	try {
 		const json = await fetchJson(adapter, nextHref, baseHref, ctx.signal, ctx.urlToKey);
