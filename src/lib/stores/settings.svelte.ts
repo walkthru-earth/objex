@@ -7,16 +7,23 @@ interface PersistedSettings {
 	theme: Theme;
 	locale: Locale;
 	featureLimit: number;
+	mosaicItemLimit: number;
 }
 
-const SETTINGS_DEFAULTS: PersistedSettings = { theme: 'system', locale: 'en', featureLimit: 1000 };
+const SETTINGS_DEFAULTS: PersistedSettings = {
+	theme: 'system',
+	locale: 'en',
+	featureLimit: 1000,
+	mosaicItemLimit: 2000
+};
 
 function loadSettings(): PersistedSettings {
 	const stored = loadFromStorage<Partial<PersistedSettings>>(STORAGE_KEYS.SETTINGS, {});
 	return {
 		theme: stored.theme ?? SETTINGS_DEFAULTS.theme,
 		locale: stored.locale ?? SETTINGS_DEFAULTS.locale,
-		featureLimit: stored.featureLimit ?? SETTINGS_DEFAULTS.featureLimit
+		featureLimit: stored.featureLimit ?? SETTINGS_DEFAULTS.featureLimit,
+		mosaicItemLimit: stored.mosaicItemLimit ?? SETTINGS_DEFAULTS.mosaicItemLimit
 	};
 }
 
@@ -31,6 +38,7 @@ function createSettingsStore() {
 	let theme = $state<Theme>(initial.theme);
 	let locale = $state<Locale>(initial.locale);
 	let featureLimit = $state<number>(initial.featureLimit);
+	let mosaicItemLimit = $state<number>(initial.mosaicItemLimit);
 	let resolved = $state<'light' | 'dark'>(resolveTheme(initial.theme));
 
 	// Sync i18n module and document dir with persisted locale
@@ -42,7 +50,7 @@ function createSettingsStore() {
 	}
 
 	function persist() {
-		persistToStorage(STORAGE_KEYS.SETTINGS, { theme, locale, featureLimit });
+		persistToStorage(STORAGE_KEYS.SETTINGS, { theme, locale, featureLimit, mosaicItemLimit });
 	}
 
 	function applyTheme(t: Theme) {
@@ -83,6 +91,9 @@ function createSettingsStore() {
 		get featureLimit() {
 			return featureLimit;
 		},
+		get mosaicItemLimit() {
+			return mosaicItemLimit;
+		},
 		setTheme(t: Theme) {
 			applyTheme(t);
 		},
@@ -91,6 +102,10 @@ function createSettingsStore() {
 		},
 		setFeatureLimit(n: number) {
 			featureLimit = n;
+			persist();
+		},
+		setMosaicItemLimit(n: number) {
+			mosaicItemLimit = Math.max(1, Math.floor(n));
 			persist();
 		}
 	};
