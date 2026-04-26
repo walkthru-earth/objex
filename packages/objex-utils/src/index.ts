@@ -149,6 +149,28 @@ export {
 	extractGeometryTypes,
 	readParquetMetadata
 } from '../../../src/lib/utils/parquet-metadata.js';
+// STAC facets (auto-detected filters, sorts, slim views)
+export type {
+	DatetimeFacet,
+	EnumFacet,
+	EnumFacetField,
+	Facet,
+	FacetSet,
+	FacetSort,
+	FacetState,
+	NumericFacet,
+	NumericFacetField,
+	StacItemView
+} from '../../../src/lib/utils/stac-facets.js';
+export {
+	applyFacets,
+	buildFacets,
+	DATETIME_HISTOGRAM_BINS,
+	emptyFacetState,
+	extractItemView,
+	hasActiveFilters,
+	sortViews
+} from '../../../src/lib/utils/stac-facets.js';
 // stac-geoparquet (detection + row → Item transform)
 export type {
 	StacBboxStruct,
@@ -164,6 +186,18 @@ export {
 	STAC_GEOPARQUET_REQUIRED_COLUMNS,
 	stacRowToItem
 } from '../../../src/lib/utils/stac-geoparquet.js';
+// STAC API filter push-down (CQL2 + native query params)
+export type {
+	StacApiCapabilities,
+	StacNativeQuery,
+	ToNativeQueryOptions
+} from '../../../src/lib/utils/stac-pushdown.js';
+export {
+	residualState,
+	sniffApiCapabilities,
+	toCql2Filter,
+	toNativeQuery
+} from '../../../src/lib/utils/stac-pushdown.js';
 // Storage URL parsing
 export type {
 	Defaults,

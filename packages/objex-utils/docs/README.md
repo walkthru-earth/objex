@@ -35,6 +35,8 @@ As of v1.2, `yaml` is loaded via dynamic `import()` inside `parseMarkdownDocumen
 | [`cog.md`](./cog.md) | Cloud-Optimized GeoTIFF helpers (pipeline selection, band configs, color ramps, bounds clamping) |
 | [`parquet-metadata.md`](./parquet-metadata.md) | `readParquetMetadata` + CRS / bounds / geometry-types extractors |
 | [`stac-geoparquet.md`](./stac-geoparquet.md) | stac-geoparquet detection (`isStacGeoparquetSchema`) and row-to-Item transforms (`stacRowToItem`, `flattenStacBbox`, `pickStacPrimaryAsset`, `resolveStacAssetHref`) |
+| [`stac-facets.md`](./stac-facets.md) | Auto-faceted state for STAC viewers, `extractItemView` / `buildFacets` / `applyFacets` / `sortViews` / `hasActiveFilters` / `emptyFacetState` + `StacItemView` / `Facet*` / `FacetState` types |
+| [`stac-pushdown.md`](./stac-pushdown.md) | `FacetState` → STAC API native query + CQL2-JSON translation. `sniffApiCapabilities`, `toNativeQuery`, `toCql2Filter`, `residualState` gated by what `conformsTo` advertises |
 | [`storage.md`](./storage.md) | URL parsing (`parseStorageUrl`, `resolveCloudUrl`), provider registry, `StorageAdapter` interface, `UrlAdapter` |
 | [`query-engine.md`](./query-engine.md) | `QueryEngine` interface and associated result/handle types |
 | [`file-types.md`](./file-types.md) | File-type registry (`getFileTypeInfo`, `getViewerKind`, `getDuckDbReadFn`, ...) |
