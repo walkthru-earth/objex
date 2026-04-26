@@ -167,6 +167,40 @@ function normalizeAssetsField(
 	return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * Coerce a stac-geoparquet `datetime` cell into an ISO 8601 string.
+ *
+ * The stac-geoparquet spec mandates a native Parquet TIMESTAMP (microseconds,
+ * UTC-adjusted) rather than a string column, so DuckDB-WASM hands these back
+ * as a `BigInt` of microseconds since epoch in the common path. JS `Date` and
+ * primitive `number` (ms) are also accepted for tolerance. Anything else is
+ * pushed through `String()` and only kept if `Date.parse` accepts it, so
+ * malformed values do not propagate as unparseable ISO strings that quietly
+ * collapse the datetime facet.
+ */
+function coerceDatetimeToIso(value: unknown): string | undefined {
+	if (value == null) return undefined;
+	if (value instanceof Date) {
+		const ms = value.getTime();
+		return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+	}
+	if (typeof value === 'bigint') {
+		// Parquet TIMESTAMP(MICROS) → microseconds since epoch.
+		const ms = Number(value / 1000n);
+		return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+	}
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		// Heuristic: > 1e14 is microseconds, anything smaller is milliseconds.
+		const ms = Math.abs(value) > 1e14 ? Math.floor(value / 1000) : value;
+		return new Date(ms).toISOString();
+	}
+	if (typeof value === 'string') {
+		const t = Date.parse(value);
+		return Number.isFinite(t) ? new Date(t).toISOString() : undefined;
+	}
+	return undefined;
+}
+
 /** Normalize the `links` field, resolving relative hrefs against `baseUrl`. */
 function normalizeLinksField(value: unknown, baseUrl: string): StacLink[] | undefined {
 	if (!Array.isArray(value)) return undefined;
@@ -218,13 +252,35 @@ export function stacRowToItem(
 
 	const properties: Record<string, unknown> = {};
 	// Hoist common STAC-property columns that live at row level in stac-geoparquet.
+	const SCALAR_PROP_KEYS = new Set([
+		'gsd',
+		'platform',
+		'constellation',
+		'instruments',
+		'mission',
+		'license'
+	]);
+	const TIMESTAMP_PROP_KEYS = new Set([
+		'datetime',
+		'start_datetime',
+		'end_datetime',
+		'created',
+		'updated'
+	]);
 	for (const [key, value] of Object.entries(row)) {
 		if (value === null || value === undefined) continue;
 		if (key.startsWith('proj:') || key.startsWith('raster:') || key.startsWith('eo:')) {
 			properties[key] = value;
+			continue;
 		}
-		if (key === 'datetime') {
-			properties.datetime = value instanceof Date ? value.toISOString() : String(value);
+		if (TIMESTAMP_PROP_KEYS.has(key)) {
+			const iso = coerceDatetimeToIso(value);
+			if (iso) properties[key] = iso;
+			continue;
+		}
+		if (SCALAR_PROP_KEYS.has(key)) {
+			properties[key] = value;
+			continue;
 		}
 		if (key === 'bands') {
 			properties.bands = value;
