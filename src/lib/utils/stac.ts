@@ -199,6 +199,26 @@ export function buildMosaicSourceMeta(
 	return null;
 }
 
+/**
+ * Stable spatial cell key for an item, used to dedupe revisits when the
+ * caller wants only the freshest scene per footprint. STAC providers
+ * default to descending-datetime sort, so the first item per key is the
+ * newest. Prefers STAC `grid:code`, then Sentinel-2 MGRS triplet, then
+ * `s2:mgrs_tile`, then a rounded bbox so non-S2 providers still dedupe.
+ */
+export function spatialCellKey(item: StacItem, bbox: [number, number, number, number]): string {
+	const props = (item.properties ?? {}) as Record<string, unknown>;
+	const grid = props['grid:code'];
+	if (typeof grid === 'string' && grid) return `g:${grid}`;
+	const utm = props['mgrs:utm_zone'];
+	const band = props['mgrs:latitude_band'];
+	const sq = props['mgrs:grid_square'];
+	if (utm != null && band != null && sq != null) return `m:${utm}${band}${sq}`;
+	const s2 = props['s2:mgrs_tile'];
+	if (typeof s2 === 'string' && s2) return `m:${s2}`;
+	return `b:${bbox[0].toFixed(3)},${bbox[1].toFixed(3)},${bbox[2].toFixed(3)},${bbox[3].toFixed(3)}`;
+}
+
 // Provider-specific asset key conventions. Each entry maps a BandSlot to the
 // asset keys providers are known to use. First match wins, so list more
 // specific keys before generic ones.
