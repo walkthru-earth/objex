@@ -73,7 +73,7 @@ export {
 	normalizeProvider
 } from './utils/connection-identity.js';
 // Error handling
-export { handleLoadError } from './utils/error.js';
+export { handleLoadError, isAbortError } from './utils/error.js';
 // Data export / serialization
 export { escapeCsvField, serializeToCsv, serializeToJson } from './utils/export.js';
 // File sorting
@@ -110,6 +110,28 @@ export {
 	extractGeometryTypes,
 	readParquetMetadata
 } from './utils/parquet-metadata.js';
+// STAC facets (auto-detected filters, sorts, slim views)
+export type {
+	DatetimeFacet,
+	EnumFacet,
+	EnumFacetField,
+	Facet,
+	FacetSet,
+	FacetSort,
+	FacetState,
+	NumericFacet,
+	NumericFacetField,
+	StacItemView
+} from './utils/stac-facets.js';
+export {
+	applyFacets,
+	buildFacets,
+	DATETIME_HISTOGRAM_BINS,
+	emptyFacetState,
+	extractItemView,
+	hasActiveFilters,
+	sortViews
+} from './utils/stac-facets.js';
 export type {
 	StacBboxStruct,
 	StacGeoparquetRow,
@@ -124,6 +146,27 @@ export {
 	STAC_GEOPARQUET_REQUIRED_COLUMNS,
 	stacRowToItem
 } from './utils/stac-geoparquet.js';
+// STAC API filter push-down (CQL2 + native query params)
+export type {
+	StacApiCapabilities,
+	StacNativeQuery,
+	ToNativeQueryOptions
+} from './utils/stac-pushdown.js';
+export {
+	residualState,
+	sniffApiCapabilities,
+	toCql2Filter,
+	toNativeQuery
+} from './utils/stac-pushdown.js';
+// StacSource contract (unified ingestion: api, parquet, static)
+export type {
+	StacSource,
+	StacSourceBatch,
+	StacSourceCapabilities,
+	StacSourceKind,
+	StacSourceRequest
+} from './utils/stac-source.js';
+export { emptyPushdown } from './utils/stac-source.js';
 export type { Defaults, ParsedStorageUrl, StorageProvider } from './utils/storage-url.js';
 export { describeParseResult, looksLikeUrl, parseStorageUrl } from './utils/storage-url.js';
 export type { GeoType, ParsedGeometry } from './utils/wkb.js';
