@@ -11,13 +11,6 @@ graph TD
         CD[ConnectionDialog]
         STB[StatusBar]
     end
-    subgraph browser
-        FTS --> FB[FileBrowser]
-        FB --> FR[FileRow]
-        FB --> BC[Breadcrumb]
-        FB --> SBar[SearchBar]
-        FB --> DZ[DropZone]
-    end
     subgraph viewers["viewers/ (20+)"]
         VR[ViewerRouter] -->|by ext| TV[TableViewer]
         VR --> CV[CogViewer] --> CC[CogControls]
@@ -38,7 +31,7 @@ graph TD
 | Directory | Files | Role | Used by |
 |-----------|-------|------|---------|
 | `viewers/` | 33 | Per-format viewers (19 routed incl. STAC tab + Mosaic + MultiCOG, plus sub-components) | ViewerRouter → +page.svelte |
-| `browser/` | 10 | File tree, search, upload, dialogs | FileTreeSidebar → Sidebar → +page.svelte |
+| `browser/` | 1 | FileTreeSidebar (read-only object tree) | Sidebar → +page.svelte |
 | `layout/` | 8 | Sidebar, tabs, status bar, toggles, about sheet | +page.svelte, +layout.svelte |
 | `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |
 | `viewers/map/` | 2 | MapContainer, AttributeTable | GeoParquetMapViewer, PmtilesMapView, MapViewer |

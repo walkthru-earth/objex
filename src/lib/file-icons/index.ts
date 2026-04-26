@@ -4,7 +4,7 @@
  * Single source of truth for extension → icon, color, label, category,
  * viewer, DuckDB read function, MIME type, and queryability.
  *
- * Used by: FileRow, FileTreeSidebar, ViewerRouter, TableViewer, WasmQueryEngine, etc.
+ * Used by: FileTreeSidebar, ViewerRouter, TableViewer, WasmQueryEngine, etc.
  */
 
 // ---------------------------------------------------------------------------

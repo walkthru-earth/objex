@@ -14,8 +14,8 @@ graph LR
 
 | File | Exports | Used by |
 |------|---------|---------|
-| `index.ts` | `getFileTypeInfo()`, `getDuckDbReadFn()`, `buildDuckDbSource()`, `isCloudNativeFormat()`, `getViewerKind()`, `isQueryable()`, `getMimeType()` | StatusBar, FileRow, ViewerRouter, TableViewer, query/wasm, +page.svelte, lib/index.ts |
-| `FileTypeIcon.svelte` | Icon component (Lucide icons by category) | FileRow, TabBar |
+| `index.ts` | `getFileTypeInfo()`, `getDuckDbReadFn()`, `buildDuckDbSource()`, `isCloudNativeFormat()`, `getViewerKind()`, `isQueryable()`, `getMimeType()` | StatusBar, FileTreeSidebar, ViewerRouter, TableViewer, query/wasm, +page.svelte, lib/index.ts |
+| `FileTypeIcon.svelte` | Icon component (Lucide icons by category) | FileTreeSidebar, TabBar |
 
 Types: `FileCategory`, `ViewerKind`, `DuckDbReadFn`, `FileTypeInfo` (interface).
 Published to npm. No Svelte dependency in `index.ts`.

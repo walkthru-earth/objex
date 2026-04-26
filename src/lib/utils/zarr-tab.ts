@@ -1,7 +1,6 @@
 /**
  * Zarr tab-opening helper.
- * Centralizes Zarr store tab creation to avoid duplicating the same logic
- * across FileBrowser, FileRow, FileTreeSidebar, and +page.svelte.
+ * Centralizes Zarr store tab creation across FileTreeSidebar and +page.svelte.
  *
  * Kept separate from zarr.ts to avoid adding a store dependency to a pure utility.
  */
