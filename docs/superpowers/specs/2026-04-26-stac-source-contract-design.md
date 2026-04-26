@@ -1,10 +1,27 @@
 # StacSource Contract — Slice 1 Design
 
 **Date:** 2026-04-26
-**Status:** Approved for implementation
+**Status:** Implemented (slices 1-5 landed together, see "Actual scope landed" below)
 **Scope:** Slice 1 of a multi-slice initiative to unify the three STAC ingestion paths (STAC API, stac-geoparquet, self-contained static catalog) behind a single contract, with `pushedDown` / `residual` reporting per batch and capability-aware UI.
 
-This slice is a **zero-functional-change refactor**. It introduces the contract and ports the three existing paths behind it. No new push-down, no UI badges, no streaming improvements. Those land in slices 2-5.
+This slice was originally drafted as a **zero-functional-change refactor**. It was scoped to introduce the contract and port the three existing paths behind it, with no new push-down, no UI badges, no streaming improvements.
+
+## Actual scope landed
+
+In the course of implementation the contract refactor and the slice 2-5 follow-ups proved to be hard to ship independently without churning the same orchestration loop multiple times in close succession. The PR that lands this design therefore includes:
+
+- **Slice 1**: the `StacSource` contract (`utils/stac-source.ts`), the three impls (`utils/stac-source-api.ts`, `utils/stac-source-static.ts`, `query/stac-source-parquet.ts`), the dispatch factory (`query/stac-source-factory.ts`), and the `StacMosaicViewer::loadMosaic` collapse onto a single orchestration loop.
+- **Slice 2 (partial)**: `utils/stac-pushdown.ts` (`sniffApiCapabilities`, `toNativeQuery`, `toCql2Filter`, `residualState`). Wiring into `stac-source-api.ts` is staged for the immediate follow-up.
+- **Slice 3 (partial)**: parquet datetime push-down with `start_datetime`/`end_datetime` interval support (catches Landsat composites / climate reanalysis). The streaming `conn.send()` cursor and property push beyond datetime stay deferred.
+- **Slice 4**: NOT landed. Static-catalog extent pruning is still future work.
+- **Slice 5 (UI portion)**: `StacFilterPanel`, `StacDatetimeBar`, `StacItemStrip`, `StacItemInspector`, `StacRangeSlider`, plus `utils/stac-facets.ts` (auto-faceted state derivation) and `utils/lru.ts` (bounded per-source caches required by the deck.gl viewer-memory checklist in `CLAUDE.md`).
+
+## Non-goals still respected
+
+- No new wire format (no CQL2 GET/POST round-tripped to a server, no `collections=` parameter beyond what `hydrateStacItems` already plumbs through).
+- No POST `/search` for long filters.
+- No Aggregations extension support.
+- No `objex-utils` promotion (still in-app, slice 6).
 
 ---
 
