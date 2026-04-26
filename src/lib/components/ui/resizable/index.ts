@@ -3,11 +3,10 @@ import Handle from './resizable-handle.svelte';
 import PaneGroup from './resizable-pane-group.svelte';
 
 export {
-	PaneGroup,
-	Pane,
 	Handle,
-	//
-	PaneGroup as ResizablePaneGroup,
+	Handle as ResizableHandle,
 	Pane as ResizablePane,
-	Handle as ResizableHandle
+	PaneGroup,
+	//
+	PaneGroup as ResizablePaneGroup
 };

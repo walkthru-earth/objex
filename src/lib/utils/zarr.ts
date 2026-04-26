@@ -213,59 +213,6 @@ function isGeoZarrAttrs(attrs: Record<string, any> | undefined): boolean {
 	return hasMultiscales && hasSpatial && hasCrs;
 }
 
-/**
- * Convert a decoded GeoZarr tile (band-planar or packed RGB) into RGBA
- * `ImageData` for deck.gl-zarr's `renderTile` callback. Input is expected to
- * be a Uint8 or Uint16 typed array with either 3 interleaved bytes per pixel
- * or 3 planar bands of width*height values.
- *
- * For 16-bit data the caller supplies the rescale range so the CPU
- * normalization matches what the GPU `LinearRescale` module would produce.
- */
-export function zarrTileToImageData(
-	raw: ArrayLike<number> & { length: number },
-	width: number,
-	height: number,
-	opts: {
-		layout?: 'packed' | 'planar';
-		bands?: 1 | 3;
-		rescaleMin?: number;
-		rescaleMax?: number;
-	} = {}
-): ImageData {
-	const bands = opts.bands ?? 3;
-	const layout = opts.layout ?? 'packed';
-	const min = opts.rescaleMin ?? 0;
-	const max = opts.rescaleMax ?? 255;
-	const range = max - min || 1;
-	const pixelCount = width * height;
-	const rgba = new Uint8ClampedArray(pixelCount * 4);
-	for (let i = 0; i < pixelCount; i++) {
-		let r = 0;
-		let g = 0;
-		let b = 0;
-		if (bands === 1) {
-			const v = Number(raw[i]);
-			r = g = b = (v - min) / range;
-		} else if (layout === 'planar') {
-			r = (Number(raw[i]) - min) / range;
-			g = (Number(raw[pixelCount + i]) - min) / range;
-			b = (Number(raw[2 * pixelCount + i]) - min) / range;
-		} else {
-			const base = i * 3;
-			r = (Number(raw[base]) - min) / range;
-			g = (Number(raw[base + 1]) - min) / range;
-			b = (Number(raw[base + 2]) - min) / range;
-		}
-		const idx = i * 4;
-		rgba[idx] = Math.round(Math.max(0, Math.min(1, r)) * 255);
-		rgba[idx + 1] = Math.round(Math.max(0, Math.min(1, g)) * 255);
-		rgba[idx + 2] = Math.round(Math.max(0, Math.min(1, b)) * 255);
-		rgba[idx + 3] = 255;
-	}
-	return new ImageData(rgba, width, height);
-}
-
 // ---------------------------------------------------------------------------
 // Kept helpers
 // ---------------------------------------------------------------------------

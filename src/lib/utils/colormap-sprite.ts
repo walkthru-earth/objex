@@ -32,9 +32,6 @@ export const COLORMAP_SPRITE_URL = colormapsPngUrl;
 /** Number of distinct ramps encoded as 1-pixel-tall rows in the sprite. */
 export const COLORMAP_SPRITE_LAYERS = Object.keys(COLORMAP_INDEX).length;
 
-/** Width of each ramp row in pixels (also the sampling resolution). */
-export const COLORMAP_SPRITE_WIDTH = 256;
-
 /** All ramp names, sorted alphabetically (matches `COLORMAP_INDEX` key order). */
 export const COLORMAP_NAMES = Object.keys(COLORMAP_INDEX).sort() as ColormapName[];
 
@@ -69,23 +66,4 @@ export async function getColormapTexture(device: Device): Promise<Texture> {
 	const texture = createColormapTexture(device, imageData);
 	textureCache.set(device, texture);
 	return texture;
-}
-
-/**
- * CSS `background` properties that render a single colormap row from the
- * shipped sprite. Vertically scales the sprite so each 1-pixel row fills
- * the container's full height, then offsets to land on the requested layer.
- * Returns `undefined` for unknown ramp names so the caller can fall back.
- */
-export function spriteBackgroundStyle(name: ColormapName, heightPx: number): string | undefined {
-	const index = COLORMAP_INDEX[name];
-	if (index === undefined) return undefined;
-	const totalHeight = COLORMAP_SPRITE_LAYERS * heightPx;
-	const yOffset = index * heightPx;
-	return [
-		`background-image: url("${COLORMAP_SPRITE_URL}")`,
-		'background-repeat: no-repeat',
-		`background-size: 100% ${totalHeight}px`,
-		`background-position: 0 -${yOffset}px`
-	].join('; ');
 }

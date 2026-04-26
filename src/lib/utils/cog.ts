@@ -65,12 +65,9 @@ export type ColorRampId = ColormapName;
 
 // Previously this file hosted a handcoded `COLOR_RAMP_STOPS` table plus
 // `interpolateRamp` / `rampToGradientCss` helpers used by both the CPU
-// single-band baker and the CogControls UI preview. All three callers
-// migrated to the shipped `colormaps.png` sprite (107 ramps, GPU-sampled
-// via the `Colormap` shader module), so previews are now CSS backgrounds
-// sliced from the sprite — no handcoded stops needed. See
-// `utils/colormap-sprite.ts::spriteBackgroundStyle` and
-// `components/viewers/CogControls.svelte::rampBg`.
+// single-band baker and the CogControls UI preview. All callers migrated
+// to the shipped `colormaps.png` sprite (107 ramps, GPU-sampled via the
+// `Colormap` shader module). See `utils/colormap-sprite.ts`.
 
 // ─── Band configuration ─────────────────────────────────────────
 
