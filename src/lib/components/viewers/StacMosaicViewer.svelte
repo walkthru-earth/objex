@@ -1,7 +1,7 @@
 <script lang="ts">
 import { GeoJsonLayer } from '@deck.gl/layers';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { COGLayer, MosaicLayer } from '@developmentseed/deck.gl-geotiff';
+import { COGLayer, MosaicLayer, MultiCOGLayer } from '@developmentseed/deck.gl-geotiff';
 import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
@@ -24,6 +24,7 @@ import {
 import { resolveCloudUrl } from '../../utils/cloud-url.js';
 import {
 	type BandConfig,
+	buildBandRenderPipeline,
 	buildDataTypeLabel,
 	type CustomTileData,
 	clampBounds,
@@ -129,6 +130,18 @@ let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
 const SOURCE_CACHE_MAX = 64;
 let geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
 let presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
+// Parallel cache of resolved presigned URLs, keyed by the original href. The
+// multi-asset mosaic path needs a synchronous href→url lookup so the per-item
+// MultiCOGLayer derivation can attach all 3 channel URLs in one render tick;
+// `presignCache` only stores the in-flight `Promise<string>`. Populated in
+// `presignHref` once the promise resolves. Bounded LRU (cap matches
+// `presignCache`) so non-COG hrefs from `StacItemStrip` thumbnails and
+// `StacItemInspector` asset table cannot grow without bound (those entries
+// are not iterated by the `commitSources()` itemsRemoved diff, which only
+// walks `extractCogAssets`). `commitSources()` still evicts COG asset
+// entries promptly on item drop / asset swap / viewer reset / teardown so
+// memory tracks the rendered set rather than waiting for LRU pressure.
+let resolvedHrefByOriginal = new LruCache<string, string>({ max: SOURCE_CACHE_MAX });
 let sourceHrefById = new Map<string, string>();
 // Per-source visible-tile histograms, summed across sources in `aggregate`.
 let sourceHistograms = new Map<string, Uint32Array>();
@@ -324,6 +337,64 @@ const mosaicLayer = $derived.by(() => {
 	return new MosaicLayer<MosaicSourceMeta, GeoTIFF>(mosaicProps);
 });
 
+// Multi-asset mosaic memory ceiling: with N items × 3 distinct assets the
+// worst case is 3N COG range-request streams. `mosaicItemLimit` (settings)
+// bounds N. If `multiCogLayers.length × 3` exceeds 300 the user gets a
+// warning HUD pill (see template).
+const multiCogLayers = $derived.by(() => {
+	const c = composite;
+	if (!c) return [] as MultiCOGLayer[];
+	if (isSingleAssetComposite(c)) return [] as MultiCOGLayer[];
+	const views = filteredViews;
+	if (views.length === 0) return [] as MultiCOGLayer[];
+	const out: MultiCOGLayer[] = [];
+	const rs = { ...rescale };
+	const gen = pipelineGen;
+	for (const view of views) {
+		const item = view.raw;
+		const itemAssets = extractCogAssets(item);
+		const sources: Record<string, { url: string }> = {};
+		for (const ref of [c.r, c.g, c.b]) {
+			if (sources[ref.assetKey]) continue;
+			const a = itemAssets.find((x) => x.key === ref.assetKey);
+			if (!a) continue;
+			// Sync lookup against the resolved-URL map populated by
+			// `presignHref`. If the presign hasn't settled yet, schedule it
+			// and skip this item this tick — the next render after the
+			// promise resolves will include it (the derivation re-runs when
+			// `pipelineGen` bumps or filteredViews changes; we also poke
+			// the chain via committing on presign resolution where needed).
+			const resolved = resolvedHrefByOriginal.get(a.href);
+			if (resolved) {
+				sources[a.key] = { url: resolved };
+			} else {
+				presignHref(a.href);
+			}
+		}
+		// Skip items whose 3 channels don't all have resolved URLs yet.
+		if (!sources[c.r.assetKey] || !sources[c.g.assetKey] || !sources[c.b.assetKey]) continue;
+		// `onTileError` is forwarded by our pnpm patch but is not in the
+		// generated MultiCOGLayer .d.ts. Widen at the boundary.
+		const layerProps: any = {
+			id: `mosaic-multicog-${view.id}-p${gen}`,
+			sources,
+			composite: { r: c.r.assetKey, g: c.g.assetKey, b: c.b.assetKey },
+			renderPipeline: buildBandRenderPipeline({
+				noDataVal: 0,
+				rescale: rs
+			}),
+			pool: pool ?? undefined,
+			epsgResolver,
+			onTileError: (err: Error) => {
+				if (isAbortError(err)) return;
+				console.error(err);
+			}
+		};
+		out.push(new MultiCOGLayer(layerProps));
+	}
+	return out;
+});
+
 const footprintLayer = $derived.by(() => {
 	if (!showFootprints) return null;
 	const views = committedViews as StacItemView[];
@@ -423,7 +494,17 @@ const footprintLayer = $derived.by(() => {
 
 const layers = $derived.by(() => {
 	const out: unknown[] = [];
-	if (mosaicLayer) out.push(mosaicLayer);
+	const c = composite;
+	if (c && isSingleAssetComposite(c) && mosaicLayer) {
+		out.push(mosaicLayer);
+	} else if (c && !isSingleAssetComposite(c)) {
+		out.push(...multiCogLayers);
+	} else if (mosaicLayer) {
+		// Composite hasn't resolved yet (first batch not seeded). Keep the
+		// single-asset MosaicLayer painting the default-href mosaic so the
+		// user sees a frame as soon as items arrive.
+		out.push(mosaicLayer);
+	}
 	if (footprintLayer) out.push(footprintLayer);
 	return out;
 });
@@ -474,8 +555,13 @@ function resetViewer(): void {
 	filterState = emptyFacetState();
 	presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
 	geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
+	resolvedHrefByOriginal = new LruCache<string, string>({ max: SOURCE_CACHE_MAX });
 	sourceHrefById = new Map();
 	sourceHistograms = new Map();
+	if (multiCogRebuildHandle !== null) {
+		cancelAnimationFrame(multiCogRebuildHandle);
+		multiCogRebuildHandle = null;
+	}
 	loading = true;
 	error = null;
 	bounds = undefined;
@@ -532,6 +618,26 @@ function commitSources(): void {
 		seen.add(id);
 		sources.push(itemsRef[i]);
 		views.push(itemViewsRef[i]);
+	}
+	// Multi-asset eviction: MosaicLayer.onTileUnload only fires for the
+	// single-asset path (where `MosaicLayer` owns the inner TileLayer). On
+	// the multi-asset path (per-item MultiCOGLayer set) deck.gl unmounts the
+	// whole layer when an item drops, but the Svelte-side per-(item, asset)
+	// caches are not keyed by source id — they're keyed by href. Diff the
+	// previous committed view set against the next and evict every asset
+	// belonging to a dropped item. Symmetric with deck.gl's working set.
+	const nextIds = new Set(views.map((v) => v.id));
+	const itemsRemoved: StacItemView[] = [];
+	for (const prev of committedViews as StacItemView[]) {
+		if (!nextIds.has(prev.id)) itemsRemoved.push(prev);
+	}
+	for (const dropped of itemsRemoved) {
+		const itemAssets = extractCogAssets(dropped.raw);
+		for (const a of itemAssets) {
+			geotiffCache.delete(`${dropped.id}::${a.key}`);
+			presignCache.delete(a.href);
+			resolvedHrefByOriginal.delete(a.href);
+		}
 	}
 	committedSources = sources;
 	committedViews = views;
@@ -692,20 +798,53 @@ function extractConnectionKey(href: string): string | null {
 	return href.slice(prefix.length);
 }
 
+function doPresign(href: string): Promise<string> {
+	const normalized = resolveCloudUrl(href);
+	if (/^https?:\/\//i.test(normalized)) {
+		const key = extractConnectionKey(normalized);
+		if (key !== null) {
+			return buildHttpsUrlAsync({ ...tab, path: key } as Tab).catch(() => normalized);
+		}
+		return Promise.resolve(normalized);
+	}
+	return buildHttpsUrlAsync({ ...tab, path: normalized } as Tab).catch(() => normalized);
+}
+
+// Coalesced multi-asset rebuild scheduler. Many presigns can resolve in the
+// same tick when a viewport batch lands; bumping `pipelineGen` per resolve
+// would rebuild the `$derived multiCogLayers` once per resolution and remount
+// every visible MultiCOGLayer mid-pan. Schedule one rebuild per animation
+// frame instead so resolutions coalesce into a single re-derive. The handle
+// is captured so teardown / asset swap / reset can cancel a pending rAF
+// before it writes to `pipelineGen` post-cleanup.
+let multiCogRebuildHandle: number | null = null;
+function scheduleMultiCogRebuild(): void {
+	if (multiCogRebuildHandle !== null) return;
+	const c = composite;
+	if (!c || isSingleAssetComposite(c)) return;
+	multiCogRebuildHandle = requestAnimationFrame(() => {
+		multiCogRebuildHandle = null;
+		const cur = composite;
+		if (!cur || isSingleAssetComposite(cur)) return;
+		bumpPipeline();
+	});
+}
+
 function presignHref(href: string): Promise<string> {
 	let cached = presignCache.get(href);
 	if (!cached) {
-		const normalized = resolveCloudUrl(href);
-		if (/^https?:\/\//i.test(normalized)) {
-			const key = extractConnectionKey(normalized);
-			if (key !== null) {
-				cached = buildHttpsUrlAsync({ ...tab, path: key } as Tab).catch(() => normalized);
-			} else {
-				cached = Promise.resolve(normalized);
-			}
-		} else {
-			cached = buildHttpsUrlAsync({ ...tab, path: normalized } as Tab).catch(() => normalized);
-		}
+		// Populate `resolvedHrefByOriginal` once the promise settles so the
+		// multi-asset MultiCOGLayer derivation can attach URLs synchronously.
+		// On the multi-asset path, schedule a coalesced rebuild so items whose
+		// 3 channels just became available join the rendered set on the next
+		// frame. Cheap on the single-asset path (early return when composite
+		// is single-asset).
+		cached = doPresign(href).then((url) => {
+			const wasNew = !resolvedHrefByOriginal.has(href);
+			resolvedHrefByOriginal.set(href, url);
+			if (wasNew) scheduleMultiCogRebuild();
+			return url;
+		});
 		presignCache.set(href, cached);
 	}
 	return cached;
@@ -1087,7 +1226,12 @@ function setMosaicAssetKey(nextKey: string): void {
 	sourceHistograms.clear();
 	geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
 	presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
+	resolvedHrefByOriginal = new LruCache<string, string>({ max: SOURCE_CACHE_MAX });
 	sourceHrefById = new Map();
+	if (multiCogRebuildHandle !== null) {
+		cancelAnimationFrame(multiCogRebuildHandle);
+		multiCogRebuildHandle = null;
+	}
 
 	const remap = (
 		views: ReadonlyArray<StacItemView>
@@ -1187,8 +1331,13 @@ function cleanup(): void {
 	committedViews = [];
 	presignCache.clear();
 	geotiffCache.clear();
+	resolvedHrefByOriginal.clear();
 	sourceHrefById.clear();
 	sourceHistograms.clear();
+	if (multiCogRebuildHandle !== null) {
+		cancelAnimationFrame(multiCogRebuildHandle);
+		multiCogRebuildHandle = null;
+	}
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
 		try {
@@ -1373,6 +1522,13 @@ onDestroy(cleanup);
 		{#if error}
 			<div class="pointer-events-auto max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200">
 				{error}
+			</div>
+		{/if}
+		{#if composite && !isSingleAssetComposite(composite) && multiCogLayers.length * 3 > 300}
+			<div
+				class="pointer-events-auto max-w-sm rounded bg-yellow-900/80 px-2 py-1 text-xs text-yellow-200"
+			>
+				{t('map.multiCogMosaicHeavy')}
 			</div>
 		{/if}
 	</div>

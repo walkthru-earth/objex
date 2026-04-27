@@ -437,6 +437,7 @@ export const en: Record<string, string> = {
 	'map.mosaicNoAssets': 'None of the STAC items expose a usable COG asset URL.',
 	'map.multiCogMissingBands':
 		'This STAC item is missing the red/green/blue bands required for a composite.',
+	'map.multiCogMosaicHeavy': 'Multi-asset mosaic with many items, performance may degrade',
 	'map.multiCogPreset.label': 'Preset',
 	'map.multiCogPreset.trueColor': 'True Color',
 	'map.multiCogPreset.falseColorIR': 'False-Color IR',

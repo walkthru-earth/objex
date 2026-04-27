@@ -435,6 +435,7 @@ export const ar: Record<string, string> = {
 		'لا توجد عناصر في نطاق الخريطة الحالي. حرّك أو ابتعد، أو ارفع حد العناصر.',
 	'map.mosaicNoAssets': 'لا تحتوي عناصر STAC على عنوان URL صالح لأصل COG.',
 	'map.multiCogMissingBands': 'عنصر STAC هذا ينقصه نطاقات الأحمر والأخضر والأزرق اللازمة للتركيب.',
+	'map.multiCogMosaicHeavy': 'فسيفساء متعددة الأصول مع عدد كبير من العناصر، قد يتأثر الأداء',
 	'map.multiCogPreset.label': 'الإعداد المسبق',
 	'map.multiCogPreset.trueColor': 'ألوان طبيعية',
 	'map.multiCogPreset.falseColorIR': 'أشعة تحت حمراء كاذبة اللون',
