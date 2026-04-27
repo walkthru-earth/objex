@@ -186,6 +186,14 @@ export type {
 	StacSourceRequest
 } from './utils/stac-source.js';
 export { emptyPushdown } from './utils/stac-source.js';
+// STAC Storage Extension (region/requester-pays/custom-s3 endpoint hints)
+export type { StorageExtensionVersion, StorageHints } from './utils/stac-storage-extension.js';
+export {
+	applyStorageHintsToConnection,
+	detectStorageExtensionVersion,
+	emptyStorageHints,
+	extractStorageHints
+} from './utils/stac-storage-extension.js';
 export type { Defaults, ParsedStorageUrl, StorageProvider } from './utils/storage-url.js';
 export { describeParseResult, looksLikeUrl, parseStorageUrl } from './utils/storage-url.js';
 export type { GeoType, ParsedGeometry } from './utils/wkb.js';

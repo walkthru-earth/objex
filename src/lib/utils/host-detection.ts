@@ -9,6 +9,8 @@
  */
 
 import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
+import type { StacItem } from './stac.js';
+import { applyStorageHintsToConnection, extractStorageHints } from './stac-storage-extension.js';
 import type { StorageProvider } from './storage-url.js';
 import { isKnownBucketHost, parseStorageUrl } from './storage-url.js';
 
@@ -119,4 +121,36 @@ export function detectHostBucket(): DetectedHost | null {
 		rootPrefix,
 		bucketUrl: buildBucketUrl(parsed.provider, parsed.endpoint, parsed.bucket, parsed.region)
 	};
+}
+
+/**
+ * Enrich an in-progress connection-config draft with hints from a STAC Item
+ * that declares the Storage Extension (`storage:region`,
+ * `storage:requester_pays`, `storage:platform`, v2 `storage:schemes`).
+ *
+ * Modular by design, callers opt in. The existing `detectHostBucket` flow
+ * does NOT know about STAC, so call sites that already hold a representative
+ * `StacItem` (e.g. classification just after fetching a Catalog / Collection /
+ * ItemCollection) should funnel through this helper before handing the draft
+ * to `connectionStore.saveHostConnection` / `connectionStore.save`. Existing
+ * non-empty fields on the draft are preserved (this never clobbers a
+ * user-set value).
+ *
+ * Returns a shallow copy of `input` with hint fields filled in. Safe to call
+ * with an unrelated item, returns `input` untouched when the extension is
+ * absent or unparseable.
+ */
+export function applyStacItemStorageHints<T extends { region?: string; endpoint?: string }>(
+	input: T,
+	item: StacItem
+): T {
+	const hints = extractStorageHints(item);
+	const merged = applyStorageHintsToConnection(input, hints);
+	// Light tracing for development. Stripped from production builds via the
+	// Vite `import.meta.env.DEV` define. Intentionally one-line so it's cheap
+	// to leave in.
+	if (import.meta.env?.DEV && (hints.region || hints.endpoint || hints.requesterPays)) {
+		console.debug('[host-detection] applied STAC storage hints', hints);
+	}
+	return merged;
 }

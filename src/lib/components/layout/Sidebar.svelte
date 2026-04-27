@@ -111,6 +111,13 @@ async function handleAutoDetection() {
 		// Auto-connect immediately for ?url= param (zero-friction)
 		autoConnecting = true;
 		try {
+			// TODO(stac-storage-ext): when `rawUrl` resolves to STAC content,
+			// peek-fetch the JSON, classify with `classifyStac`, pick the first
+			// item with non-empty hints, and pass `detected` through
+			// `applyStacItemStorageHints(detected, item)` BEFORE
+			// `saveHostConnection` so `storage:region` / `storage:platform` /
+			// `storage:requester_pays` flow into the auto-created connection.
+			// Helper lives in `utils/host-detection.ts` -- modular, callers opt in.
 			const connId = await connections.saveHostConnection(detected);
 			const conn = connections.getById(connId);
 			if (!conn) return;
