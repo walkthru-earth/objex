@@ -36,6 +36,7 @@ import {
 	isSingleAssetComposite,
 	pickNaturalColorComposite
 } from '../../utils/cog-asset.js';
+import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import { isStacItem, type StacItem, type StacRoutableKind } from '../../utils/stac.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
@@ -81,7 +82,7 @@ type MultiPixelValue = { lng: number; lat: number; entries: MultiPixelEntry[] };
 let pixelValue = $state<MultiPixelValue | null>(null);
 let inspecting = $state(false);
 let proj4DefRef: string | null = null;
-let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+let detachInspector: (() => void) | null = null;
 // Per-asset-key GeoTIFF cache. Opening the GeoTIFF up-front lets buildRgbLayer
 // run selectCogPipeline (which inspects sampleFormat / band count) and emit a
 // custom getTileData/renderTile pair that honors per-channel bandIndex picks.
@@ -149,10 +150,10 @@ function resetViewer(): void {
 }
 
 function removeClickHandler(): void {
-	if (mapRef && clickHandlerRef) {
-		mapRef.off('click', clickHandlerRef);
+	if (detachInspector) {
+		detachInspector();
+		detachInspector = null;
 	}
-	clickHandlerRef = null;
 }
 
 async function ensureGeotiff(assetKey: string): Promise<GeoTIFF | null> {
@@ -179,21 +180,19 @@ async function ensureGeotiff(assetKey: string): Promise<GeoTIFF | null> {
 
 function setupClickHandler(map: maplibregl.Map): void {
 	removeClickHandler();
-	const handler = async (e: maplibregl.MapMouseEvent) => {
-		const c = composite;
-		if (!c) return;
-		const channels: { channel: 'R' | 'G' | 'B' | 'A'; ref: typeof c.r | undefined }[] = [
-			{ channel: 'R', ref: c.r },
-			{ channel: 'G', ref: c.g },
-			{ channel: 'B', ref: c.b },
-			{ channel: 'A', ref: c.a }
-		];
-		const active = channels.filter(
-			(x): x is { channel: 'R' | 'G' | 'B' | 'A'; ref: NonNullable<typeof c.r> } => Boolean(x.ref)
-		);
-		const signal = abortController.signal;
-		inspecting = true;
-		try {
+	detachInspector = attachPixelInspector<MultiPixelValue>(map, {
+		probe: async ({ lng, lat, signal }) => {
+			const c = composite;
+			if (!c) return null;
+			const channels: { channel: 'R' | 'G' | 'B' | 'A'; ref: typeof c.r | undefined }[] = [
+				{ channel: 'R', ref: c.r },
+				{ channel: 'G', ref: c.g },
+				{ channel: 'B', ref: c.b },
+				{ channel: 'A', ref: c.a }
+			];
+			const active = channels.filter(
+				(x): x is { channel: 'R' | 'G' | 'B' | 'A'; ref: NonNullable<typeof c.r> } => Boolean(x.ref)
+			);
 			const entries = await Promise.all(
 				active.map(async ({ channel, ref }): Promise<MultiPixelEntry> => {
 					const geotiff = await ensureGeotiff(ref.assetKey);
@@ -203,8 +202,8 @@ function setupClickHandler(map: maplibregl.Map): void {
 					try {
 						const result: PixelValue | null = await readPixelAtLngLat(
 							geotiff,
-							e.lngLat.lng,
-							e.lngLat.lat,
+							lng,
+							lat,
 							proj4DefRef,
 							pool,
 							signal
@@ -216,14 +215,17 @@ function setupClickHandler(map: maplibregl.Map): void {
 					}
 				})
 			);
-			if (signal.aborted) return;
-			pixelValue = { lng: e.lngLat.lng, lat: e.lngLat.lat, entries };
-		} finally {
+			if (signal.aborted) return null;
+			return { lng, lat, entries };
+		},
+		onStart: () => {
+			inspecting = true;
+		},
+		onResult: (result) => {
+			pixelValue = result;
 			inspecting = false;
 		}
-	};
-	clickHandlerRef = handler;
-	map.on('click', handler);
+	});
 }
 
 function scheduleLayerRebuild(map: maplibregl.Map, signal: AbortSignal): void {

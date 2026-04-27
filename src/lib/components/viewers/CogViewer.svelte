@@ -30,6 +30,7 @@ import {
 	selectCogPipeline
 } from '../../utils/cog.js';
 import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
+import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import CogControls from './CogControls.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -93,7 +94,7 @@ let geotiffRef: GeoTIFF | null = null;
 let proj4DefRef: string | null = null;
 let sampleFormatRef = 1;
 let isTiledRef = true;
-let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+let detachInspector: (() => void) | null = null;
 let resolvedHttpsUrl: string | null = null;
 // LinearRescale operates on a 0..1 scalar. Two cases expose a meaningful
 // slider: (1) the library-default uint RGB pipeline (scales `color.rgb`
@@ -175,34 +176,27 @@ function onMapReady(map: maplibregl.Map) {
 // ─── Click handler for pixel inspection ──────────────────────────
 
 function removeClickHandler() {
-	if (mapRef && clickHandlerRef) {
-		mapRef.off('click', clickHandlerRef);
-		clickHandlerRef = null;
+	if (detachInspector) {
+		detachInspector();
+		detachInspector = null;
 	}
 }
 
 function setupClickHandler(map: maplibregl.Map) {
 	removeClickHandler();
-	clickHandlerRef = async (e: maplibregl.MapMouseEvent) => {
-		if (!geotiffRef) return;
-		inspecting = true;
-		try {
-			const result = await readPixelAtLngLat(
-				geotiffRef,
-				e.lngLat.lng,
-				e.lngLat.lat,
-				proj4DefRef,
-				pool,
-				abortController.signal
-			);
+	detachInspector = attachPixelInspector<PixelValue>(map, {
+		probe: async ({ lng, lat, signal }) => {
+			if (!geotiffRef) return null;
+			return readPixelAtLngLat(geotiffRef, lng, lat, proj4DefRef, pool, signal);
+		},
+		onStart: () => {
+			inspecting = true;
+		},
+		onResult: (result) => {
 			pixelValue = result;
-		} catch {
-			pixelValue = null;
-		} finally {
 			inspecting = false;
 		}
-	};
-	map.on('click', clickHandlerRef);
+	});
 }
 
 // ─── Core load function ──────────────────────────────────────────

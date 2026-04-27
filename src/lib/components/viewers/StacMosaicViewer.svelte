@@ -50,6 +50,7 @@ import {
 } from '../../utils/cog-asset.js';
 import { isAbortError } from '../../utils/error.js';
 import { LruCache } from '../../utils/lru.js';
+import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import {
 	buildMosaicSourceMeta,
 	classifyStac,
@@ -121,7 +122,7 @@ const presetsForMosaic = $derived(availablePresets(cogAssets));
 let pixelValue = $state<PixelValue | null>(null);
 let pixelSourceId = $state<string | null>(null);
 let inspecting = $state(false);
-let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
+let detachInspector: (() => void) | null = null;
 
 // ─── Caches ────────────────────────────────────────────────────────
 // Bounded so panning does not grow memory forever. Eviction is wired to
@@ -686,36 +687,31 @@ function bumpPipeline(): void {
 }
 
 function removeClickHandler(): void {
-	if (mapRef && clickHandlerRef) {
-		mapRef.off('click', clickHandlerRef);
-		clickHandlerRef = null;
+	if (detachInspector) {
+		detachInspector();
+		detachInspector = null;
 	}
 }
 
+type MosaicProbeResult = { value: PixelValue; sourceId: string };
+
 function setupClickHandler(map: maplibregl.Map): void {
 	removeClickHandler();
-	clickHandlerRef = async (e: maplibregl.MapMouseEvent) => {
-		const lng = e.lngLat.lng;
-		const lat = e.lngLat.lat;
-		// Click against the rendered set, not the streaming buffer, so the
-		// pixel readout matches what the user is actually looking at. Reverse
-		// iteration matches MosaicLayer's z-order (last source on top).
-		const items = committedSources;
-		let hit: MosaicSourceMeta | undefined;
-		for (let i = items.length - 1; i >= 0; i--) {
-			const [w, s, east, n] = items[i].bbox;
-			if (lng >= w && lng <= east && lat >= s && lat <= n) {
-				hit = items[i];
-				break;
+	detachInspector = attachPixelInspector<MosaicProbeResult>(map, {
+		probe: async ({ lng, lat, signal }) => {
+			// Click against the rendered set, not the streaming buffer, so the
+			// pixel readout matches what the user is actually looking at. Reverse
+			// iteration matches MosaicLayer's z-order (last source on top).
+			const items = committedSources;
+			let hit: MosaicSourceMeta | undefined;
+			for (let i = items.length - 1; i >= 0; i--) {
+				const [w, s, east, n] = items[i].bbox;
+				if (lng >= w && lng <= east && lat >= s && lat <= n) {
+					hit = items[i];
+					break;
+				}
 			}
-		}
-		if (!hit) {
-			pixelValue = null;
-			pixelSourceId = null;
-			return;
-		}
-		inspecting = true;
-		try {
+			if (!hit) return null;
 			let geotiffPromise = geotiffCache.get(hit.id);
 			if (!geotiffPromise) {
 				geotiffPromise = (async () => {
@@ -728,25 +724,20 @@ function setupClickHandler(map: maplibregl.Map): void {
 				sourceHrefById.set(hit.id, hit.href);
 			}
 			const geotiff = await geotiffPromise;
-			const proj4Def = await resolveProj4Def(geotiff.crs, abortController.signal);
-			const result = await readPixelAtLngLat(
-				geotiff,
-				lng,
-				lat,
-				proj4Def,
-				pool,
-				abortController.signal
-			);
-			pixelValue = result;
-			pixelSourceId = hit.id;
-		} catch {
-			pixelValue = null;
-			pixelSourceId = null;
-		} finally {
+			const proj4Def = await resolveProj4Def(geotiff.crs, signal);
+			const result = await readPixelAtLngLat(geotiff, lng, lat, proj4Def, pool, signal);
+			if (!result) return null;
+			return { value: result, sourceId: hit.id };
+		},
+		onStart: () => {
+			inspecting = true;
+		},
+		onResult: (result) => {
+			pixelValue = result?.value ?? null;
+			pixelSourceId = result?.sourceId ?? null;
 			inspecting = false;
 		}
-	};
-	map.on('click', clickHandlerRef);
+	});
 }
 
 function onMapReady(map: maplibregl.Map): void {

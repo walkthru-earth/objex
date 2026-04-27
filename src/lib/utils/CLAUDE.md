@@ -43,6 +43,7 @@ graph TD
         STACAPI[stac-source-api.ts<br/>createApiSource]
         STACSTAT[stac-source-static.ts<br/>createStaticSource]
         LRU[lru.ts<br/>LruCache]
+        MPI[map-pixel-inspect.ts<br/>attachPixelInspector]
     end
     WKB --> GA
     PM --> GA
@@ -102,3 +103,4 @@ graph TD
 | `geometry-type.ts` | `parseGeometryTypeCrs()`, `isWgs84Crs()`, `buildTransformExpr()`, `wrapWkbWithCrs()`, `GeometryTypeInfo` | query/wasm.ts, TableViewer |
 | `error.ts` | `handleLoadError()`, `isAbortError()` (recognizes raw `DOMException`, `_SourceError("Failed to fetch")` whose cause is AbortError, and `/\baborted?\b/i` text from `@developmentseed/geotiff`) | ImageViewer, MediaViewer, RawViewer, CodeViewer, PdfViewer, ModelViewer, MarkdownViewer, NotebookViewer, StacMosaicViewer, lib/index.ts |
 | `lru.ts` | `LruCache<K,V>` (move-to-end on `get`, evicts oldest past `max`, optional `onEvict`). Used to bound per-source caches in viewers whose source list mutates with viewport changes (e.g. `StacMosaicViewer`'s `geotiffCache`/`presignCache`) so panning does not grow memory forever. Pair with `MosaicLayer.onTileUnload` for symmetric eviction with deck.gl's tile cache. | StacMosaicViewer |
+| `map-pixel-inspect.ts` | `attachPixelInspector(map, {probe, onStart, onResult})` → `detach()`. Framework-agnostic click-to-inspect helper used by `CogViewer`, `StacMosaicViewer`, `MultiCogViewer`. Subscribes to `map.on('click', ...)`, manages a per-click `AbortController` (a fast second click cancels the first probe) and surfaces the probe payload (or `null` on probe miss / non-helper abort) through `onResult`. `detach()` removes the listener AND aborts the in-flight probe. `MapLike` is a minimal interface (`on('click', handler)` / `off('click', handler)` with `{lngLat: {lng, lat}}`); no `maplibre-gl` / `deck.gl` / Svelte imports. Each viewer keeps its own `pixelValue` shape — the probe callback returns whatever payload it wants (single `PixelValue`, mosaic `{value, sourceId}`, or per-channel `MultiPixelValue`). | CogViewer, StacMosaicViewer, MultiCogViewer |
