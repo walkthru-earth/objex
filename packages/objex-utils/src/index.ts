@@ -68,12 +68,35 @@ export type {
 	Theme,
 	WriteResult
 } from '../../../src/lib/types.js';
+// Channel composite presets + URL round-trip (unified RGB picker)
+export type { PresetDef } from '../../../src/lib/utils/channel-composite.js';
+export {
+	applyPreset,
+	availablePresets,
+	compositeFromUrl,
+	compositeToUrl,
+	PRESETS,
+	presetMatchesComposite
+} from '../../../src/lib/utils/channel-composite.js';
 // Cloud URL resolution
 export {
 	getNativeScheme,
 	resolveCloudUrl,
 	safeDecodeURIComponent
 } from '../../../src/lib/utils/cloud-url.js';
+// COG asset enumeration (unified RGB picker)
+export type {
+	ChannelComposite,
+	ChannelRef,
+	CogAsset
+} from '../../../src/lib/utils/cog-asset.js';
+export {
+	allChannelsBand0,
+	extractCogAssets,
+	isSingleAssetComposite,
+	pickNaturalColorComposite,
+	syntheticSelfAsset
+} from '../../../src/lib/utils/cog-asset.js';
 // COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
 // MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
 // imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,

@@ -55,6 +55,16 @@ export {
 } from './storage/providers.js';
 export { UrlAdapter } from './storage/url-adapter.js';
 export type { Connection, ConnectionConfig, FileEntry, Tab, Theme, WriteResult } from './types.js';
+// Channel composite presets + URL round-trip (unified RGB picker)
+export type { PresetDef } from './utils/channel-composite.js';
+export {
+	applyPreset,
+	availablePresets,
+	compositeFromUrl,
+	compositeToUrl,
+	PRESETS,
+	presetMatchesComposite
+} from './utils/channel-composite.js';
 // Clipboard
 export { copyToClipboard, wireCodeCopyButtons } from './utils/clipboard.js';
 // Cloud URL resolution
@@ -62,6 +72,15 @@ export { getNativeScheme, resolveCloudUrl, safeDecodeURIComponent } from './util
 // COG utilities
 export type { CogInfo, GeoBounds } from './utils/cog.js';
 export { buildDataTypeLabel, clampBounds, SF_LABELS, safeClamp } from './utils/cog.js';
+// COG asset enumeration (unified RGB picker)
+export type { ChannelComposite, ChannelRef, CogAsset } from './utils/cog-asset.js';
+export {
+	allChannelsBand0,
+	extractCogAssets,
+	isSingleAssetComposite,
+	pickNaturalColorComposite,
+	syntheticSelfAsset
+} from './utils/cog-asset.js';
 export type { TypeCategory } from './utils/column-types.js';
 export { classifyType, typeBadgeClass, typeColor, typeLabel } from './utils/column-types.js';
 // Connection identity (dedup)
