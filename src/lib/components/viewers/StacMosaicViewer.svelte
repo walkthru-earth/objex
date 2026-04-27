@@ -73,6 +73,7 @@ import type { StacSource } from '../../utils/stac-source.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
+import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
 import MapContainer from './map/MapContainer.svelte';
 import StacDatetimeBar from './stac/StacDatetimeBar.svelte';
 import StacFilterPanel from './stac/StacFilterPanel.svelte';
@@ -1658,49 +1659,23 @@ onDestroy(cleanup);
 		{/if}
 	{/if}
 
-	{#if pixelValue}
-		<div
-			class="absolute bottom-2 left-2 z-10 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			<div class="mb-1 flex items-center justify-between gap-3">
-				<span class="font-medium">{t('cog.pixelValue')}</span>
-				<button
-					class="text-muted-foreground hover:text-card-foreground"
-					onclick={() => {
-						pixelValue = null;
-						pixelSourceId = null;
-					}}
-				>
-					&times;
-				</button>
-			</div>
-			<div class="space-y-0.5 text-muted-foreground">
-				<div>{pixelValue.lat.toFixed(6)}&deg;, {pixelValue.lng.toFixed(6)}&deg;</div>
-				<div class="text-[10px]">px ({pixelValue.col}, {pixelValue.row})</div>
-				{#if pixelSourceId}
-					<div class="truncate text-[10px]" title={pixelSourceId}>{pixelSourceId}</div>
-				{/if}
-			</div>
-			<div class="mt-1.5 space-y-0.5">
-				{#each pixelValue.values as val, i}
-					<div class="flex justify-between gap-2">
-						<span class="text-muted-foreground">{t('cog.band')} {i + 1}</span>
-						<span class="font-mono tabular-nums">
-							{Number.isInteger(val) ? val : val.toFixed(4)}
-						</span>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	{#if inspecting}
-		<div
-			class="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			{t('cog.reading')}
-		</div>
-	{/if}
+	<PixelInspectorPanel
+		lng={pixelValue?.lng ?? null}
+		lat={pixelValue?.lat ?? null}
+		rows={pixelValue
+			? (pixelValue.values.map((v, i) => ({
+					label: `${t('cog.band')} ${i + 1}`,
+					value: v
+				})) satisfies PixelInspectorRow[])
+			: null}
+		footnote={pixelValue ? `px (${pixelValue.col}, ${pixelValue.row})` : undefined}
+		extraLine={pixelSourceId ?? undefined}
+		onClose={() => {
+			pixelValue = null;
+			pixelSourceId = null;
+		}}
+		{inspecting}
+	/>
 
 	{#if showStrip && sourceCount > 0}
 		<div

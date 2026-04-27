@@ -90,4 +90,4 @@ Shared style/picker panel mounted by `CogViewer`, `MultiCogViewer`, and `StacMos
 
 | Sub-directory | Files | Role | Used by |
 |---------------|-------|------|---------|
-| `viewers/cog/` | 2 | ChannelPicker (one row, two dropdowns) + buildRgbLayer (COGLayer ↔ MultiCOGLayer dispatch). | CogControls, MultiCogViewer, StacMosaicViewer |
+| `viewers/cog/` | 3 | ChannelPicker (one row, two dropdowns) + buildRgbLayer (COGLayer ↔ MultiCOGLayer dispatch) + PixelInspectorPanel (bottom-left lat/lng + per-row label/sublabel/value readout, optional `footnote` for `px (col, row)` and `extraLine` for source id; renders the `cog.reading` pill while `inspecting` is true). | CogControls (ChannelPicker, buildRgbLayer), CogViewer (PixelInspectorPanel), MultiCogViewer (ChannelPicker, buildRgbLayer), StacMosaicViewer (PixelInspectorPanel) |
