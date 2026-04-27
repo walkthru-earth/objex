@@ -30,6 +30,39 @@ export interface CreateStacSourceDeps {
 	 * tab whose connectionId is missing).
 	 */
 	connectionId: string;
+	/**
+	 * SDK opt-in: force the parquet source to treat `tab.path` as a
+	 * hive-partitioned parquet directory and query it with
+	 * `read_parquet('.../**\/*.parquet', hive_partitioning=true,
+	 * union_by_name=true)`. Mirrors lazycogs'
+	 * `DuckdbClient(use_hive_partitioning=True)`. When undefined, the factory
+	 * also auto-detects directory layouts (see below).
+	 */
+	useHivePartitioning?: boolean;
+	/**
+	 * Debug flag. When true the parquet source runs `EXPLAIN <query>` once per
+	 * `runQuery()` and logs the plan to the console so we can verify partition
+	 * stats are pruning files. OFF by default — never enable in shipped UI.
+	 */
+	debugExplain?: boolean;
+}
+
+/**
+ * True when the tab looks like a hive-partitioned parquet directory rather
+ * than a single parquet file. Conservative: requires either an explicit SDK
+ * opt-in (`deps.useHivePartitioning`) OR a `tab.path` ending in `/` AND a
+ * `.parquet`/`.geoparquet` extension. We do NOT auto-promote arbitrary
+ * extensionless paths to parquet — that would silently mis-dispatch JSON
+ * catalogs whose URL happens to have no extension. The factory defers the
+ * actual `adapter.list()` probe to the parquet source so the dispatch stays
+ * synchronous.
+ */
+export function looksLikeHivePartitionedParquet(tab: Tab, deps: CreateStacSourceDeps): boolean {
+	if (deps.useHivePartitioning === true) return true;
+	const path = tab.path ?? '';
+	const ext = (tab.extension ?? '').toLowerCase();
+	if (path.endsWith('/') && (ext === 'parquet' || ext === 'geoparquet')) return true;
+	return false;
 }
 
 /**
@@ -58,8 +91,13 @@ export function createStacSourceForTab(
 	deps: CreateStacSourceDeps
 ): StacSource {
 	const ext = (tab.extension ?? '').toLowerCase();
-	if (ext === 'parquet' || ext === 'geoparquet') {
-		return createParquetSource(tab, deps.connectionId);
+	const hive = looksLikeHivePartitionedParquet(tab, deps);
+	if (ext === 'parquet' || ext === 'geoparquet' || hive) {
+		return createParquetSource(tab, deps.connectionId, {
+			adapter: deps.adapter,
+			useHivePartitioning: hive,
+			debugExplain: deps.debugExplain
+		});
 	}
 
 	if (classified.kind === 'collection' || classified.kind === 'catalog') {

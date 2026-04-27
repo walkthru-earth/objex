@@ -40,6 +40,15 @@ export interface StacSourceCapabilities {
 	countAvailable: boolean;
 	/** True when query() yields multiple batches before completing. */
 	streaming: boolean;
+	/**
+	 * True when the underlying source is a hive-partitioned parquet directory
+	 * (e.g. `s3://bucket/prefix/year=2023/month=01/...`). Set by the parquet
+	 * source when the factory detects a directory layout (or the SDK passes
+	 * `hivePartitioned: true`). Lets the viewer surface a HUD hint without
+	 * inspecting `kind === 'parquet'` alone, since the same `kind` covers
+	 * single-file stac-geoparquet.
+	 */
+	hivePartitioned?: boolean;
 	pushdown: {
 		bbox: boolean;
 		datetime: boolean;

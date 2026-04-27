@@ -14,10 +14,21 @@
  * returned zero matches. Cloud cover / GSD / platform / etc. still ride
  * along on the residual until slice 3 plumbs them through DuckDB SQL.
  *
+ * Hive partitioning: when the factory (or an SDK caller) sets
+ * `useHivePartitioning: true`, the FROM target switches to
+ * `read_parquet('.../**\/*.parquet', hive_partitioning=true,
+ * union_by_name=true)`. Mirrors lazycogs'
+ * `DuckdbClient(use_hive_partitioning=True)`. Partition columns appear as
+ * virtual columns on the schema, but `buildSelectList` only projects known
+ * STAC columns so they never leak into the rendered Items. `union_by_name`
+ * is required because partitioned writes can drift schemas across
+ * partitions (extra `proj:*` columns added later, etc.).
+ *
  * Yields a single batch with `done: true`. Slice 3 turns this into a real
  * stream via `conn.send()` so large catalogs can render progressively.
  */
 
+import type { StorageAdapter } from '../storage/adapter.js';
 import type { Tab } from '../types.js';
 import type { StacItem } from '../utils/stac.js';
 import type { FacetState } from '../utils/stac-facets.js';
@@ -32,12 +43,55 @@ import {
 import { parseWKB } from '../utils/wkb.js';
 import { QueryCancelledError } from './engine.js';
 import { getQueryEngine } from './index.js';
-import { resolveTableSourceAsync } from './source.js';
+import { type ResolvedTableSource, resolveTableSourceAsync } from './source.js';
+
+/**
+ * Options for `createParquetSource`. The factory threads adapter +
+ * `useHivePartitioning` + `debugExplain` from `CreateStacSourceDeps`, but
+ * library consumers can construct a `StacSource` directly.
+ */
+export interface CreateParquetSourceOptions {
+	/**
+	 * Storage adapter for the connection backing `tab`. Used solely to probe
+	 * `tab.path` for `.parquet` children when `useHivePartitioning` is set —
+	 * never consulted on the per-row read path (DuckDB httpfs handles I/O
+	 * directly via the presigned / signed URL).
+	 */
+	adapter?: StorageAdapter;
+	/**
+	 * When true, treat `tab.path` as a hive-partitioned parquet directory
+	 * (e.g. `s3://bucket/year=2023/month=01/...`) and build SQL with
+	 * `read_parquet('.../**\/*.parquet', hive_partitioning=true,
+	 * union_by_name=true)` so DuckDB prunes partitions per `bbox` /
+	 * `datetime` predicate. Mirrors lazycogs'
+	 * `DuckdbClient(use_hive_partitioning=True)`.
+	 */
+	useHivePartitioning?: boolean;
+	/**
+	 * When true, run `EXPLAIN <query>` once per `runQuery()` and log the plan
+	 * to the console. Used to verify partition pruning hits parquet stats.
+	 * Off by default — never enable in shipped UI.
+	 */
+	debugExplain?: boolean;
+}
 
 export interface QueryStacGeoparquetOptions {
 	signal?: AbortSignal;
 	/** Hard cap on rows. Matches `hydrateStacItems` default. */
 	limit?: number;
+	/**
+	 * Hive-partitioning context resolved at source construction. When
+	 * `enabled === true` the runtime FROM target is a `read_parquet` glob
+	 * over `tab.path` and `union_by_name=true` is applied. The probe lives
+	 * on the source (`createParquetSource` awaits it once before the first
+	 * runQuery), not in `runQuery` itself, so the per-pan path stays cheap.
+	 */
+	hive?: { enabled: boolean };
+	/**
+	 * Debug flag, propagated from source options. See
+	 * `CreateParquetSourceOptions.debugExplain`.
+	 */
+	debugExplain?: boolean;
 	/**
 	 * Optional WGS84 viewport bbox `[west, south, east, north]`. When set the
 	 * query is filtered with `ST_Intersects(geometry, ST_MakeEnvelope(...))` so
@@ -178,20 +232,107 @@ function quoteIdent(name: string): string {
 	return `"${name.replace(/"/g, '""')}"`;
 }
 
-/** Run one full materialization of the catalog into a flat StacItem list. */
-async function runQuery(
+/**
+ * Strip a trailing `/` and any URL fragment / query so a directory URL like
+ * `s3://bucket/cache/` becomes `s3://bucket/cache`. The `**\/*.parquet` glob
+ * is then appended for the hive read_parquet call.
+ */
+function trimDirectoryUrl(url: string): string {
+	const noQuery = url.split('?')[0].split('#')[0];
+	return noQuery.endsWith('/') ? noQuery.slice(0, -1) : noQuery;
+}
+
+/**
+ * Build the FROM-clause target for a hive-partitioned parquet directory.
+ * `union_by_name=true` is required because partitioned writes can drift
+ * schemas across partitions (extra `proj:*` columns added later, etc.) and
+ * positional union would error out on the first mismatch.
+ */
+function buildHiveReadParquet(directoryUrl: string): string {
+	const root = trimDirectoryUrl(directoryUrl);
+	const escaped = root.replace(/'/g, "''");
+	return `read_parquet('${escaped}/**/*.parquet', hive_partitioning=true, union_by_name=true)`;
+}
+
+/**
+ * Best-effort confirmation that a directory contains at least one parquet
+ * file. Returns true on the first match. Listing failures fall back to
+ * `true` so we still attempt the hive query — DuckDB will surface the real
+ * error if the path is empty. Adapters that don't list (UrlAdapter) return
+ * an empty array, in which case we also fall through to `true`.
+ */
+async function probeHasParquetChild(
+	adapter: StorageAdapter | undefined,
+	tabPath: string,
+	signal: AbortSignal | undefined
+): Promise<boolean> {
+	if (!adapter) return true;
+	try {
+		const entries = await adapter.list(tabPath, signal);
+		if (!Array.isArray(entries) || entries.length === 0) return true;
+		return entries.some(
+			(e) =>
+				!e.is_dir &&
+				(e.extension?.toLowerCase() === 'parquet' ||
+					e.extension?.toLowerCase() === 'geoparquet' ||
+					e.name?.toLowerCase().endsWith('.parquet') ||
+					e.name?.toLowerCase().endsWith('.geoparquet'))
+		);
+	} catch {
+		return true;
+	}
+}
+
+/**
+ * Build the FROM-clause target. For single-file parquet this is the resolved
+ * `read_parquet('url')` from `resolveTableSourceAsync`; for hive directories
+ * we override with a recursive glob + `hive_partitioning=true` so DuckDB
+ * prunes partition columns from the predicate. `union_by_name=true` is
+ * load-bearing — partitioned writes can drift schemas across partitions
+ * (extra `proj:*` columns added later, etc.) and positional union would
+ * error out on the first mismatch.
+ */
+function buildFromTarget(resolved: ResolvedTableSource, hive: boolean): string {
+	if (!hive) return resolved.ref;
+	const url = resolved.fileUrl;
+	if (!url) {
+		// Hive was requested but we never resolved an httpfs URL (e.g.
+		// SQL-backed source). Fall back to the resolved ref — DuckDB will
+		// surface the real error if the path can't be globbed.
+		return resolved.ref;
+	}
+	return buildHiveReadParquet(url);
+}
+
+/**
+ * Stream the catalog as Arrow RecordBatches and yield each batch's items as a
+ * separate chunk. Peak DuckDB-WASM heap usage tracks one Arrow batch (~64 KiB
+ * rows) instead of the full result set; for a 4000-item LIMIT against a
+ * stac-geoparquet root with deep `assets` / `bands` payloads this turns the
+ * "Out of Memory ... 3.1 GiB / 3.1 GiB used" failure into a steady-state
+ * stream that the viewer can also render progressively. Falls back to a
+ * single-batch buffered query when the engine has no `queryStream` (test
+ * doubles, future engine impls).
+ */
+async function* streamQuery(
 	tab: Tab,
 	connId: string,
 	opts: QueryStacGeoparquetOptions
-): Promise<StacItem[]> {
+): AsyncIterable<{ items: StacItem[]; final: boolean }> {
 	const { signal, limit = DEFAULT_LIMIT, bbox, datetime } = opts;
+	const hiveEnabled = opts.hive?.enabled === true;
 	if (signal?.aborted) throw new QueryCancelledError();
 
 	const engine = await getQueryEngine();
 	const resolved = await resolveTableSourceAsync(tab);
 	if (signal?.aborted) throw new QueryCancelledError();
 
-	const schema = await engine.getSchema(connId, resolved);
+	const fromTarget = buildFromTarget(resolved, hiveEnabled);
+	const schemaSource: ResolvedTableSource = hiveEnabled
+		? { ...resolved, ref: fromTarget }
+		: resolved;
+
+	const schema = await engine.getSchema(connId, schemaSource);
 	if (signal?.aborted) throw new QueryCancelledError();
 	const available = new Set(schema.map((f) => f.name));
 
@@ -200,9 +341,6 @@ async function runQuery(
 		throw new Error('Not a stac-geoparquet file (missing geometry or assets column)');
 	}
 
-	// Validate bbox + datetime values before inlining into SQL. The engine path
-	// takes raw SQL strings (no parameter binding), so the validation in
-	// `buildBboxWhere` / `buildDatetimeWhere` is what makes this injection-safe.
 	const datetimeAvailability = {
 		datetime: available.has('datetime'),
 		startDatetime: available.has('start_datetime'),
@@ -213,8 +351,49 @@ async function runQuery(
 	const orderClause = available.has('datetime') ? ' ORDER BY datetime DESC' : '';
 
 	const safeLimit = Math.max(1, Math.floor(Number(limit) || DEFAULT_LIMIT));
-	const sql = `SELECT ${selectList} FROM ${resolved.ref}${whereClause}${orderClause} LIMIT ${safeLimit}`;
+	const sql = `SELECT ${selectList} FROM ${fromTarget}${whereClause}${orderClause} LIMIT ${safeLimit}`;
 
+	if (opts.debugExplain) {
+		try {
+			const plan = (await engine.query(connId, `EXPLAIN ${sql}`)) as {
+				rows: Record<string, unknown>[];
+			};
+			// eslint-disable-next-line no-console
+			console.debug('[stac-source-parquet] EXPLAIN', { hive: hiveEnabled, sql, plan });
+		} catch (e) {
+			// eslint-disable-next-line no-console
+			console.debug('[stac-source-parquet] EXPLAIN failed', e);
+		}
+		if (signal?.aborted) throw new QueryCancelledError();
+	}
+
+	const parquetUrl = resolved.fileUrl ?? tab.path;
+	const parquetDir = parquetUrl.replace(/[^/]*(?:\?.*)?$/, '');
+	const rowToItem = (row: Record<string, unknown>): StacItem => {
+		const id = typeof row.id === 'string' ? row.id : String(row.id ?? '');
+		const itemBase = id ? `${parquetDir}${id}/` : parquetUrl;
+		return stacRowToItem(row, itemBase, { wkbParser: parseWKB });
+	};
+
+	if (engine.queryStream) {
+		const stream = engine.queryStream(connId, sql, signal);
+		const it = stream[Symbol.asyncIterator]();
+		let pending: { items: StacItem[] } | null = null;
+		while (true) {
+			const { value, done } = await it.next();
+			if (done) break;
+			if (signal?.aborted) throw new QueryCancelledError();
+			const items = (value.rows as Record<string, unknown>[]).map(rowToItem);
+			// One-batch lookahead so we know which yield is the final one without
+			// driving the consumer to track it.
+			if (pending) yield { items: pending.items, final: false };
+			pending = { items };
+		}
+		yield { items: pending?.items ?? [], final: true };
+		return;
+	}
+
+	// Fallback: buffered single-batch path (engines without queryStream).
 	let resultPromise: Promise<{ rows: Record<string, unknown>[] }>;
 	let cancel: (() => Promise<boolean>) | null = null;
 	if (engine.queryCancellable) {
@@ -224,12 +403,10 @@ async function runQuery(
 	} else {
 		resultPromise = engine.query(connId, sql) as Promise<{ rows: Record<string, unknown>[] }>;
 	}
-
 	const onAbort = () => {
 		cancel?.().catch(() => {});
 	};
 	signal?.addEventListener('abort', onAbort, { once: true });
-
 	let rows: Record<string, unknown>[];
 	try {
 		const result = await resultPromise;
@@ -238,21 +415,7 @@ async function runQuery(
 		signal?.removeEventListener('abort', onAbort);
 	}
 	if (signal?.aborted) throw new QueryCancelledError();
-
-	// Asset hrefs in stac-geoparquet are typically written relative to each
-	// item's original `self` URL, not the parquet URL. The stactools default
-	// layout places each item JSON at `{catalog_dir}/{item.id}/{item.id}.json`,
-	// so a per-row base of `{parquet_dir}/{item.id}/` resolves `./foo.tif` to
-	// `{parquet_dir}/{item.id}/foo.tif`. Absolute hrefs pass through unchanged
-	// via `resolveStacAssetHref`.
-	const parquetUrl = resolved.fileUrl ?? tab.path;
-	const parquetDir = parquetUrl.replace(/[^/]*(?:\?.*)?$/, '');
-
-	return rows.map((row) => {
-		const id = typeof row.id === 'string' ? row.id : String(row.id ?? '');
-		const itemBase = id ? `${parquetDir}${id}/` : parquetUrl;
-		return stacRowToItem(row, itemBase, { wkbParser: parseWKB });
-	});
+	yield { items: rows.map(rowToItem), final: true };
 }
 
 /**
@@ -260,49 +423,95 @@ async function runQuery(
  * single yield with `done: true`. Slice 3 widens push-down (cloud cover /
  * gsd / platform via DuckDB SQL) and turns this into a streaming
  * `conn.send()` cursor.
+ *
+ * `options.useHivePartitioning` switches the FROM target to a recursive
+ * `read_parquet` glob over `tab.path` so DuckDB prunes partitions per
+ * `bbox` / `datetime` predicate. The first `query()` call awaits a
+ * best-effort `adapter.list()` probe to confirm at least one `.parquet`
+ * child exists; if listing fails (e.g. UrlAdapter, AccessDenied) we still
+ * attempt the hive query and let DuckDB surface the real error.
  */
-export function createParquetSource(tab: Tab, connectionId: string): StacSource {
+export function createParquetSource(
+	tab: Tab,
+	connectionId: string,
+	options: CreateParquetSourceOptions = {}
+): StacSource {
+	const requestedHive = options.useHivePartitioning === true;
 	const capabilities: StacSourceCapabilities = {
 		kind: 'parquet',
-		label: 'stac-geoparquet',
+		label: requestedHive ? 'stac-geoparquet (hive)' : 'stac-geoparquet',
 		countAvailable: true,
-		streaming: false,
+		// Now true: `streamQuery` yields one StacSourceBatch per Arrow
+		// RecordBatch via the engine's `queryStream` cursor, so peak DuckDB
+		// heap usage tracks one batch instead of the full result set. This
+		// fixes the `Out of Memory ... in-memory mode` OOM on large catalogs
+		// and lets the mosaic render progressively as items arrive.
+		streaming: true,
+		hivePartitioned: requestedHive,
 		pushdown: { ...emptyPushdown(), bbox: true, datetime: true }
 	};
 
 	const connId = connectionId;
+	// The probe is purely advisory: when `useHivePartitioning: true` is
+	// passed, we always run the hive query, but the first probe logs (in
+	// debug mode) whether the directory actually has parquet children so a
+	// misconfigured path gets a faster signal than DuckDB's binder error.
+	// The probe result is cached so a second viewport reload doesn't re-list.
+	let hiveProbe: Promise<boolean> | null = null;
+	const ensureHive = async (signal: AbortSignal | undefined): Promise<boolean> => {
+		if (!requestedHive) return false;
+		if (!hiveProbe) hiveProbe = probeHasParquetChild(options.adapter, tab.path, signal);
+		const probed = await hiveProbe;
+		if (options.debugExplain && !probed) {
+			// eslint-disable-next-line no-console
+			console.debug('[stac-source-parquet] hive probe found no .parquet children', {
+				path: tab.path
+			});
+		}
+		return true;
+	};
 
 	return {
 		capabilities,
 		async *query(req: StacSourceRequest): AsyncIterable<StacSourceBatch> {
 			if (req.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-			const items = await runQuery(tab, connId, {
-				signal: req.signal,
-				limit: req.limit,
-				bbox: req.bbox,
-				datetime: req.filter?.datetime
-			});
+			const hiveEnabled = await ensureHive(req.signal);
 			if (req.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-			// `datetime` is pushed down via SQL, so report it in `pushedDown`
-			// and strip it from the residual. Everything else still rides
-			// along until later slices add property push-down.
 			const pushedDown: FacetState = req.filter?.datetime ? { datetime: req.filter.datetime } : {};
 			const { datetime: _pushed, ...residualRest } = req.filter ?? {};
 			const residual: FacetState = residualRest;
-			yield {
-				items,
-				pushedDown,
-				residual,
-				done: true,
-				totalHinted: items.length
-			};
+			let totalSoFar = 0;
+			for await (const chunk of streamQuery(tab, connId, {
+				signal: req.signal,
+				limit: req.limit,
+				bbox: req.bbox,
+				datetime: req.filter?.datetime,
+				hive: { enabled: hiveEnabled },
+				debugExplain: options.debugExplain
+			})) {
+				if (req.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+				totalSoFar += chunk.items.length;
+				yield {
+					items: chunk.items,
+					pushedDown,
+					residual,
+					done: chunk.final,
+					totalHinted: chunk.final ? totalSoFar : undefined
+				};
+			}
 		},
 		async count(filter, bbox, signal) {
+			if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+			const hiveEnabled = await ensureHive(signal);
 			if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 			const engine = await getQueryEngine();
 			const resolved = await resolveTableSourceAsync(tab);
 			if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-			const schema = await engine.getSchema(connId, resolved);
+			const fromTarget = buildFromTarget(resolved, hiveEnabled);
+			const schemaSource: ResolvedTableSource = hiveEnabled
+				? { ...resolved, ref: fromTarget }
+				: resolved;
+			const schema = await engine.getSchema(connId, schemaSource);
 			if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 			const available = new Set(schema.map((f) => f.name));
 			const datetimeWhere = buildDatetimeWhere(filter?.datetime, {
@@ -311,7 +520,7 @@ export function createParquetSource(tab: Tab, connectionId: string): StacSource 
 				endDatetime: available.has('end_datetime')
 			});
 			const where = joinWhere([buildBboxWhere(bbox), datetimeWhere]);
-			const sql = `SELECT COUNT(*) AS n FROM ${resolved.ref}${where}`;
+			const sql = `SELECT COUNT(*) AS n FROM ${fromTarget}${where}`;
 			const result = (await engine.query(connId, sql)) as { rows: { n?: number | bigint }[] };
 			const raw = result.rows?.[0]?.n ?? 0;
 			return typeof raw === 'bigint' ? Number(raw) : Number(raw);
