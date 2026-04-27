@@ -53,6 +53,12 @@ export interface StacItemsQuery {
 	datetime?: string;
 	/** Per-page item count hint, the server may cap this. */
 	limit?: number;
+	/**
+	 * CQL2-JSON filter expression (STAC API Filter extension). When set, gets
+	 * appended as `?filter=<json>&filter-lang=cql2-json` and re-stamped onto
+	 * every `rel="next"` page so cursor URLs cannot strip it.
+	 */
+	filter?: unknown;
 }
 
 export interface HydrateResult {
@@ -254,6 +260,21 @@ function applyItemsQuery(absolute: string, query: StacItemsQuery | undefined): s
 		}
 		if (typeof query.limit === 'number' && query.limit > 0 && !url.searchParams.has('limit')) {
 			url.searchParams.set('limit', String(Math.floor(query.limit)));
+		}
+		// CQL2-JSON filter, encoded as a query-string param per OGC API Filter.
+		// Skip when the server already stamped `filter=` onto its `rel=next` URL
+		// (some servers echo the original filter in cursor links, double-stamping
+		// would corrupt the JSON).
+		if (query.filter !== undefined && query.filter !== null && !url.searchParams.has('filter')) {
+			try {
+				url.searchParams.set('filter', JSON.stringify(query.filter));
+				if (!url.searchParams.has('filter-lang')) {
+					url.searchParams.set('filter-lang', 'cql2-json');
+				}
+			} catch {
+				// JSON.stringify can only throw on cyclic input; fall through with
+				// the URL unchanged so hydration continues without the filter.
+			}
 		}
 		return url.toString();
 	} catch {
