@@ -35,13 +35,15 @@ import {
 	defaultBandConfig,
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
+	mapResolutionMetersPerPixel,
 	normalizeCogGeotiff,
 	type PixelValue,
 	percentileFromHistogram,
 	type RescaleConfig,
 	readPixelAtLngLat,
 	resolveProj4Def,
-	selectCogPipeline
+	selectCogPipeline,
+	selectOverviewForResolution
 } from '../../utils/cog.js';
 import {
 	type ChannelComposite,
@@ -51,6 +53,7 @@ import {
 	pickNaturalColorComposite
 } from '../../utils/cog-asset.js';
 import { isAbortError } from '../../utils/error.js';
+import { formatFileSize } from '../../utils/format.js';
 import { LruCache } from '../../utils/lru.js';
 import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import {
@@ -73,6 +76,7 @@ import {
 	type StacItemView
 } from '../../utils/stac-facets.js';
 import type { StacSource } from '../../utils/stac-source.js';
+import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
@@ -136,10 +140,17 @@ let inspecting = $state(false);
 let detachInspector: (() => void) | null = null;
 
 // ─── Caches ────────────────────────────────────────────────────────
-// Bounded so panning does not grow memory forever. Eviction is wired to
-// `MosaicLayer.onTileUnload` so the working set tracks deck.gl's own tile
-// cache; cap matches `MosaicLayer.maxCacheSize` for symmetric eviction.
-const SOURCE_CACHE_MAX = 64;
+// Bounded so panning does not grow memory forever. Sized larger than the
+// inner TileLayer's tile cache so a pan-back to a previously-visited bbox
+// finds COG headers + presigned URLs ready instead of paying a header
+// re-fetch. Each entry is small (~16 KB IFD per geotiff, a string per
+// presign), so 256 entries fits in well under 50 MB. Tile pixel bytes are
+// still bounded by `MosaicLayer.maxCacheSize` (kept smaller because decoded
+// tiles are 1-4 MB each). Histograms are evicted in `onTileUnload` because
+// they reflect visible state, not data; the geotiff / presign / resolved
+// caches are NOT evicted on tile-unload anymore so pan-back is fast.
+const SOURCE_CACHE_MAX = 256;
+const TILE_CACHE_MAX = 64;
 let geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
 let presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
 // Parallel cache of resolved presigned URLs, keyed by the original href. The
@@ -157,6 +168,17 @@ let resolvedHrefByOriginal = new LruCache<string, string>({ max: SOURCE_CACHE_MA
 let sourceHrefById = new Map<string, string>();
 // Per-source visible-tile histograms, summed across sources in `aggregate`.
 let sourceHistograms = new Map<string, Uint32Array>();
+// Dedup `onTileError` log floods. deck.gl's TileLayer retries a failed source
+// for every visible tile that overlaps it; on `ERR_INSUFFICIENT_RESOURCES`
+// (Chrome renderer URL-request budget exhaustion) the same href fires once
+// per tile per pan. Logging once per source per session is enough to surface
+// the failure without flooding the console.
+const loggedTileErrors = new Set<string>();
+function logTileErrorOnce(sourceId: string, err: unknown) {
+	if (loggedTileErrors.has(sourceId)) return;
+	loggedTileErrors.add(sourceId);
+	console.error(`[StacMosaic] tile error on source "${sourceId}":`, err);
+}
 
 // ─── Lifecycle controllers ─────────────────────────────────────────
 // `abortController` is viewer-lifetime (only torn down on tab close / reset)
@@ -168,6 +190,12 @@ let hydrationController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let loadGen = 0;
+// Tracks the currently-running loadMosaic. reloadViewport awaits this after
+// aborting so a rapid pan can't stack 5+ DuckDB queryStream calls in the worker
+// (DuckDB-WASM cancelSent is best-effort at polling boundaries — meanwhile
+// each in-flight scan keeps its STRUCT result buffers alive on the WASM heap,
+// which OOMs at ~3.1 GiB on stac-geoparquet rows with deep `assets`/`links`).
+let inflightLoad: Promise<void> | null = null;
 
 // ─── Ingestion buffer ──────────────────────────────────────────────
 // Mutated freely as STAC batches arrive. NOT consumed by the renderer.
@@ -224,13 +252,138 @@ let filterState = $state<FacetState>(emptyFacetState());
 // if static-mode usage grows.
 const facets = $derived(buildFacets(committedViews as StacItemView[]));
 const filteredViews = $derived(applyFacets(committedViews as StacItemView[], filterState));
+
+// Zoom-aware source culling. `MosaicTileset2D.getTileIndices` searches the
+// full map viewport bbox and returns every overlapping source as a deck.gl
+// "tile", which fires our `getSource` and opens the COG header (range
+// requests for IFDs). At low zoom over a global mosaic that wastes hundreds
+// of header fetches on COGs that span fewer than a few screen pixels and
+// won't contribute meaningful pixels at that zoom anyway. Cull sources whose
+// projected on-screen footprint is below `ZOOM_CULL_MIN_PIXELS`. The cull is
+// binned by integer zoom so within a zoom level the source list (and the
+// inner Flatbush + TileLayer cache) stays stable across pans, and only zoom
+// transitions force a MosaicLayer rebuild.
+const ZOOM_CULL_MIN_PIXELS = 4;
+let mapZoomBin = $state<number | null>(null);
+function sourcePixelSize(bbox: [number, number, number, number], zoom: number): number {
+	const [w, s, e, n] = bbox;
+	const lat = (n + s) / 2;
+	const cosLat = Math.cos((lat * Math.PI) / 180);
+	if (!Number.isFinite(cosLat) || cosLat <= 0) return Number.POSITIVE_INFINITY;
+	const widthMeters = (e - w) * 111320 * cosLat;
+	const heightMeters = (n - s) * 111320;
+	const mpp = (156543.03392 * cosLat) / 2 ** zoom;
+	if (!Number.isFinite(mpp) || mpp <= 0) return Number.POSITIVE_INFINITY;
+	return Math.min(widthMeters / mpp, heightMeters / mpp);
+}
+const culledSources = $derived.by(() => {
+	const z = mapZoomBin;
+	if (z == null || committedSources.length === 0) return committedSources;
+	const out: MosaicSourceMeta[] = [];
+	for (const s of committedSources) {
+		if (sourcePixelSize(s.bbox, z) >= ZOOM_CULL_MIN_PIXELS) out.push(s);
+	}
+	// If the cull would empty the mosaic (every source is sub-pixel), keep the
+	// raw set so the user sees something rather than nothing — they're zoomed
+	// way out and a single fetch is acceptable.
+	return out.length > 0 ? out : committedSources;
+});
 const filteredItems = $derived.by(() => {
-	if (!hasActiveFilters(filterState)) return committedSources;
+	if (!hasActiveFilters(filterState)) return culledSources;
 	const allowed = new Set(filteredViews.map((v) => v.id));
-	return committedSources.filter((it) => allowed.has(it.id));
+	return culledSources.filter((it) => allowed.has(it.id));
 });
 const filtersActive = $derived(hasActiveFilters(filterState));
 const sourceCount = $derived(committedSources.length);
+
+// ─── Explain / cost-preview stats (Info panel) ─────────────────────
+// Inspired by lazycogs `da.lazycogs.explain()` — a lightweight read-cost
+// breakdown that does NOT issue any new network requests. Distinct asset
+// keys come from cached `StacItemView.raw.assets`. Center overlap counts
+// how many committed source bboxes contain the current viewport center.
+// Tile bytes per item is a best-effort estimate from the first cached
+// GeoTIFF's IFD (tileWidth × tileHeight × bandCount × bytesPerSample);
+// returns null on failure so the UI can show a dash.
+function bboxesIntersect(
+	a: [number, number, number, number],
+	b: [number, number, number, number]
+): boolean {
+	return !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
+}
+const distinctAssetKeys = $derived.by(() => {
+	const set = new Set<string>();
+	for (const v of committedViews as StacItemView[]) {
+		const assets = v.raw?.assets;
+		if (!assets) continue;
+		for (const k of Object.keys(assets)) set.add(k);
+	}
+	return set.size;
+});
+let mapCenterTick = $state(0);
+const centerOverlapCount = $derived.by(() => {
+	// touch the tick so panning re-evaluates
+	mapCenterTick;
+	if (!mapRef) return 0;
+	try {
+		const c = mapRef.getCenter();
+		const lng = c.lng;
+		const lat = c.lat;
+		const point: [number, number, number, number] = [lng, lat, lng, lat];
+		let n = 0;
+		for (const s of committedSources) {
+			if (bboxesIntersect(s.bbox, point)) n++;
+		}
+		return n;
+	} catch {
+		return 0;
+	}
+});
+const estimatedTileBytes = $derived.by(() => {
+	try {
+		// Find any resolved GeoTIFF in the cache and probe its IFD tags.
+		// `geotiffCache` stores `Promise<GeoTIFF>`; we need a settled value,
+		// so peek by racing with a resolved-marker. To stay sync, we rely on
+		// the fact that probedBandCount only flips after a GeoTIFF resolved;
+		// look up an entry by iterating committedSources and reading the
+		// promise's settled value via `.then` is not synchronous, so instead
+		// we recompute from the detected band count + a typical tile size
+		// (256x256) and a bytesPerSample inferred from `detectedDataType`.
+		if (!probedBandCount || committedSources.length === 0) return null;
+		const bandCount = detectedBandCount;
+		const dt = detectedDataType.toLowerCase();
+		let bytesPerSample = 1;
+		if (dt.includes('16')) bytesPerSample = 2;
+		else if (dt.includes('32')) bytesPerSample = 4;
+		else if (dt.includes('64')) bytesPerSample = 8;
+		const tileW = 256;
+		const tileH = 256;
+		return tileW * tileH * bandCount * bytesPerSample;
+	} catch {
+		return null;
+	}
+});
+const timeSpan = $derived.by(() => {
+	let minT = Number.POSITIVE_INFINITY;
+	let maxT = Number.NEGATIVE_INFINITY;
+	let minIso: string | null = null;
+	let maxIso: string | null = null;
+	for (const v of committedViews as StacItemView[]) {
+		const iso = v.datetime ?? v.endDatetime;
+		if (!iso) continue;
+		const t = Date.parse(iso);
+		if (!Number.isFinite(t)) continue;
+		if (t < minT) {
+			minT = t;
+			minIso = iso;
+		}
+		if (t > maxT) {
+			maxT = t;
+			maxIso = iso;
+		}
+	}
+	if (!minIso || !maxIso) return null;
+	return { start: minIso.slice(0, 10), end: maxIso.slice(0, 10) };
+});
 
 // ─── Stage HUD ─────────────────────────────────────────────────────
 type Stage = 'idle' | 'classify' | 'fetch' | 'index' | 'render' | 'done' | 'error';
@@ -240,6 +393,13 @@ let stageHinted = $state<number | null>(null);
 let lastRefreshAt = $state<number | null>(null);
 let stageMessage = $state<string | null>(null);
 let showFilters = $state(false);
+// Storage smoke-test result for the first representative COG. Inspired by
+// lazycogs `_smoketest_store`: a one-byte ranged GET surfaces auth / CORS /
+// presign failures at viewer load instead of waiting for the inner TileLayer
+// to fail mid-render. Only set when probe fails, so the HUD stays quiet on
+// the happy path. Cleared on every `loadMosaic()` retry.
+let smokeWarning = $state<string | null>(null);
+let smokeProbed = false;
 
 let pool: DecoderPool | null = new DecoderPool();
 const epsgResolver = createEpsgResolver();
@@ -286,16 +446,26 @@ const mosaicLayer = $derived.by(() => {
 	const mosaicProps: any = {
 		id: mosaicId,
 		sources,
-		maxCacheSize: SOURCE_CACHE_MAX,
+		maxCacheSize: TILE_CACHE_MAX,
+		// Cap concurrent COG range fetches the inner TileLayer can fire. With a
+		// dense mosaic on a single S3 host (e.g. source.coop) Chrome's per-renderer
+		// URL request budget exhausts as `net::ERR_INSUFFICIENT_RESOURCES` once
+		// hundreds of sources go in-flight together. 6 matches Chrome's HTTP/1.1
+		// per-host concurrency cap; deck.gl forwards `maxRequests` natively (see
+		// `dist/mosaic-layer/mosaic-layer.js:15`).
+		maxRequests: 6,
+		// Coalesce pan/zoom-jitter so we don't fire range fetches that get aborted
+		// half a frame later. deck.gl forwards `debounceTime` natively to TileLayer.
+		debounceTime: 200,
 		onTileUnload: (tile: { index?: { id?: string } } | undefined) => {
 			const sid = tile?.index?.id;
 			if (typeof sid !== 'string') return;
-			geotiffCache.delete(sid);
-			const href = sourceHrefById.get(sid);
-			if (href) {
-				presignCache.delete(href);
-				sourceHrefById.delete(sid);
-			}
+			// Keep `geotiffCache` / `presignCache` / `sourceHrefById` populated
+			// past the tile unload — they are bounded by `SOURCE_CACHE_MAX`
+			// (LRU-evicted under pressure) and are tiny per entry. This makes
+			// pan-back to a previously-visited bbox skip the COG header
+			// re-fetch and the SigV4 re-sign. Histograms reflect visible
+			// pixels, not source data, so they are still dropped here.
 			if (sourceHistograms.delete(sid)) aggregateSources();
 		},
 		getSource: async (source: MosaicSourceMeta, opts: { signal?: AbortSignal }) => {
@@ -330,6 +500,46 @@ const mosaicLayer = $derived.by(() => {
 				const bps = geotiff.cachedTags.bitsPerSample?.[0] ?? 8;
 				detectedBandCount = count;
 				detectedDataType = buildDataTypeLabel(sf, bps);
+				// Catalogs without `eo:bands` / `raster:bands` / `properties.bands`
+				// (e.g. tge-labs/aef: one `data` asset, 64-band Int8 cube) seed
+				// `cogAssets` with `bandCount: 1, bandCountKnown: false`, which
+				// makes the RGB picker collapse every channel row to "Band 1".
+				// Now that we know the real count, patch the asset feeding the
+				// mosaic so the picker exposes all bands.
+				const probedKey = mosaicAssetKey ?? composite?.r.assetKey ?? cogAssets[0]?.key;
+				if (probedKey && cogAssets.length > 0) {
+					let changed = false;
+					const updated = cogAssets.map((a) => {
+						if (a.key !== probedKey) return a;
+						if (a.bandCountKnown && a.bandCount === count) return a;
+						changed = true;
+						return { ...a, bandCount: count, bandCountKnown: true };
+					});
+					if (changed) {
+						cogAssets = updated;
+						// If R/G/B all bound to the same asset at band 0 (the
+						// fallback `pickNaturalColorComposite` emits when bandCount
+						// was unknown/1), spread them across bands 0/1/2 of the
+						// now-multi-band asset so the picker shows three distinct
+						// band picks instead of three identical "Band 1" rows.
+						const cur0 = composite;
+						if (
+							cur0 &&
+							isSingleAssetComposite(cur0) &&
+							cur0.r.bandIndex === 0 &&
+							cur0.g.bandIndex === 0 &&
+							cur0.b.bandIndex === 0 &&
+							count >= 2
+						) {
+							const lim = Math.max(0, count - 1);
+							composite = {
+								r: { assetKey: cur0.r.assetKey, bandIndex: 0 },
+								g: { assetKey: cur0.g.assetKey, bandIndex: Math.min(1, lim) },
+								b: { assetKey: cur0.b.assetKey, bandIndex: Math.min(2, lim) }
+							};
+						}
+					}
+				}
 				const seeded = defaultBandConfig(count, sf);
 				// If the user already has a single-asset composite (URL hash, or
 				// natural-color default with eo:bands ordering), seed `bandConfig`
@@ -370,7 +580,7 @@ const mosaicLayer = $derived.by(() => {
 				},
 				onTileError: (err: unknown) => {
 					if (isAbortError(err)) return;
-					console.error(err);
+					logTileErrorOnce(source.id, err);
 				}
 			};
 			return new COGLayer(cogProps);
@@ -431,9 +641,14 @@ const multiCogLayers = $derived.by(() => {
 			}),
 			pool: pool ?? undefined,
 			epsgResolver,
+			// See MosaicLayer note above. The multi-asset path runs N per-item
+			// layers, so the aggregate concurrency budget is even tighter —
+			// keep `maxRequests` low.
+			maxRequests: 6,
+			debounceTime: 200,
 			onTileError: (err: Error) => {
 				if (isAbortError(err)) return;
-				console.error(err);
+				logTileErrorOnce(view.id, err);
 			}
 		};
 		out.push(new MultiCOGLayer(layerProps));
@@ -574,7 +789,11 @@ $effect(() => {
 	tab.id;
 	untrack(() => {
 		resetViewer();
-		if (mapRef) void loadMosaic(mapRef);
+		if (mapRef) {
+			const restart = loadMosaic(mapRef);
+			inflightLoad = restart.catch(() => {});
+			void restart;
+		}
 	});
 });
 
@@ -583,6 +802,7 @@ function resetViewer(): void {
 	abortController = new AbortController();
 	hydrationController.abort();
 	hydrationController = new AbortController();
+	inflightLoad = null;
 	teardownViewportReload();
 	kind = 'static';
 	stage = 'idle';
@@ -595,6 +815,7 @@ function resetViewer(): void {
 	itemViewsRef = [];
 	committedSources = [];
 	committedViews = [];
+	mapZoomBin = mapRef ? Math.floor(mapRef.getZoom()) : null;
 	pipelineGen = 0;
 	hoveredId = null;
 	selectedId = null;
@@ -667,26 +888,13 @@ function commitSources(): void {
 		sources.push(itemsRef[i]);
 		views.push(itemViewsRef[i]);
 	}
-	// Multi-asset eviction: MosaicLayer.onTileUnload only fires for the
-	// single-asset path (where `MosaicLayer` owns the inner TileLayer). On
-	// the multi-asset path (per-item MultiCOGLayer set) deck.gl unmounts the
-	// whole layer when an item drops, but the Svelte-side per-(item, asset)
-	// caches are not keyed by source id — they're keyed by href. Diff the
-	// previous committed view set against the next and evict every asset
-	// belonging to a dropped item. Symmetric with deck.gl's working set.
-	const nextIds = new Set(views.map((v) => v.id));
-	const itemsRemoved: StacItemView[] = [];
-	for (const prev of committedViews as StacItemView[]) {
-		if (!nextIds.has(prev.id)) itemsRemoved.push(prev);
-	}
-	for (const dropped of itemsRemoved) {
-		const itemAssets = extractCogAssets(dropped.raw);
-		for (const a of itemAssets) {
-			geotiffCache.delete(`${dropped.id}::${a.key}`);
-			presignCache.delete(a.href);
-			resolvedHrefByOriginal.delete(a.href);
-		}
-	}
+	// Pan-back caching: items that drop out of `committedViews` no longer
+	// have a rendered layer, but their COG headers + presigned URLs stay in
+	// the LRU caches so pan-back to the previous bbox does not re-pay the
+	// header IFD fetch and the SigV4 re-sign. The caches are bounded by
+	// `SOURCE_CACHE_MAX` and are tiny per entry. Aggressive diff-eviction
+	// here would defeat that for both the single-asset and multi-asset
+	// paths.
 	committedSources = sources;
 	committedViews = views;
 }
@@ -738,7 +946,15 @@ function setupClickHandler(map: maplibregl.Map): void {
 			}
 			const geotiff = await geotiffPromise;
 			const proj4Def = await resolveProj4Def(geotiff.crs, signal);
-			const result = await readPixelAtLngLat(geotiff, lng, lat, proj4Def, pool, signal);
+			// Match the overview that's currently on screen so the pixel readout
+			// reflects the visible decimation level. Per-source COGs may have
+			// different overview pyramids so the pick happens after the source
+			// is resolved.
+			const targetRes = mapResolutionMetersPerPixel(map.getZoom(), lat);
+			const overview = selectOverviewForResolution(geotiff, targetRes);
+			const result = await readPixelAtLngLat(geotiff, lng, lat, proj4Def, pool, signal, {
+				overview
+			});
 			if (!result) return null;
 			return { value: result, sourceId: hit.id };
 		},
@@ -755,6 +971,17 @@ function setupClickHandler(map: maplibregl.Map): void {
 
 function onMapReady(map: maplibregl.Map): void {
 	mapRef = map;
+	// Bump the center-tick so the Explain panel's center-overlap stat
+	// re-derives whenever the user pans / zooms. Also update `mapZoomBin`
+	// (integer zoom) so `culledSources` re-evaluates only at zoom-level
+	// boundaries — within a bin the source list is stable, so micro-pans
+	// don't churn the inner TileLayer.
+	mapZoomBin = Math.floor(map.getZoom());
+	map.on('moveend', () => {
+		mapCenterTick++;
+		const z = Math.floor(map.getZoom());
+		if (z !== mapZoomBin) mapZoomBin = z;
+	});
 	setupClickHandler(map);
 	const overlay = new MapboxOverlay({
 		interleaved: false,
@@ -770,7 +997,9 @@ function onMapReady(map: maplibregl.Map): void {
 	});
 	overlayRef = overlay;
 	map.addControl(overlay as unknown as maplibregl.IControl);
-	void loadMosaic(map);
+	const initial = loadMosaic(map);
+	inflightLoad = initial.catch(() => {});
+	void initial;
 }
 
 function viewportBbox(map: maplibregl.Map): [number, number, number, number] {
@@ -814,11 +1043,25 @@ async function reloadViewport(): Promise<void> {
 		stageMessage = t('stac.stageSuperseded');
 	}
 	hydrationController.abort();
+	// Wait for the prior loadMosaic to actually settle before issuing a new
+	// one. Without this, the JS-side abort returns instantly but the underlying
+	// DuckDB queryStream keeps scanning the parquet (cancelSent is polled at
+	// batch boundaries, ~10s for a Philly-sized scan). Stacking these without
+	// waiting reproduced the 3.1 GiB OOM from rapid moveend events.
+	if (inflightLoad) {
+		try {
+			await inflightLoad;
+		} catch {
+			/* prior was aborted or errored — fine, we're starting fresh */
+		}
+	}
 	hydrationController = new AbortController();
 	error = null;
 	loading = true;
 	hasFittedOnce = true;
-	await loadMosaic(mapRef);
+	const next = loadMosaic(mapRef);
+	inflightLoad = next.catch(() => {});
+	await next;
 }
 
 function extractConnectionKey(href: string): string | null {
@@ -924,6 +1167,9 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 	stageMessage = null;
 	stageFetched = 0;
 	stageHinted = null;
+	smokeWarning = null;
+	smokeProbed = false;
+	loggedTileErrors.clear();
 	try {
 		const adapter = getAdapter(tab.source, tab.connectionId);
 		const ext = (tab.extension ?? '').toLowerCase();
@@ -1058,6 +1304,29 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 			acceptedCount += accepted.length;
 			for (const src of accepted) presignHref(src.href);
 
+			// Smoke-test a representative COG once per load. lazycogs does this
+			// in `_smoketest_store` so credential / CORS issues surface in <1s
+			// rather than as opaque "Failed to fetch" messages mid-tile-render.
+			// Fire-and-forget: probe runs in parallel with the next batch and
+			// writes to `smokeWarning` only on failure. Aborts via the per-pan
+			// `hydrationController` so a viewport reload tears down the probe.
+			if (!smokeProbed && accepted.length > 0) {
+				smokeProbed = true;
+				const probeHref = accepted[0].href;
+				void (async () => {
+					try {
+						const url = await presignHref(probeHref);
+						const result = await smokeTestHref(url, signal);
+						if (gen !== loadGen || signal.aborted) return;
+						if (!result.ok) smokeWarning = result.reason;
+					} catch (err) {
+						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (gen !== loadGen) return;
+						smokeWarning = err instanceof Error ? err.message : String(err);
+					}
+				})();
+			}
+
 			// Update the streaming buffer. The renderer is intentionally NOT
 			// driven by `itemsRef` — only by `committedSources`. We commit
 			// only at strategic boundaries below to control rebuild cadence.
@@ -1084,10 +1353,21 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 				// constraint and commit per batch below.
 				itemsRef = [...accepted.slice().reverse(), ...itemsRef];
 				itemViewsRef = [...acceptedViews.slice().reverse(), ...itemViewsRef];
+			} else if (kind === 'parquet' && firstBatch) {
+				// Parquet re-runs `ST_Intersects(geometry, ST_MakeEnvelope(...))`
+				// on every moveend, so the previous viewport's sources are stale.
+				// Atomic-swap the new viewport's first (and, for our single-yield
+				// parquet source, only) batch so sources don't accumulate across
+				// pans, matching the "atomic source swap on viewport reload" rule.
+				itemsRef = accepted.slice();
+				itemViewsRef = acceptedViews.slice();
+				firstBatch = false;
+				commitSources();
 			} else {
-				// Static + parquet: append in catalog order. Static streams
-				// slowly enough that per-batch commits are cheap; parquet
-				// emits a single batch.
+				// Static catalog walk: append in catalog order. Static does not
+				// re-run on pan (moveend listener is torn down), so itemsRef
+				// always starts empty after resetViewer and per-batch commits
+				// are cheap.
 				itemsRef = [...itemsRef, ...accepted];
 				itemViewsRef = [...itemViewsRef, ...acceptedViews];
 				commitSources();
@@ -1648,6 +1928,14 @@ onDestroy(cleanup);
 				{error}
 			</div>
 		{/if}
+		{#if smokeWarning && !error}
+			<div
+				class="pointer-events-auto max-w-sm rounded bg-amber-900/80 px-2 py-1 text-xs text-amber-100"
+				title={t('stac.smokeWarningHint')}
+			>
+				{t('stac.smokeWarning', { reason: smokeWarning })}
+			</div>
+		{/if}
 		{#if composite && !isSingleAssetComposite(composite) && multiCogLayers.length * 3 > 300}
 			<div
 				class="pointer-events-auto max-w-sm rounded bg-yellow-900/80 px-2 py-1 text-xs text-yellow-200"
@@ -1722,6 +2010,37 @@ onDestroy(cleanup);
 						<dd>
 							W {bounds[0].toFixed(4)}, S {bounds[1].toFixed(4)}<br />
 							E {bounds[2].toFixed(4)}, N {bounds[3].toFixed(4)}
+						</dd>
+					{/if}
+				</dl>
+
+				<h3 class="mb-2 mt-3 font-medium">{t('stac.explainHeading')}</h3>
+				<dl class="space-y-1.5">
+					<dt class="sr-only">items</dt>
+					<dd class="text-muted-foreground">
+						{t('stac.explainItems', {
+							visible: filteredItems.length,
+							total: committedSources.length
+						})}
+					</dd>
+					<dt class="sr-only">assets</dt>
+					<dd class="text-muted-foreground">
+						{t('stac.explainAssets', { count: distinctAssetKeys })}
+					</dd>
+					<dt class="sr-only">overlap</dt>
+					<dd class="text-muted-foreground">
+						{t('stac.explainOverlap', { count: centerOverlapCount })}
+					</dd>
+					<dt class="sr-only">bytes</dt>
+					<dd class="text-muted-foreground">
+						{t('stac.explainBytes', {
+							bytes: estimatedTileBytes != null ? formatFileSize(estimatedTileBytes) : '—'
+						})}
+					</dd>
+					{#if timeSpan}
+						<dt class="sr-only">time</dt>
+						<dd class="text-muted-foreground">
+							{t('stac.explainTimeSpan', { start: timeSpan.start, end: timeSpan.end })}
 						</dd>
 					{/if}
 				</dl>
