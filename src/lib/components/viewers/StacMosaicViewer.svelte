@@ -244,7 +244,21 @@ function hashSources(items: ReadonlyArray<MosaicSourceMeta>): string {
 	if (items.length === 0) return '0';
 	return `${items.length}-${items[0].id}-${items[items.length - 1].id}`;
 }
-const mosaicId = $derived(`mosaic-${hashSources(filteredItems)}-p${pipelineGen}`);
+// Composite signature is embedded in every mosaic / multi-cog layer id so any
+// band-or-asset swap forces deck.gl to unmount the stale layer and mount a
+// fresh one with freshly resolved sources. Without this, `setComposite` only
+// updates `composite` state — `setMosaicAssetKey` early-returns when only the
+// band index changed (single-asset path), and `setComposite` does not call
+// `bumpPipeline` for the multi-asset path, so the layer id stays the same and
+// deck.gl reconciles in-place over an internal source map opened under the
+// previous composite.
+function compositeSignature(c: ChannelComposite | null): string {
+	if (!c) return 'none';
+	return `${c.r.assetKey}.${c.r.bandIndex}-${c.g.assetKey}.${c.g.bandIndex}-${c.b.assetKey}.${c.b.bandIndex}`;
+}
+const mosaicId = $derived(
+	`mosaic-${hashSources(filteredItems)}-c${compositeSignature(composite)}-p${pipelineGen}`
+);
 const footprintId = $derived(`footprints-${tab.id}`);
 
 const mosaicLayer = $derived.by(() => {
@@ -350,6 +364,10 @@ const multiCogLayers = $derived.by(() => {
 	const out: MultiCOGLayer[] = [];
 	const rs = { ...rescale };
 	const gen = pipelineGen;
+	// Hoisted: same value for every per-item layer in this derive run. Embedded
+	// in every layer id so band/asset swaps remount the layer (see
+	// `compositeSignature` doc comment above).
+	const compositeKey = compositeSignature(c);
 	for (const view of views) {
 		const item = view.raw;
 		const itemAssets = extractCogAssets(item);
@@ -376,7 +394,7 @@ const multiCogLayers = $derived.by(() => {
 		// `onTileError` is forwarded by our pnpm patch but is not in the
 		// generated MultiCOGLayer .d.ts. Widen at the boundary.
 		const layerProps: any = {
-			id: `mosaic-multicog-${view.id}-p${gen}`,
+			id: `mosaic-multicog-${view.id}-c${compositeKey}-p${gen}`,
 			sources,
 			composite: { r: c.r.assetKey, g: c.g.assetKey, b: c.b.assetKey },
 			renderPipeline: buildBandRenderPipeline({
