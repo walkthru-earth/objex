@@ -236,6 +236,52 @@ export function defaultRescaleForGeotiff(geotiff: GeoTIFFType): RescaleConfig {
 }
 
 /**
+ * Build a 64-bin histogram of band 0 from a GeoTIFF's smallest overview, in
+ * the same shader-space [0, 1] coordinate system the rescale slider operates
+ * on (raw / 65535 for uint16, raw / 255 for uint8, raw clamped to [0, 1] for
+ * float). Used by viewers on the multi-asset MultiCOGLayer path to give the
+ * rescale slider a histogram backdrop without hooking per-tile sampling into
+ * the layer.
+ *
+ * Returns null if the smallest overview cannot be fetched. Skips the GeoTIFF's
+ * declared nodata value and non-finite values.
+ */
+export async function buildHistogramFromGeotiff(
+	geotiff: GeoTIFFType,
+	signal?: AbortSignal
+): Promise<Uint32Array | null> {
+	const tags = geotiff.cachedTags;
+	const sampleFormat = tags.sampleFormat?.[0] ?? 1;
+	const bps = tags.bitsPerSample?.[0] ?? 8;
+	const norm = sampleFormat === 1 ? (bps <= 8 ? 255 : 65535) : 1;
+	const nodata = geotiff.nodata;
+
+	const overviews = geotiff.overviews ?? [];
+	const sourceImage = overviews.length ? overviews[overviews.length - 1] : geotiff;
+	try {
+		const tile = await sourceImage.fetchTile(0, 0, { signal });
+		if (signal?.aborted) return null;
+		const arr = tile.array;
+		const data: ArrayLike<number> = arr.layout === 'band-separate' ? arr.bands[0] : arr.data;
+		const stride = arr.layout === 'band-separate' ? 1 : (arr.count ?? 1);
+		const histogram = new Uint32Array(HISTOGRAM_BIN_COUNT);
+		const len = data.length;
+		for (let i = 0; i < len; i += stride) {
+			const raw = data[i];
+			if (!Number.isFinite(raw)) continue;
+			if (nodata !== null && raw === nodata) continue;
+			const t = sampleFormat === 1 ? raw / norm : Math.max(0, Math.min(1, raw));
+			if (t < 0 || t > 1) continue;
+			const bin = Math.min(HISTOGRAM_BIN_COUNT - 1, Math.floor(t * HISTOGRAM_BIN_COUNT));
+			histogram[bin]++;
+		}
+		return histogram;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Build a `getTileData` + `renderTile` pair that reuses the library-default
  * uint pipeline (via `inferRenderPipeline`) and appends `LinearRescale` to the
  * returned render pipeline. Only safe to use when the default pipeline would

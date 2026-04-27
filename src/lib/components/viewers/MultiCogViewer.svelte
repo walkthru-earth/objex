@@ -18,6 +18,7 @@ import {
 	presetMatchesComposite
 } from '../../utils/channel-composite.js';
 import {
+	buildHistogramFromGeotiff,
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
@@ -62,6 +63,13 @@ let activePresetId = $state<string>('natural-color');
 // render near-black tiles.
 let rescale = $state<RescaleConfig>({ min: 0, max: 0.3 });
 let userTouchedRescale = false;
+// Single-band histogram baked once from the R-channel preflight's smallest
+// overview, in the same shader-space [0,1] domain the rescale slider uses.
+// Backs the histogram overlay in CogControls. Recomputed when the R-channel
+// asset changes (tracked by histogramAssetKey) so swapping bands gives the
+// user an accurate distribution to scrub against.
+let histogram = $state.raw<Uint32Array | null>(null);
+let histogramAssetKey: string | null = null;
 
 let assets = $state.raw<CogAsset[]>([]);
 let composite = $state.raw<ChannelComposite | null>(null);
@@ -143,6 +151,8 @@ function resetViewer(): void {
 	activePresetId = 'natural-color';
 	rescale = { min: 0, max: 0.3 };
 	userTouchedRescale = false;
+	histogram = null;
+	histogramAssetKey = null;
 	hasFittedOnce = false;
 	showControls = false;
 	pixelValue = null;
@@ -425,6 +435,18 @@ async function buildAndAddLayer(
 		}
 	}
 
+	// Bake the histogram once per R-channel asset. Cheap (one overview tile),
+	// and gives CogControls a real distribution to overlay behind the slider.
+	if (preflightGeotiff && histogramAssetKey !== rChannelKey) {
+		histogramAssetKey = rChannelKey;
+		void (async () => {
+			const bins = await buildHistogramFromGeotiff(preflightGeotiff, signal);
+			if (signal.aborted) return;
+			if (histogramAssetKey !== rChannelKey) return; // user swapped while baking
+			histogram = bins;
+		})();
+	}
+
 	// Resolve proj4 once for pixel inspection. All band assets in a STAC Item
 	// share the same source CRS so the R-channel preflight is sufficient.
 	if (preflightGeotiff && proj4DefRef === null) {
@@ -574,6 +596,8 @@ function cleanup(): void {
 	pixelValue = null;
 	inspecting = false;
 	proj4DefRef = null;
+	histogram = null;
+	histogramAssetKey = null;
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
 		try {
@@ -645,6 +669,7 @@ onDestroy(cleanup);
 				rescaleApplicable={true}
 				onRescaleChange={handleRescaleChange}
 				showAlpha={assets.length >= 4}
+				{histogram}
 			/>
 		{/if}
 	{/if}
