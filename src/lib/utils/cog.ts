@@ -246,6 +246,31 @@ export function defaultRescaleForGeotiff(geotiff: GeoTIFFType): RescaleConfig {
  * Returns null if the smallest overview cannot be fetched. Skips the GeoTIFF's
  * declared nodata value and non-finite values.
  */
+/**
+ * Walk a cumulative histogram (`HISTOGRAM_BIN_COUNT` bins covering [0, 1])
+ * and return the shader-space value at percentile `p` (0..1). Returns null
+ * when the histogram is empty. Linearly interpolates within the matching bin
+ * so the result is monotonic across calls with adjacent percentiles, instead
+ * of jumping in `1/HISTOGRAM_BIN_COUNT` increments.
+ */
+export function percentileFromHistogram(histogram: Uint32Array | null, p: number): number | null {
+	if (!histogram || histogram.length !== HISTOGRAM_BIN_COUNT) return null;
+	let total = 0;
+	for (let i = 0; i < HISTOGRAM_BIN_COUNT; i++) total += histogram[i];
+	if (total === 0) return null;
+	const target = total * Math.max(0, Math.min(1, p));
+	let acc = 0;
+	for (let i = 0; i < HISTOGRAM_BIN_COUNT; i++) {
+		const next = acc + histogram[i];
+		if (next >= target) {
+			const frac = histogram[i] === 0 ? 0 : (target - acc) / histogram[i];
+			return (i + frac) / HISTOGRAM_BIN_COUNT;
+		}
+		acc = next;
+	}
+	return 1;
+}
+
 export async function buildHistogramFromGeotiff(
 	geotiff: GeoTIFFType,
 	signal?: AbortSignal
@@ -265,6 +290,7 @@ export async function buildHistogramFromGeotiff(
 		const data: ArrayLike<number> = arr.layout === 'band-separate' ? arr.bands[0] : arr.data;
 		const stride = arr.layout === 'band-separate' ? 1 : (arr.count ?? 1);
 		const histogram = new Uint32Array(HISTOGRAM_BIN_COUNT);
+		let counted = 0;
 		const len = data.length;
 		for (let i = 0; i < len; i += stride) {
 			const raw = data[i];
@@ -274,9 +300,27 @@ export async function buildHistogramFromGeotiff(
 			if (t < 0 || t > 1) continue;
 			const bin = Math.min(HISTOGRAM_BIN_COUNT - 1, Math.floor(t * HISTOGRAM_BIN_COUNT));
 			histogram[bin]++;
+			counted++;
 		}
+		console.debug('[buildHistogramFromGeotiff] OK', {
+			usingOverview: overviews.length > 0,
+			sampleFormat,
+			bps,
+			norm,
+			nodata,
+			layout: arr.layout,
+			count: arr.count,
+			tilePixels: len,
+			counted,
+			nonZeroBins: histogram.reduce((acc, v) => acc + (v > 0 ? 1 : 0), 0)
+		});
+		if (counted === 0) return null;
 		return histogram;
-	} catch {
+	} catch (err) {
+		console.warn('[buildHistogramFromGeotiff] fetchTile failed', {
+			usingOverview: overviews.length > 0,
+			err
+		});
 		return null;
 	}
 }

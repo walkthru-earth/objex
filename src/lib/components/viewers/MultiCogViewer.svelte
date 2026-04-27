@@ -26,6 +26,7 @@ import {
 	fitCogBounds,
 	normalizeCogGeotiff,
 	type PixelValue,
+	percentileFromHistogram,
 	type RescaleConfig,
 	readPixelAtLngLat,
 	resolveProj4Def
@@ -437,6 +438,11 @@ async function buildAndAddLayer(
 
 	// Bake the histogram once per R-channel asset. Cheap (one overview tile),
 	// and gives CogControls a real distribution to overlay behind the slider.
+	// When the user hasn't touched the slider, also reseed rescale to the
+	// p2/p98 of that distribution so the thumbs land where the data actually
+	// lives instead of at the bit-depth-aware default. This is what gives a
+	// preset switch (e.g. true-color → vegetation, red → swir16) auto-contrast
+	// without the user having to re-drag the slider every time.
 	if (preflightGeotiff && histogramAssetKey !== rChannelKey) {
 		histogramAssetKey = rChannelKey;
 		void (async () => {
@@ -444,6 +450,18 @@ async function buildAndAddLayer(
 			if (signal.aborted) return;
 			if (histogramAssetKey !== rChannelKey) return; // user swapped while baking
 			histogram = bins;
+			if (!userTouchedRescale && bins) {
+				const lo = percentileFromHistogram(bins, 0.02);
+				const hi = percentileFromHistogram(bins, 0.98);
+				if (lo !== null && hi !== null && hi > lo) {
+					console.debug('[MultiCogViewer] reseeding rescale from histogram p2/p98', {
+						assetKey: rChannelKey,
+						prev: { ...rescale },
+						next: { min: lo, max: hi }
+					});
+					rescale = { min: lo, max: hi };
+				}
+			}
 		})();
 	}
 
