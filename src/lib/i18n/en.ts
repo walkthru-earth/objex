@@ -443,6 +443,11 @@ export const en: Record<string, string> = {
 	'map.multiCogPreset.swir': 'SWIR',
 	'map.multiCogPreset.vegetation': 'Vegetation',
 	'map.multiCogPreset.agriculture': 'Agriculture',
+	'map.multiCogPreset.custom': 'Custom',
+	'map.multiCogBands': 'Bands',
+	'map.multiCogBandsTooltip': 'Pick which STAC asset feeds each output channel',
+	'map.multiCogChannelNone': '(none)',
+	'map.mosaicAsset': 'Asset',
 
 	// STAC tab toggle (StacTabViewer)
 	'stac.viewMosaic': 'Map',
@@ -517,8 +522,6 @@ export const en: Record<string, string> = {
 	'stac.close': 'Close',
 	'stac.showRaw': 'Show raw JSON',
 	'stac.hideRaw': 'Hide raw JSON',
-	'stac.rangeLowerBound': 'Lower bound',
-	'stac.rangeUpperBound': 'Upper bound',
 
 	// COG Controls
 	'cog.style': 'Style',

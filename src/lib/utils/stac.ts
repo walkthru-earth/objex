@@ -146,9 +146,12 @@ export function detectMosaicCapable(item: StacItem): boolean {
 	return stacItemBbox(item) !== null && pickCogAssetHref(item) !== null;
 }
 
-/** True when a single STAC Item exposes Sentinel-2-style RGB bands (MultiCog). */
+/** True when a single STAC Item exposes ≥3 single-band raster COG assets,
+ *  whether tagged with S2-style common names or not. The MultiCogViewer's
+ *  band picker fills in the gap when presets don't auto-resolve. */
 export function detectMultiCogCapable(item: StacItem): boolean {
-	return hasRgbBands(extractSentinelBandAssets(item));
+	if (hasRgbBands(extractSentinelBandAssets(item))) return true;
+	return hasCompositableBands(extractRasterBandAssets(item));
 }
 
 /** WGS84 bbox helper. Returns `null` if no bbox can be derived. */
@@ -277,4 +280,158 @@ function isBandSlot(value: string): value is BandSlot {
 /** True when the band map has enough channels for a True Color composite. */
 export function hasRgbBands(map: BandMap): boolean {
 	return Boolean(map.red && map.green && map.blue);
+}
+
+/**
+ * Generic raster band asset description, vendor-neutral. Carries the bits a
+ * MultiCOG band picker needs to populate dropdowns and resolve presets.
+ *
+ * `key` is the STAC asset key as it appears in `item.assets` (`red`, `B04`,
+ * `image`, `analytic`, ...). It is the natural identifier and lines up 1:1
+ * with `MultiCOGLayer.sources`'s record key.
+ */
+export interface RasterBandAsset {
+	key: string;
+	href: string;
+	commonName?: string;
+	bandCount?: number;
+	roles?: string[];
+	mediaType?: string;
+	title?: string;
+}
+
+/**
+ * Enumerate every asset on a STAC Item that looks like a single-band raster
+ * COG suitable for compositing in MultiCOGLayer. Used by the band picker UI.
+ *
+ * Inclusion: `media_type` matches `image/tiff*` (drops JP2 mirrors, PNGs,
+ * thumbnails) AND it is not a thumbnail / overview / metadata role. Pre-baked
+ * multi-band visuals (`raster:bands.length > 1` or `eo:bands.length > 1`) are
+ * dropped because compositing needs single-band sources, not a 3-band visual
+ * COG; that asset belongs in `CogViewer`.
+ *
+ * `bandCount` is reported as `1` when neither tag is present and the asset
+ * media type is COG-like, so vendor catalogs that omit `eo:bands` are still
+ * pickable. Callers wanting to be strict can filter on `bandCount === 1`.
+ */
+export function extractRasterBandAssets(item: StacItem): RasterBandAsset[] {
+	const out: RasterBandAsset[] = [];
+	const assets = item.assets ?? {};
+	for (const [key, asset] of Object.entries(assets)) {
+		if (!asset?.href) continue;
+		const mediaType = typeof asset.type === 'string' ? asset.type : undefined;
+		// Be permissive on missing media_type (some catalogs omit it for COGs)
+		// and accept image/tiff* including the cloud-optimized profile suffix.
+		if (mediaType && !/^image\/(tiff|geotiff)\b/i.test(mediaType)) continue;
+		const roles = Array.isArray(asset.roles) ? (asset.roles as string[]) : undefined;
+		if (
+			roles &&
+			(roles.includes('thumbnail') || roles.includes('overview') || roles.includes('metadata'))
+		) {
+			continue;
+		}
+		const eoBands = Array.isArray(asset['eo:bands']) ? asset['eo:bands'] : undefined;
+		const assetExt = asset as unknown as Record<string, unknown>;
+		const rasterBands = Array.isArray(assetExt['raster:bands'])
+			? (assetExt['raster:bands'] as unknown[])
+			: undefined;
+		const bandCount = rasterBands?.length ?? eoBands?.length;
+		if (typeof bandCount === 'number' && bandCount > 1) continue;
+		const commonName = eoBands?.[0]?.common_name?.toLowerCase();
+		out.push({
+			key,
+			href: asset.href,
+			commonName,
+			bandCount: typeof bandCount === 'number' ? bandCount : 1,
+			roles,
+			mediaType,
+			title: typeof asset.title === 'string' ? asset.title : undefined
+		});
+	}
+	return out;
+}
+
+/**
+ * Resolve a semantic band slot to an asset key on this Item.
+ *
+ * Priority:
+ *   1. First asset whose `eo:bands[0].common_name` (lowercased) equals the slot.
+ *   2. First asset whose key appears in `BAND_KEY_FALLBACKS[slot]` (vendor key
+ *      conventions: `B04`, `red-jp2`, etc.).
+ *
+ * Returns the asset key (NOT the href) so callers can plumb it into
+ * `composite: { r, g, b }` and look it up in `extractRasterBandAssets()`.
+ */
+export function resolveBandSlotAssetKey(
+	assets: RasterBandAsset[],
+	slot: BandSlot
+): string | undefined {
+	const byCommon = assets.find((a) => a.commonName === slot);
+	if (byCommon) return byCommon.key;
+	const fallbacks = BAND_KEY_FALLBACKS[slot] ?? [];
+	const byKey = assets.find((a) => fallbacks.includes(a.key));
+	return byKey?.key;
+}
+
+/**
+ * Resolve a preset's R/G/B BandSlot triple into asset keys for this Item.
+ * Returns null when any of the three required slots cannot be resolved, so
+ * the caller can disable the preset rather than half-apply it.
+ */
+export function resolvePresetComposite(
+	assets: RasterBandAsset[],
+	composite: { r: BandSlot; g: BandSlot; b: BandSlot }
+): { r: string; g: string; b: string } | null {
+	const r = resolveBandSlotAssetKey(assets, composite.r);
+	const g = resolveBandSlotAssetKey(assets, composite.g);
+	const b = resolveBandSlotAssetKey(assets, composite.b);
+	if (!r || !g || !b) return null;
+	return { r, g, b };
+}
+
+/** True when ≥3 single-band raster COG assets exist, so manual RGB pick is viable. */
+export function hasCompositableBands(assets: RasterBandAsset[]): boolean {
+	return assets.length >= 3;
+}
+
+/**
+ * Same shape as `extractRasterBandAssets`, but does NOT drop multi-band assets.
+ * Used by the mosaic asset picker, where a 3-band pre-baked `visual` TCI is a
+ * legitimate choice alongside the per-band single-band COGs.
+ *
+ * `bandCount` is reported when known (`raster:bands.length` or `eo:bands.length`),
+ * else left undefined so the consuming UI can fall back to probing the COG.
+ */
+export function extractMosaicAssets(item: StacItem): RasterBandAsset[] {
+	const out: RasterBandAsset[] = [];
+	const assets = item.assets ?? {};
+	for (const [key, asset] of Object.entries(assets)) {
+		if (!asset?.href) continue;
+		const mediaType = typeof asset.type === 'string' ? asset.type : undefined;
+		if (mediaType && !/^image\/(tiff|geotiff)\b/i.test(mediaType)) continue;
+		const roles = Array.isArray(asset.roles) ? (asset.roles as string[]) : undefined;
+		if (
+			roles &&
+			(roles.includes('thumbnail') || roles.includes('overview') || roles.includes('metadata'))
+		) {
+			continue;
+		}
+		const eoBands = Array.isArray(asset['eo:bands']) ? asset['eo:bands'] : undefined;
+		const assetExt = asset as unknown as Record<string, unknown>;
+		const rasterBands = Array.isArray(assetExt['raster:bands'])
+			? (assetExt['raster:bands'] as unknown[])
+			: undefined;
+		const bandCount = rasterBands?.length ?? eoBands?.length;
+		const commonName = eoBands?.[0]?.common_name?.toLowerCase();
+		out.push({
+			key,
+			href: asset.href,
+			commonName,
+			bandCount: typeof bandCount === 'number' ? bandCount : undefined,
+			roles,
+			mediaType,
+			title: typeof asset.title === 'string' ? asset.title : undefined
+		});
+	}
+	return out;
 }

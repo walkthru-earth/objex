@@ -3,7 +3,7 @@ import type { Snippet } from 'svelte';
 import { t } from '../../../i18n/index.svelte.js';
 import { formatDate } from '../../../utils/format.js';
 import { type FacetSet, type FacetState, hasActiveFilters } from '../../../utils/stac-facets.js';
-import StacRangeSlider from './StacRangeSlider.svelte';
+import { RangeSlider } from '../../ui/slider/index.js';
 
 /**
  * Auto-faceted filter panel. Reads a `FacetSet` derived from the loaded
@@ -171,14 +171,14 @@ const active = $derived(hasActiveFilters(state));
 						{facets.datetime.count}
 					</span>
 				</div>
-				<StacRangeSlider
+				<RangeSlider
 					min={datetimeBounds[0]}
 					max={datetimeBounds[1]}
 					value={datetimeValue}
 					step={86_400_000}
 					histogram={facets.datetime.bins}
 					formatLabel={fmtDate}
-					onChange={setDatetime}
+					onValueCommit={setDatetime}
 				/>
 			</section>
 		{/if}
@@ -192,13 +192,13 @@ const active = $derived(hasActiveFilters(state));
 					<span class="text-muted-foreground">{t(NUMERIC_LABEL_KEYS[facet.field] ?? facet.field)}</span>
 					<span class="text-[10px] tabular-nums text-muted-foreground">{facet.count}</span>
 				</div>
-				<StacRangeSlider
+				<RangeSlider
 					min={facet.min}
 					max={facet.max}
 					value={[lo, hi]}
 					step={Math.max((facet.max - facet.min) / 200, 0.01)}
 					formatLabel={fmtNumber}
-					onChange={(next) => setNumeric(facet.field, next, facet.min, facet.max)}
+					onValueCommit={(next) => setNumeric(facet.field, next, facet.min, facet.max)}
 				/>
 			</section>
 		{/each}

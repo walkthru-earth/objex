@@ -37,7 +37,10 @@ import { LruCache } from '../../utils/lru.js';
 import {
 	buildMosaicSourceMeta,
 	classifyStac,
+	extractMosaicAssets,
 	type MosaicSourceMeta,
+	pickCogAssetHref,
+	type RasterBandAsset,
 	type StacRoutableKind,
 	spatialCellKey
 } from '../../utils/stac.js';
@@ -75,6 +78,17 @@ let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
 let detectedBandCount = $state<number>(3);
 let detectedDataType = $state<string>('');
 let probedBandCount = false;
+// ─── Asset picker (mosaic uses ONE COG per item) ──────────────────
+// `availableAssets` is seeded from the first item that arrives so the user
+// can pick which STAC asset (`visual` / `red` / `nir` / ...) drives the
+// mosaic. `mosaicAssetKey` may be null until the first batch lands; while
+// null, `buildMosaicSourceMeta(item, undefined)` falls back to the default
+// `pickCogAssetHref` order (`visual` → `image` → `data` → `rendered_preview`
+// → first tiff). Changing the key swaps every committed source's `href` in
+// place via re-deriving from the cached `StacItemView.raw`, no viewport
+// re-query needed.
+let availableAssets = $state.raw<RasterBandAsset[]>([]);
+let mosaicAssetKey = $state<string | null>(null);
 
 // ─── Pixel inspection ──────────────────────────────────────────────
 let pixelValue = $state<PixelValue | null>(null);
@@ -448,6 +462,8 @@ function resetViewer(): void {
 	detectedBandCount = 3;
 	detectedDataType = '';
 	probedBandCount = false;
+	availableAssets = [];
+	mosaicAssetKey = null;
 	pixelValue = null;
 	pixelSourceId = null;
 	inspecting = false;
@@ -768,10 +784,28 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 
 			const residualFilteredItems = applyFacetsToItems(batch.items, batch.residual);
 
+			// Seed asset picker from the first item with raster assets so the user
+			// can flip from `visual` → `red` / `nir` / etc. without a re-query.
+			if (availableAssets.length === 0) {
+				for (const probe of residualFilteredItems) {
+					const probed = extractMosaicAssets(probe);
+					if (probed.length > 0) {
+						availableAssets = probed;
+						if (!mosaicAssetKey) {
+							const defaultHref = pickCogAssetHref(probe);
+							const matched = probed.find((a) => a.href === defaultHref);
+							mosaicAssetKey = matched?.key ?? probed[0].key;
+						}
+						break;
+					}
+				}
+			}
+
 			const accepted: MosaicSourceMeta[] = [];
 			const acceptedViews: StacItemView[] = [];
+			const assetKeyForBuild = mosaicAssetKey ?? undefined;
 			for (const item of residualFilteredItems) {
-				const normalized = buildMosaicSourceMeta(item);
+				const normalized = buildMosaicSourceMeta(item, assetKeyForBuild);
 				if (!normalized) continue;
 				// Same item.id can appear across pagination batches (revisits whose
 				// spatialCellKey differs, or static catalogs that re-walk overlapping
@@ -952,6 +986,50 @@ function handleConfigChange(next: BandConfig): void {
 	bandConfig = next;
 	histogram = null;
 	sourceHistograms.clear();
+	bumpPipeline();
+}
+
+/**
+ * Swap which STAC asset feeds the mosaic. Re-derives `committedSources` and
+ * `itemsRef` from the cached `StacItemView.raw` so the deck.gl layer rebuilds
+ * with the new hrefs but the streaming buffer / pagination state stay intact.
+ * Resets the band config + per-source histograms because the new asset may
+ * have a different band count / sample format (e.g. `visual` 3-band uint8 →
+ * `nir` 1-band uint16).
+ */
+function setMosaicAssetKey(nextKey: string): void {
+	if (nextKey === mosaicAssetKey) return;
+	mosaicAssetKey = nextKey;
+	bandConfig = null;
+	probedBandCount = false;
+	histogram = null;
+	sourceHistograms.clear();
+	geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
+	presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
+	sourceHrefById = new Map();
+
+	const remap = (
+		views: ReadonlyArray<StacItemView>
+	): {
+		sources: MosaicSourceMeta[];
+		viewsOut: StacItemView[];
+	} => {
+		const sources: MosaicSourceMeta[] = [];
+		const viewsOut: StacItemView[] = [];
+		for (const v of views) {
+			const meta = buildMosaicSourceMeta(v.raw, nextKey);
+			if (!meta) continue;
+			sources.push(meta);
+			viewsOut.push(v);
+		}
+		return { sources, viewsOut };
+	};
+	const fromBuffer = remap(itemViewsRef);
+	itemsRef = fromBuffer.sources;
+	itemViewsRef = fromBuffer.viewsOut;
+	const fromCommitted = remap(committedViews);
+	committedSources = fromCommitted.sources;
+	committedViews = fromCommitted.viewsOut;
 	bumpPipeline();
 }
 
@@ -1244,15 +1322,19 @@ onDestroy(cleanup);
 			</button>
 		</div>
 
-		{#if showControls}
+		{#if showControls && bandConfig}
 			<CogControls
+				mode="single"
 				bandCount={detectedBandCount}
 				{bandConfig}
 				onConfigChange={handleConfigChange}
 				{rescale}
-				rescaleApplicable={bandConfig?.mode === 'single'}
+				rescaleApplicable={bandConfig.mode === 'single'}
 				onRescaleChange={handleRescaleChange}
 				{histogram}
+				assets={availableAssets}
+				assetKey={mosaicAssetKey}
+				onAssetChange={setMosaicAssetKey}
 			/>
 		{/if}
 

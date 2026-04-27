@@ -546,6 +546,7 @@ onDestroy(cleanup);
 		<!-- Band/Color controls panel -->
 		{#if showControls && bandConfig}
 			<CogControls
+				mode="single"
 				bandCount={cogInfo.bandCount}
 				{bandConfig}
 				onConfigChange={handleConfigChange}

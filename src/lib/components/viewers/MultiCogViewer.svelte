@@ -19,15 +19,17 @@ import {
 	type RescaleConfig
 } from '../../utils/cog.js';
 import {
-	type BandMap,
 	type BandSlot,
-	extractSentinelBandAssets,
-	hasRgbBands,
+	extractRasterBandAssets,
+	hasCompositableBands,
 	isStacItem,
+	type RasterBandAsset,
+	resolvePresetComposite,
 	type StacItem,
 	type StacRoutableKind
 } from '../../utils/stac.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
@@ -67,6 +69,10 @@ const PRESETS: Preset[] = [
 
 let { tab, classified }: { tab: Tab; classified?: StacRoutableKind } = $props();
 
+/** R/G/B (+ optional A) composite expressed as STAC asset keys for this Item.
+ *  Replaces the closed `BandSlot` enum so non-S2 catalogs can be composed. */
+type AssetComposite = { r: string; g: string; b: string; a?: string };
+
 let loading = $state(true);
 let error = $state<string | null>(null);
 let showControls = $state(false);
@@ -77,7 +83,8 @@ let activePresetId = $state<string>('true-color');
 // keeps typical land surfaces in the visible range without clipping.
 let rescale = $state<RescaleConfig>({ min: 0, max: 0.3 });
 
-let bandMap = $state.raw<BandMap>({});
+let rasterAssets = $state.raw<RasterBandAsset[]>([]);
+let composite = $state.raw<AssetComposite | null>(null);
 let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
@@ -98,8 +105,13 @@ const epsgResolver = createEpsgResolver();
 
 const activePreset = $derived(PRESETS.find((p) => p.id === activePresetId) ?? PRESETS[0]);
 const availablePresets = $derived(
-	PRESETS.filter((p) => bandMap[p.composite.r] && bandMap[p.composite.g] && bandMap[p.composite.b])
+	PRESETS.filter((p) => resolvePresetComposite(rasterAssets, p.composite) !== null)
 );
+const assetByKey = $derived.by(() => {
+	const map = new Map<string, RasterBandAsset>();
+	for (const a of rasterAssets) map.set(a.key, a);
+	return map;
+});
 
 $effect(() => {
 	if (!tab) return;
@@ -128,7 +140,8 @@ function resetViewer(): void {
 		}
 	}
 	overlayRef = null;
-	bandMap = {};
+	rasterAssets = [];
+	composite = null;
 	presignCache = new Map();
 	loading = true;
 	error = null;
@@ -218,13 +231,43 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 			return;
 		}
 
-		const bands = extractSentinelBandAssets(item);
-		if (!hasRgbBands(bands)) {
+		const assets = extractRasterBandAssets(item);
+		if (!hasCompositableBands(assets)) {
 			error = t('map.multiCogMissingBands');
 			loading = false;
 			return;
 		}
-		bandMap = bands;
+		rasterAssets = assets;
+
+		// Hydrate composite from URL hash params first (shareable links), then
+		// fall back to the active preset (resolved via common-name + vendor key
+		// fallbacks), then to the first three assets if no preset matches.
+		const params = getUrlViewParams();
+		const r = params.get('r');
+		const g = params.get('g');
+		const b = params.get('b');
+		const a = params.get('a') ?? undefined;
+		const presetId = params.get('preset');
+		if (
+			r &&
+			g &&
+			b &&
+			assets.some((x) => x.key === r) &&
+			assets.some((x) => x.key === g) &&
+			assets.some((x) => x.key === b)
+		) {
+			composite = { r, g, b, a: a && assets.some((x) => x.key === a) ? a : undefined };
+			if (presetId) activePresetId = presetId;
+		} else {
+			const resolved = resolvePresetComposite(assets, activePreset.composite);
+			if (resolved) {
+				composite = resolved;
+			} else {
+				const [c0, c1, c2] = assets;
+				composite = { r: c0.key, g: c1.key, b: c2.key };
+				activePresetId = '';
+			}
+		}
 
 		if (Array.isArray(item.bbox) && item.bbox.length >= 4) {
 			const clamped = clampBounds({
@@ -255,20 +298,30 @@ async function buildAndAddLayer(
 	version: number,
 	signal: AbortSignal
 ): Promise<void> {
-	const composite = activePreset.composite;
-	const sources: Record<string, { url: string }> = {};
-	for (const slot of [composite.r, composite.g, composite.b]) {
-		const href = bandMap[slot];
-		if (!href) continue;
-		const url = await presignHref(href);
+	const cur = composite;
+	if (!cur) return;
+	const channels: { key: string; href: string }[] = [];
+	for (const k of [cur.r, cur.g, cur.b, cur.a].filter((v): v is string => Boolean(v))) {
+		const asset = assetByKey.get(k);
+		if (!asset) continue;
+		const url = await presignHref(asset.href);
 		if (version !== layerVersion || signal.aborted) return;
-		sources[slot] = { url };
+		channels.push({ key: k, href: url });
 	}
+	const sources: Record<string, { url: string }> = {};
+	for (const ch of channels) sources[ch.key] = { url: ch.href };
+
+	const compositeSpec: { r: string; g: string; b: string; a?: string } = {
+		r: cur.r,
+		g: cur.g,
+		b: cur.b
+	};
+	if (cur.a && sources[cur.a]) compositeSpec.a = cur.a;
 
 	const layer = new MultiCOGLayer({
 		id: `multicog-${tab.id}-v${version}`,
 		sources,
-		composite: { r: composite.r, g: composite.g, b: composite.b },
+		composite: compositeSpec,
 		renderPipeline: buildBandRenderPipeline({ noDataVal: 0, rescale: { ...rescale } }),
 		pool: pool ?? undefined,
 		epsgResolver,
@@ -305,8 +358,50 @@ async function buildAndAddLayer(
 	map.addControl(overlay as unknown as maplibregl.IControl);
 }
 
+function syncCompositeToUrl(c: AssetComposite | null, presetId: string | null): void {
+	if (!c) {
+		updateUrlViewParams('map', null);
+		return;
+	}
+	const params = new URLSearchParams();
+	params.set('r', c.r);
+	params.set('g', c.g);
+	params.set('b', c.b);
+	if (c.a) params.set('a', c.a);
+	if (presetId) params.set('preset', presetId);
+	updateUrlViewParams('map', params);
+}
+
 function setPreset(id: string): void {
+	const preset = PRESETS.find((p) => p.id === id);
+	if (!preset) return;
+	const resolved = resolvePresetComposite(rasterAssets, preset.composite);
+	if (!resolved) return;
 	activePresetId = id;
+	composite = { ...resolved, a: composite?.a };
+	syncCompositeToUrl(composite, id);
+	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
+}
+
+function setChannel(channel: 'r' | 'g' | 'b' | 'a', assetKey: string): void {
+	if (!composite) return;
+	const next: AssetComposite =
+		channel === 'a' && !assetKey
+			? { r: composite.r, g: composite.g, b: composite.b }
+			: { ...composite, [channel]: assetKey };
+	composite = next;
+	// User overrode a channel — drop the preset id so the URL reflects manual.
+	const p = PRESETS.find((pr) => pr.id === activePresetId);
+	const stillMatches = p && resolvePresetComposite(rasterAssets, p.composite);
+	if (
+		!stillMatches ||
+		stillMatches.r !== next.r ||
+		stillMatches.g !== next.g ||
+		stillMatches.b !== next.b
+	) {
+		activePresetId = '';
+	}
+	syncCompositeToUrl(next, activePresetId || null);
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
 
@@ -331,7 +426,8 @@ function cleanup(): void {
 	if (mapRef) cleanupNativeBitmap(mapRef);
 	mapRef = null;
 	overlayRef = null;
-	bandMap = {};
+	rasterAssets = [];
+	composite = null;
 	presignCache.clear();
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
@@ -376,20 +472,25 @@ onDestroy(cleanup);
 		{/if}
 	</div>
 
-	{#if !error && availablePresets.length > 0}
+	{#if !error && rasterAssets.length > 0 && composite}
 		<div class="absolute right-2 top-2 z-10 flex items-center gap-1">
-			<label class="flex items-center gap-1 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm">
-				<span class="text-muted-foreground">{t('map.multiCogPreset.label')}</span>
-				<select
-					class="rounded border border-border bg-background px-1 py-0.5 text-xs"
-					value={activePresetId}
-					onchange={(e) => setPreset((e.target as HTMLSelectElement).value)}
-				>
-					{#each availablePresets as p}
-						<option value={p.id}>{t(p.labelKey)}</option>
-					{/each}
-				</select>
-			</label>
+			{#if availablePresets.length > 0}
+				<label class="flex items-center gap-1 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm">
+					<span class="text-muted-foreground">{t('map.multiCogPreset.label')}</span>
+					<select
+						class="rounded border border-border bg-background px-1 py-0.5 text-xs"
+						value={activePresetId}
+						onchange={(e) => setPreset((e.target as HTMLSelectElement).value)}
+					>
+						{#if !activePresetId}
+							<option value="">{t('map.multiCogPreset.custom')}</option>
+						{/if}
+						{#each availablePresets as p}
+							<option value={p.id}>{t(p.labelKey)}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
 			<button
 				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
 				class:ring-1={showControls}
@@ -405,8 +506,9 @@ onDestroy(cleanup);
 		{#if showControls}
 			<CogControls
 				mode="multi"
-				bandCount={3}
-				onConfigChange={() => {}}
+				assets={rasterAssets}
+				composite={composite}
+				onCompositeChange={setChannel}
 				{rescale}
 				rescaleApplicable={true}
 				onRescaleChange={handleRescaleChange}

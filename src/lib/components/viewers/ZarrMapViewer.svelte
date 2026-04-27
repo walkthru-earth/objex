@@ -17,6 +17,7 @@ import {
 	type ZarrHierarchy,
 	type ZarrNode
 } from '../../utils/zarr.js';
+import { Slider } from '../ui/slider/index.js';
 import MapContainer from './map/MapContainer.svelte';
 
 /** Enriched selector dimension with coordinate metadata. */
@@ -661,16 +662,17 @@ onDestroy(cleanup);
 				title={dimLabel(dim)}
 			>
 				<span class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">{dim.name}</span>
-				<input
-					type="range"
-					min="0"
+				<Slider
+					type="single"
+					min={0}
 					max={dim.size - 1}
+					step={1}
 					value={selectorValues[dim.name] ?? 0}
-					oninput={(e) => {
-						selectorValues[dim.name] = +e.currentTarget.value;
+					onValueChange={(v) => {
+						selectorValues[dim.name] = v as number;
 					}}
-					onchange={updateSelector}
-					class="h-1 w-16"
+					onValueCommit={() => updateSelector()}
+					class="w-20"
 				/>
 				{#if dim.isDatetime && dim.minDate && dim.maxDate}
 					{@const dateVal = indexToDateStr(selectorValues[dim.name] ?? 0, dim)}

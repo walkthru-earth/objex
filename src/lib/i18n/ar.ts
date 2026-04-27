@@ -441,6 +441,11 @@ export const ar: Record<string, string> = {
 	'map.multiCogPreset.swir': 'الأشعة تحت الحمراء قصيرة الموجة',
 	'map.multiCogPreset.vegetation': 'الغطاء النباتي',
 	'map.multiCogPreset.agriculture': 'الزراعة',
+	'map.multiCogPreset.custom': 'مخصص',
+	'map.multiCogBands': 'النطاقات',
+	'map.multiCogBandsTooltip': 'اختر النطاق المُسند إلى كل قناة إخراج',
+	'map.multiCogChannelNone': '(بدون)',
+	'map.mosaicAsset': 'الأصل',
 
 	// تبديل عرض STAC (StacTabViewer)
 	'stac.viewMosaic': 'خريطة',
@@ -515,8 +520,6 @@ export const ar: Record<string, string> = {
 	'stac.close': 'إغلاق',
 	'stac.showRaw': 'عرض JSON الخام',
 	'stac.hideRaw': 'إخفاء JSON الخام',
-	'stac.rangeLowerBound': 'الحد الأدنى',
-	'stac.rangeUpperBound': 'الحد الأعلى',
 
 	// COG Controls
 	'cog.style': 'النمط',

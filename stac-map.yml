@@ -1,0 +1,76 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - button [ref=e6]:
+      - button [ref=e7]:
+        - img [ref=e8]
+    - separator [ref=e9]
+    - generic [ref=e10]:
+      - button [ref=e12]:
+        - button [ref=e13]:
+          - img [ref=e14]
+      - button [ref=e15]:
+        - button [ref=e16]:
+          - img [ref=e17]
+    - generic [ref=e18]:
+      - button "Language" [ref=e19]:
+        - img
+      - button "System mode" [ref=e20]:
+        - img
+  - generic [ref=e22]:
+    - button "items Close tab items" [ref=e29]:
+      - img [ref=e30]
+      - generic [ref=e31]: items
+      - button "Close tab items" [ref=e32]:
+        - img
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]: items
+        - generic [ref=e61]: JSON
+        - generic [ref=e62]: STAC Item
+        - generic [ref=e63]:
+          - button "Map (Bands)" [ref=e64]:
+            - img
+            - text: Map (Bands)
+          - button "stac-map" [ref=e65]:
+            - img
+            - text: stac-map
+          - button "STAC Browser" [ref=e66]:
+            - img
+            - text: STAC Browser
+          - button "JSON" [ref=e67]:
+            - img
+            - text: JSON
+      - generic [ref=e69]:
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - region "Map" [ref=e73]
+            - generic:
+              - generic:
+                - generic [ref=e74]:
+                  - button "Zoom in" [ref=e75] [cursor=pointer]
+                  - button "Zoom out" [ref=e77] [cursor=pointer]
+                  - button "Drag to rotate map, click to reset north" [ref=e79]
+                - group [ref=e81]:
+                  - generic "Toggle attribution" [ref=e82] [cursor=pointer]
+                  - generic [ref=e83]:
+                    - link "MapLibre" [ref=e84] [cursor=pointer]:
+                      - /url: https://maplibre.org/
+                    - text: "| ©"
+                    - link "CARTO" [ref=e85] [cursor=pointer]:
+                      - /url: https://carto.com/about-carto/
+                    - text: ", ©"
+                    - link "OpenStreetMap" [ref=e86] [cursor=pointer]:
+                      - /url: http://www.openstreetmap.org/about/
+                    - text: contributors
+          - generic:
+            - generic: "2.0"
+        - generic [ref=e87]: This STAC item is missing the red/green/blue bands required for a composite.
+    - generic [ref=e48]:
+      - img [ref=e49]
+      - generic [ref=e50]: JSON
+      - separator [ref=e51]
+      - button "Safe lock enabled (read-only)" [ref=e52]:
+        - img [ref=e53]
+      - separator [ref=e54]
+      - img [ref=e55]
+      - generic [ref=e56]: Web

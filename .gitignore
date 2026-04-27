@@ -13,3 +13,6 @@ packages/objex-utils/dist/
 .claude/skills/
 .claude/settings.local.json
 .claude/worktrees/
+
+# Playwright MCP local capture artifacts
+.playwright-mcp/

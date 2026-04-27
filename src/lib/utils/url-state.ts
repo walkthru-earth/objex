@@ -74,13 +74,55 @@ export function updateUrlView(view: string) {
 
 /**
  * Read the current #hash view mode from the URL.
+ *
+ * The hash is parsed as `#<mode>?<viewParams>`, where `<mode>` is the viewer
+ * token (`map`, `stac-map`, `code`, `multicog`, ...) and `<viewParams>` is an
+ * optional URLSearchParams-shaped string used by viewers that want richer
+ * shareable state (e.g. MultiCogViewer encoding its chosen R/G/B asset keys).
+ * Returns just the mode string for backwards compatibility; per-viewer
+ * params are retrieved via `getUrlViewParams()`.
  */
 export function getUrlView(): string {
 	try {
-		return window.location.hash.replace('#', '');
+		const raw = window.location.hash.replace('#', '');
+		const q = raw.indexOf('?');
+		return q >= 0 ? raw.slice(0, q) : raw;
 	} catch {
 		return '';
 	}
+}
+
+/**
+ * Read viewer-specific params from the URL hash query-string portion.
+ *
+ * Format: `#<mode>?k1=v1&k2=v2`. Returns a `URLSearchParams` so callers can
+ * `.get(key)` cleanly and merge their own state into it.
+ */
+export function getUrlViewParams(): URLSearchParams {
+	try {
+		const raw = window.location.hash.replace('#', '');
+		const q = raw.indexOf('?');
+		if (q < 0) return new URLSearchParams();
+		return new URLSearchParams(raw.slice(q + 1));
+	} catch {
+		return new URLSearchParams();
+	}
+}
+
+/**
+ * Update the hash with both a mode and an optional set of viewer params.
+ * Empty / null `params` writes just `#<mode>`. Existing hash params are
+ * fully replaced — pass the merged set in.
+ */
+export function updateUrlViewParams(view: string, params?: URLSearchParams | null): void {
+	const qs = params?.toString();
+	writeLocation((url) => {
+		if (!view) {
+			url.hash = '';
+			return;
+		}
+		url.hash = qs ? `${view}?${qs}` : view;
+	});
 }
 
 /**

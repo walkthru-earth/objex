@@ -2,7 +2,7 @@
 import { t } from '../../../i18n/index.svelte.js';
 import { formatDate } from '../../../utils/format.js';
 import type { DatetimeFacet, FacetState } from '../../../utils/stac-facets.js';
-import StacRangeSlider from './StacRangeSlider.svelte';
+import { RangeSlider } from '../../ui/slider/index.js';
 
 /**
  * Datetime range picker that sits above the item strip. Replaces the older
@@ -134,14 +134,14 @@ function fmtDate(ms: number): string {
 	</div>
 
 	{#if facet && bounds && sliderValue}
-		<StacRangeSlider
+		<RangeSlider
 			min={bounds[0]}
 			max={bounds[1]}
 			value={sliderValue}
 			step={86_400_000}
 			histogram={facet.bins}
 			formatLabel={fmtDate}
-			onChange={setSlider}
+			onValueCommit={setSlider}
 		/>
 	{:else}
 		<div class="text-[10px] text-muted-foreground">{t('stac.facetNoneAvailable')}</div>

@@ -12,28 +12,67 @@ import {
 	COLORMAP_SPRITE_LAYERS,
 	COLORMAP_SPRITE_URL
 } from '../../utils/colormap-sprite.js';
+import type { RasterBandAsset } from '../../utils/stac.js';
+import { RangeSlider } from '../ui/slider/index.js';
 
-let {
-	bandCount,
-	bandConfig,
-	onConfigChange,
-	rescale,
-	rescaleApplicable,
-	onRescaleChange,
-	histogram = null,
-	mode = 'single'
-}: {
+/** Channel slot for a multi-COG composite. */
+export type MultiChannel = 'r' | 'g' | 'b' | 'a';
+/** Composite asset-key map handed to MultiCOGLayer's `composite` prop. */
+export type AssetComposite = { r: string; g: string; b: string; a?: string };
+
+/**
+ * Discriminated-union props so the band/picker shape lines up with the mode.
+ * `single` drives single-COG band selectors + color ramp; `multi` drives the
+ * STAC asset-key picker for MultiCOGLayer composition. Both modes share the
+ * rescale slider + (optional) histogram overlay.
+ */
+type SingleProps = {
+	mode: 'single';
 	bandCount: number;
-	/** Required when `mode === 'single'`, ignored when `mode === 'multi'`. */
-	bandConfig?: BandConfig;
+	bandConfig: BandConfig;
 	onConfigChange: (config: BandConfig) => void;
 	rescale: RescaleConfig;
 	rescaleApplicable: boolean;
 	onRescaleChange: (rescale: RescaleConfig) => void;
-	/** Optional histogram bins (normalized, single-band only) for the slider overlay. */
+	/** Optional histogram bins (single-band only) for the slider overlay. */
 	histogram?: Uint32Array | null;
-	mode?: 'single' | 'multi';
-} = $props();
+	/**
+	 * Optional STAC asset picker for mosaic-mode usage. When supplied with ≥2
+	 * entries, an Asset `<select>` renders above the band/ramp UI so the user
+	 * can swap which single-asset COG drives each item in the mosaic.
+	 */
+	assets?: RasterBandAsset[];
+	assetKey?: string | null;
+	onAssetChange?: (assetKey: string) => void;
+};
+
+type MultiProps = {
+	mode: 'multi';
+	/** Asset list available on the current STAC Item. */
+	assets: RasterBandAsset[];
+	composite: AssetComposite;
+	onCompositeChange: (channel: MultiChannel, assetKey: string) => void;
+	rescale: RescaleConfig;
+	rescaleApplicable: boolean;
+	onRescaleChange: (rescale: RescaleConfig) => void;
+	histogram?: Uint32Array | null;
+};
+
+const props: SingleProps | MultiProps = $props();
+const isSingle = $derived(props.mode === 'single');
+const isMulti = $derived(props.mode === 'multi');
+// Narrowed views — Svelte's $derived plus runtime guards keep TS happy.
+const single = $derived(props.mode === 'single' ? (props as SingleProps) : null);
+const multi = $derived(props.mode === 'multi' ? (props as MultiProps) : null);
+
+const rescale = $derived(props.rescale);
+const rescaleApplicable = $derived(props.rescaleApplicable);
+const onRescaleChange = $derived(props.onRescaleChange);
+const histogram = $derived(props.histogram ?? null);
+
+function multiAssetLabel(a: RasterBandAsset): string {
+	return a.commonName ? `${a.key} (${a.commonName})` : a.key;
+}
 
 // ─── Ramp picker state ──────────────────────────────────────────
 // Keep a curated set pinned at the top for familiarity; the full set of
@@ -69,19 +108,19 @@ function bandOptions(count: number): { value: number; label: string }[] {
 	}));
 }
 
-function setMode(mode: 'rgb' | 'single') {
-	if (!bandConfig) return;
-	onConfigChange({ ...bandConfig, mode });
+function setSingleMode(m: 'rgb' | 'single') {
+	if (!single) return;
+	single.onConfigChange({ ...single.bandConfig, mode: m });
 }
 
 function setBand(key: 'rBand' | 'gBand' | 'bBand' | 'band', value: number) {
-	if (!bandConfig) return;
-	onConfigChange({ ...bandConfig, [key]: value });
+	if (!single) return;
+	single.onConfigChange({ ...single.bandConfig, [key]: value });
 }
 
 function setRamp(id: ColorRampId) {
-	if (!bandConfig) return;
-	onConfigChange({ ...bandConfig, colorRamp: id });
+	if (!single) return;
+	single.onConfigChange({ ...single.bandConfig, colorRamp: id });
 }
 
 /**
@@ -121,8 +160,18 @@ function setRescaleMax(value: number) {
 	onRescaleChange({ min: rescale.min, max: Number.isFinite(next) ? next : 1 });
 }
 
+function setRescaleRange(next: [number, number]) {
+	const lo = clamp01(next[0]);
+	const hi = clamp01(next[1]);
+	onRescaleChange({ min: Math.min(lo, hi), max: Math.max(lo, hi) });
+}
+
 function resetRescale() {
 	onRescaleChange({ ...DEFAULT_RESCALE });
+}
+
+function fmtRescale(n: number): string {
+	return n.toFixed(2);
 }
 
 const histogramBars = $derived.by(() => {
@@ -138,30 +187,45 @@ const histogramBars = $derived.by(() => {
 <div
 	class="absolute right-2 top-10 z-10 w-60 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
 >
-{#if mode === 'single' && bandConfig}
+{#if isSingle && single}
+	{#if single.assets && single.assets.length > 1 && single.onAssetChange}
+		<!-- Mosaic asset picker: which single STAC asset drives every item. -->
+		<div class="mb-2 flex items-center gap-2">
+			<span class="text-muted-foreground">{t('map.mosaicAsset')}</span>
+			<select
+				class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
+				value={single.assetKey ?? ''}
+				onchange={(e) => single.onAssetChange?.((e.target as HTMLSelectElement).value)}
+			>
+				{#each single.assets as asset (asset.key)}
+					<option value={asset.key}>{multiAssetLabel(asset)}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 	<!-- Mode toggle -->
 	<div class="mb-2 flex gap-1">
 		<button
 			class="flex-1 rounded px-2 py-1 transition-colors"
-			class:bg-primary={bandConfig.mode === 'rgb'}
-			class:text-primary-foreground={bandConfig.mode === 'rgb'}
-			class:bg-muted={bandConfig.mode !== 'rgb'}
-			onclick={() => setMode('rgb')}
+			class:bg-primary={single.bandConfig.mode === 'rgb'}
+			class:text-primary-foreground={single.bandConfig.mode === 'rgb'}
+			class:bg-muted={single.bandConfig.mode !== 'rgb'}
+			onclick={() => setSingleMode('rgb')}
 		>
 			RGB
 		</button>
 		<button
 			class="flex-1 rounded px-2 py-1 transition-colors"
-			class:bg-primary={bandConfig.mode === 'single'}
-			class:text-primary-foreground={bandConfig.mode === 'single'}
-			class:bg-muted={bandConfig.mode !== 'single'}
-			onclick={() => setMode('single')}
+			class:bg-primary={single.bandConfig.mode === 'single'}
+			class:text-primary-foreground={single.bandConfig.mode === 'single'}
+			class:bg-muted={single.bandConfig.mode !== 'single'}
+			onclick={() => setSingleMode('single')}
 		>
 			{t('cog.singleBand')}
 		</button>
 	</div>
 
-	{#if bandConfig.mode === 'rgb'}
+	{#if single.bandConfig.mode === 'rgb'}
 		<!-- RGB band selectors -->
 		<div class="space-y-1">
 			{#each [
@@ -173,11 +237,11 @@ const histogramBars = $derived.by(() => {
 					<span class="w-3 font-bold {ch.color}">{ch.label}</span>
 					<select
 						class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-						value={bandConfig[ch.key]}
+						value={single.bandConfig[ch.key]}
 						onchange={(e) =>
 							setBand(ch.key, Number((e.target as HTMLSelectElement).value))}
 					>
-						{#each bandOptions(bandCount) as opt}
+						{#each bandOptions(single.bandCount) as opt}
 							<option value={opt.value}>{opt.label}</option>
 						{/each}
 					</select>
@@ -190,11 +254,11 @@ const histogramBars = $derived.by(() => {
 			<span class="text-muted-foreground">{t('cog.band')}</span>
 			<select
 				class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				value={bandConfig.band}
+				value={single.bandConfig.band}
 				onchange={(e) =>
 					setBand('band', Number((e.target as HTMLSelectElement).value))}
 			>
-				{#each bandOptions(bandCount) as opt}
+				{#each bandOptions(single.bandCount) as opt}
 					<option value={opt.value}>{opt.label}</option>
 				{/each}
 			</select>
@@ -214,7 +278,7 @@ const histogramBars = $derived.by(() => {
 				<div class="grid grid-cols-2 gap-1">
 					{#each PINNED_RAMPS as id}
 						<button
-							class="flex flex-col items-stretch rounded border px-1 py-0.5 transition-colors {bandConfig.colorRamp === id ? 'border-primary bg-muted' : 'border-transparent hover:border-border'}"
+							class="flex flex-col items-stretch rounded border px-1 py-0.5 transition-colors {single.bandConfig.colorRamp === id ? 'border-primary bg-muted' : 'border-transparent hover:border-border'}"
 							onclick={() => setRamp(id)}
 							title={id}
 						>
@@ -238,7 +302,7 @@ const histogramBars = $derived.by(() => {
 			<div class="max-h-40 overflow-y-auto rounded border border-border">
 				{#each filteredRamps as id}
 					<button
-						class="flex w-full items-center gap-2 px-1.5 py-0.5 text-left text-[11px] transition-colors {bandConfig.colorRamp === id ? 'bg-muted' : 'hover:bg-muted/60'}"
+						class="flex w-full items-center gap-2 px-1.5 py-0.5 text-left text-[11px] transition-colors {single.bandConfig.colorRamp === id ? 'bg-muted' : 'hover:bg-muted/60'}"
 						onclick={() => setRamp(id)}
 						title={id}
 					>
@@ -249,6 +313,36 @@ const histogramBars = $derived.by(() => {
 			</div>
 		</div>
 	{/if}
+{/if}
+
+{#if isMulti && multi}
+	<!-- STAC asset → channel picker for MultiCOG composites. -->
+	<div class="mb-2 text-muted-foreground">{t('map.multiCogBands')}</div>
+	<div class="space-y-1">
+		{#each [
+			{ ch: 'r' as const, label: 'R', color: 'text-red-400' },
+			{ ch: 'g' as const, label: 'G', color: 'text-green-400' },
+			{ ch: 'b' as const, label: 'B', color: 'text-blue-400' },
+			{ ch: 'a' as const, label: 'A', color: 'text-muted-foreground' }
+		] as row}
+			<div class="flex items-center gap-2">
+				<span class="w-3 font-bold {row.color}">{row.label}</span>
+				<select
+					class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
+					value={multi.composite[row.ch] ?? ''}
+					onchange={(e) =>
+						multi.onCompositeChange(row.ch, (e.target as HTMLSelectElement).value)}
+				>
+					{#if row.ch === 'a'}
+						<option value="">{t('map.multiCogChannelNone')}</option>
+					{/if}
+					{#each multi.assets as asset (asset.key)}
+						<option value={asset.key}>{multiAssetLabel(asset)}</option>
+					{/each}
+				</select>
+			</div>
+		{/each}
+	</div>
 {/if}
 
 	{#if rescaleApplicable}
@@ -264,73 +358,41 @@ const histogramBars = $derived.by(() => {
 				</button>
 			</div>
 
-			<!-- Histogram + range visualization -->
-			{#if histogramBars}
-				<div class="relative h-8 w-full rounded bg-background/60">
-					<!-- Histogram bars -->
-					<svg
-						viewBox="0 0 100 100"
-						preserveAspectRatio="none"
-						class="absolute inset-0 h-full w-full"
-						aria-hidden="true"
-					>
-						{#each histogramBars as h, i}
-							<rect
-								x={(i * 100) / histogramBars.length}
-								y={100 - h * 100}
-								width={100 / histogramBars.length}
-								height={h * 100}
-								class="fill-primary/40"
-							/>
-						{/each}
-					</svg>
-					<!-- Active rescale window -->
-					<div
-						class="pointer-events-none absolute inset-y-0 border-x border-primary bg-primary/10"
-						style="left: {rescale.min * 100}%; right: {(1 - rescale.max) * 100}%;"
-					></div>
-				</div>
-			{/if}
+			<RangeSlider
+				min={0}
+				max={1}
+				step={0.01}
+				value={[rescale.min, rescale.max]}
+				histogram={histogramBars}
+				formatLabel={fmtRescale}
+				onValueChange={setRescaleRange}
+			/>
 
 			<div class="flex items-center gap-1.5">
-				<input
-					type="number"
-					min="0"
-					max="1"
-					step="0.01"
-					class="w-14 rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
-					value={rescale.min}
-					oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
-				/>
-				<input
-					type="range"
-					min="0"
-					max="1"
-					step="0.01"
-					class="flex-1 accent-primary"
-					value={rescale.min}
-					oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
-				/>
-			</div>
-			<div class="flex items-center gap-1.5">
-				<input
-					type="number"
-					min="0"
-					max="1"
-					step="0.01"
-					class="w-14 rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
-					value={rescale.max}
-					oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
-				/>
-				<input
-					type="range"
-					min="0"
-					max="1"
-					step="0.01"
-					class="flex-1 accent-primary"
-					value={rescale.max}
-					oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
-				/>
+				<label class="flex flex-1 items-center gap-1 text-[10px] text-muted-foreground">
+					<span class="w-6">min</span>
+					<input
+						type="number"
+						min="0"
+						max="1"
+						step="0.01"
+						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+						value={rescale.min}
+						oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
+					/>
+				</label>
+				<label class="flex flex-1 items-center gap-1 text-[10px] text-muted-foreground">
+					<span class="w-6">max</span>
+					<input
+						type="number"
+						min="0"
+						max="1"
+						step="0.01"
+						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+						value={rescale.max}
+						oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
+					/>
+				</label>
 			</div>
 		</div>
 	{/if}
