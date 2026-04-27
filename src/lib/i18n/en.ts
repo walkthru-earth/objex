@@ -525,6 +525,7 @@ export const en: Record<string, string> = {
 
 	// COG Controls
 	'cog.style': 'Style',
+	'cog.asset': 'Asset',
 	'cog.band': 'Band',
 	'cog.singleBand': 'Single',
 	'cog.colorRamp': 'Color ramp',

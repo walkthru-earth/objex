@@ -523,6 +523,7 @@ export const ar: Record<string, string> = {
 
 	// COG Controls
 	'cog.style': 'النمط',
+	'cog.asset': 'الأصل',
 	'cog.band': 'النطاق',
 	'cog.singleBand': 'نطاق واحد',
 	'cog.colorRamp': 'تدرج الألوان',
