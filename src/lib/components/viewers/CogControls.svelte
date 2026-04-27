@@ -1,83 +1,49 @@
 <script lang="ts">
 import { t } from '../../i18n/index.svelte.js';
+import type { PresetDef } from '../../utils/channel-composite.js';
 import {
 	type BandConfig,
 	type ColorRampId,
 	DEFAULT_RESCALE,
 	type RescaleConfig
 } from '../../utils/cog.js';
+import type { ChannelComposite, ChannelRef, CogAsset } from '../../utils/cog-asset.js';
 import {
 	COLORMAP_INDEX,
 	COLORMAP_NAMES,
 	COLORMAP_SPRITE_LAYERS,
 	COLORMAP_SPRITE_URL
 } from '../../utils/colormap-sprite.js';
-import type { RasterBandAsset } from '../../utils/stac.js';
 import { RangeSlider } from '../ui/slider/index.js';
+import ChannelPicker from './cog/ChannelPicker.svelte';
 
-/** Channel slot for a multi-COG composite. */
-export type MultiChannel = 'r' | 'g' | 'b' | 'a';
-/** Composite asset-key map handed to MultiCOGLayer's `composite` prop. */
-export type AssetComposite = { r: string; g: string; b: string; a?: string };
-
-/**
- * Discriminated-union props so the band/picker shape lines up with the mode.
- * `single` drives single-COG band selectors + color ramp; `multi` drives the
- * STAC asset-key picker for MultiCOGLayer composition. Both modes share the
- * rescale slider + (optional) histogram overlay.
- */
-type SingleProps = {
-	mode: 'single';
-	bandCount: number;
-	bandConfig: BandConfig;
-	onConfigChange: (config: BandConfig) => void;
+type Props = {
+	/** All raster-COG-ish assets on the current item (or `[selfAsset]` for plain CogViewer). */
+	assets: CogAsset[];
+	/** Current RGB composite. Always present. */
+	composite: ChannelComposite;
+	onCompositeChange: (next: ChannelComposite) => void;
+	/** Presets that resolve on this item. Empty when no preset applies. */
+	presets: PresetDef[];
+	activePresetId: string;
+	onPresetChange: (id: string) => void;
+	/** Rendering mode toggle: 'rgb' uses the channel pickers; 'single' the band+ramp picker. */
+	mode: 'rgb' | 'single';
+	onModeChange: (m: 'rgb' | 'single') => void;
+	/** Band/ramp config used when mode === 'single'. Optional for RGB-only callers. */
+	bandConfig?: BandConfig | null;
+	bandCount?: number;
+	onBandConfigChange?: (next: BandConfig) => void;
 	rescale: RescaleConfig;
 	rescaleApplicable: boolean;
-	onRescaleChange: (rescale: RescaleConfig) => void;
-	/** Optional histogram bins (single-band only) for the slider overlay. */
+	onRescaleChange: (next: RescaleConfig) => void;
 	histogram?: Uint32Array | null;
-	/**
-	 * Optional STAC asset picker for mosaic-mode usage. When supplied with ≥2
-	 * entries, an Asset `<select>` renders above the band/ramp UI so the user
-	 * can swap which single-asset COG drives each item in the mosaic.
-	 */
-	assets?: RasterBandAsset[];
-	assetKey?: string | null;
-	onAssetChange?: (assetKey: string) => void;
+	/** Optional 4th channel UI affordance (alpha). When false, alpha row is hidden. */
+	showAlpha?: boolean;
 };
 
-type MultiProps = {
-	mode: 'multi';
-	/** Asset list available on the current STAC Item. */
-	assets: RasterBandAsset[];
-	composite: AssetComposite;
-	onCompositeChange: (channel: MultiChannel, assetKey: string) => void;
-	rescale: RescaleConfig;
-	rescaleApplicable: boolean;
-	onRescaleChange: (rescale: RescaleConfig) => void;
-	histogram?: Uint32Array | null;
-};
+const props: Props = $props();
 
-const props: SingleProps | MultiProps = $props();
-const isSingle = $derived(props.mode === 'single');
-const isMulti = $derived(props.mode === 'multi');
-// Narrowed views — Svelte's $derived plus runtime guards keep TS happy.
-const single = $derived(props.mode === 'single' ? (props as SingleProps) : null);
-const multi = $derived(props.mode === 'multi' ? (props as MultiProps) : null);
-
-const rescale = $derived(props.rescale);
-const rescaleApplicable = $derived(props.rescaleApplicable);
-const onRescaleChange = $derived(props.onRescaleChange);
-const histogram = $derived(props.histogram ?? null);
-
-function multiAssetLabel(a: RasterBandAsset): string {
-	return a.commonName ? `${a.key} (${a.commonName})` : a.key;
-}
-
-// ─── Ramp picker state ──────────────────────────────────────────
-// Keep a curated set pinned at the top for familiarity; the full set of
-// 107 is searchable underneath. Pinned names match the old UI exactly so
-// existing muscle memory holds.
 const PINNED_RAMPS: ColorRampId[] = [
 	'gray',
 	'terrain',
@@ -99,7 +65,28 @@ const filteredRamps = $derived.by(() => {
 	return COLORMAP_NAMES.filter((name) => name.toLowerCase().includes(q));
 });
 
-// ─── Helpers ────────────────────────────────────────────────────
+function setChannel(channel: 'r' | 'g' | 'b' | 'a', next: ChannelRef): void {
+	if (channel === 'a') {
+		const c = { ...props.composite, a: next.assetKey ? next : undefined };
+		props.onCompositeChange(c);
+		return;
+	}
+	props.onCompositeChange({ ...props.composite, [channel]: next });
+}
+
+function setMode(m: 'rgb' | 'single'): void {
+	props.onModeChange(m);
+}
+
+function setBand(value: number): void {
+	if (!props.bandConfig || !props.onBandConfigChange) return;
+	props.onBandConfigChange({ ...props.bandConfig, band: value });
+}
+
+function setRamp(id: ColorRampId): void {
+	if (!props.bandConfig || !props.onBandConfigChange) return;
+	props.onBandConfigChange({ ...props.bandConfig, colorRamp: id });
+}
 
 function bandOptions(count: number): { value: number; label: string }[] {
 	return Array.from({ length: count }, (_, i) => ({
@@ -108,27 +95,6 @@ function bandOptions(count: number): { value: number; label: string }[] {
 	}));
 }
 
-function setSingleMode(m: 'rgb' | 'single') {
-	if (!single) return;
-	single.onConfigChange({ ...single.bandConfig, mode: m });
-}
-
-function setBand(key: 'rBand' | 'gBand' | 'bBand' | 'band', value: number) {
-	if (!single) return;
-	single.onConfigChange({ ...single.bandConfig, [key]: value });
-}
-
-function setRamp(id: ColorRampId) {
-	if (!single) return;
-	single.onConfigChange({ ...single.bandConfig, colorRamp: id });
-}
-
-/**
- * CSS `background` declaration that renders one sprite row at the
- * container's full height. Sprite is 256 wide × 107 tall (one 1px row per
- * ramp); we scale it vertically by the target height and offset to land on
- * the requested layer.
- */
 function rampBg(name: ColorRampId, heightPx: number): string {
 	const index = COLORMAP_INDEX[name];
 	if (index === undefined) return '';
@@ -142,32 +108,30 @@ function rampBg(name: ColorRampId, heightPx: number): string {
 	].join('; ');
 }
 
-// ─── Rescale / histogram ────────────────────────────────────────
-
 function clamp01(v: number): number {
 	return Math.max(0, Math.min(1, v));
 }
 
-function setRescaleMin(value: number) {
+function setRescaleMin(value: number): void {
 	const clamped = clamp01(value);
-	const next = Math.min(clamped, rescale.max - 0.001);
-	onRescaleChange({ min: Number.isFinite(next) ? next : 0, max: rescale.max });
+	const next = Math.min(clamped, props.rescale.max - 0.001);
+	props.onRescaleChange({ min: Number.isFinite(next) ? next : 0, max: props.rescale.max });
 }
 
-function setRescaleMax(value: number) {
+function setRescaleMax(value: number): void {
 	const clamped = clamp01(value);
-	const next = Math.max(clamped, rescale.min + 0.001);
-	onRescaleChange({ min: rescale.min, max: Number.isFinite(next) ? next : 1 });
+	const next = Math.max(clamped, props.rescale.min + 0.001);
+	props.onRescaleChange({ min: props.rescale.min, max: Number.isFinite(next) ? next : 1 });
 }
 
-function setRescaleRange(next: [number, number]) {
+function setRescaleRange(next: [number, number]): void {
 	const lo = clamp01(next[0]);
 	const hi = clamp01(next[1]);
-	onRescaleChange({ min: Math.min(lo, hi), max: Math.max(lo, hi) });
+	props.onRescaleChange({ min: Math.min(lo, hi), max: Math.max(lo, hi) });
 }
 
-function resetRescale() {
-	onRescaleChange({ ...DEFAULT_RESCALE });
+function resetRescale(): void {
+	props.onRescaleChange({ ...DEFAULT_RESCALE });
 }
 
 function fmtRescale(n: number): string {
@@ -175,96 +139,111 @@ function fmtRescale(n: number): string {
 }
 
 const histogramBars = $derived.by(() => {
-	if (!histogram || histogram.length === 0) return null;
+	const h = props.histogram;
+	if (!h || h.length === 0) return null;
 	let max = 0;
-	for (const v of histogram) if (v > max) max = v;
+	for (const v of h) if (v > max) max = v;
 	if (max === 0) return null;
-	const bins = Array.from(histogram, (count) => count / max);
-	return bins;
+	return Array.from(h, (count) => count / max);
 });
 </script>
 
 <div
-	class="absolute right-2 top-10 z-10 w-60 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
+	class="absolute right-2 top-10 z-10 w-72 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
 >
-{#if isSingle && single}
-	{#if single.assets && single.assets.length > 1 && single.onAssetChange}
-		<!-- Mosaic asset picker: which single STAC asset drives every item. -->
+	{#if props.presets.length > 0 && props.mode === 'rgb'}
 		<div class="mb-2 flex items-center gap-2">
-			<span class="text-muted-foreground">{t('map.mosaicAsset')}</span>
+			<span class="text-muted-foreground">{t('map.multiCogPreset.label')}</span>
 			<select
 				class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				value={single.assetKey ?? ''}
-				onchange={(e) => single.onAssetChange?.((e.target as HTMLSelectElement).value)}
+				value={props.activePresetId}
+				onchange={(e) => props.onPresetChange((e.target as HTMLSelectElement).value)}
 			>
-				{#each single.assets as asset (asset.key)}
-					<option value={asset.key}>{multiAssetLabel(asset)}</option>
+				{#if !props.activePresetId}
+					<option value="">{t('map.multiCogPreset.custom')}</option>
+				{/if}
+				{#each props.presets as p (p.id)}
+					<option value={p.id}>{t(p.labelKey)}</option>
 				{/each}
 			</select>
 		</div>
 	{/if}
-	<!-- Mode toggle -->
-	<div class="mb-2 flex gap-1">
-		<button
-			class="flex-1 rounded px-2 py-1 transition-colors"
-			class:bg-primary={single.bandConfig.mode === 'rgb'}
-			class:text-primary-foreground={single.bandConfig.mode === 'rgb'}
-			class:bg-muted={single.bandConfig.mode !== 'rgb'}
-			onclick={() => setSingleMode('rgb')}
-		>
-			RGB
-		</button>
-		<button
-			class="flex-1 rounded px-2 py-1 transition-colors"
-			class:bg-primary={single.bandConfig.mode === 'single'}
-			class:text-primary-foreground={single.bandConfig.mode === 'single'}
-			class:bg-muted={single.bandConfig.mode !== 'single'}
-			onclick={() => setSingleMode('single')}
-		>
-			{t('cog.singleBand')}
-		</button>
-	</div>
 
-	{#if single.bandConfig.mode === 'rgb'}
-		<!-- RGB band selectors -->
-		<div class="space-y-1">
-			{#each [
-				{ key: 'rBand' as const, label: 'R', color: 'text-red-400' },
-				{ key: 'gBand' as const, label: 'G', color: 'text-green-400' },
-				{ key: 'bBand' as const, label: 'B', color: 'text-blue-400' }
-			] as ch}
-				<div class="flex items-center gap-2">
-					<span class="w-3 font-bold {ch.color}">{ch.label}</span>
-					<select
-						class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-						value={single.bandConfig[ch.key]}
-						onchange={(e) =>
-							setBand(ch.key, Number((e.target as HTMLSelectElement).value))}
-					>
-						{#each bandOptions(single.bandCount) as opt}
-							<option value={opt.value}>{opt.label}</option>
-						{/each}
-					</select>
-				</div>
-			{/each}
+	{#if props.bandConfig && props.onBandConfigChange}
+		<div class="mb-2 flex gap-1">
+			<button
+				class="flex-1 rounded px-2 py-1 transition-colors"
+				class:bg-primary={props.mode === 'rgb'}
+				class:text-primary-foreground={props.mode === 'rgb'}
+				class:bg-muted={props.mode !== 'rgb'}
+				onclick={() => setMode('rgb')}
+			>
+				RGB
+			</button>
+			<button
+				class="flex-1 rounded px-2 py-1 transition-colors"
+				class:bg-primary={props.mode === 'single'}
+				class:text-primary-foreground={props.mode === 'single'}
+				class:bg-muted={props.mode !== 'single'}
+				onclick={() => setMode('single')}
+			>
+				{t('cog.singleBand')}
+			</button>
 		</div>
-	{:else}
-		<!-- Single band selector -->
+	{/if}
+
+	{#if props.mode === 'rgb'}
+		<div class="space-y-1">
+			<ChannelPicker
+				channel="r"
+				label="R"
+				colorClass="text-red-400"
+				assets={props.assets}
+				value={props.composite.r}
+				onChange={(next) => setChannel('r', next)}
+			/>
+			<ChannelPicker
+				channel="g"
+				label="G"
+				colorClass="text-green-400"
+				assets={props.assets}
+				value={props.composite.g}
+				onChange={(next) => setChannel('g', next)}
+			/>
+			<ChannelPicker
+				channel="b"
+				label="B"
+				colorClass="text-blue-400"
+				assets={props.assets}
+				value={props.composite.b}
+				onChange={(next) => setChannel('b', next)}
+			/>
+			{#if props.showAlpha}
+				<ChannelPicker
+					channel="a"
+					label="A"
+					colorClass="text-muted-foreground"
+					assets={props.assets}
+					value={props.composite.a ?? { assetKey: '', bandIndex: 0 }}
+					onChange={(next) => setChannel('a', next)}
+					allowNone
+				/>
+			{/if}
+		</div>
+	{:else if props.bandConfig && typeof props.bandCount === 'number'}
 		<div class="mb-2 flex items-center gap-2">
 			<span class="text-muted-foreground">{t('cog.band')}</span>
 			<select
 				class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-				value={single.bandConfig.band}
-				onchange={(e) =>
-					setBand('band', Number((e.target as HTMLSelectElement).value))}
+				value={props.bandConfig.band}
+				onchange={(e) => setBand(Number((e.target as HTMLSelectElement).value))}
 			>
-				{#each bandOptions(single.bandCount) as opt}
+				{#each bandOptions(props.bandCount) as opt (opt.value)}
 					<option value={opt.value}>{opt.label}</option>
 				{/each}
 			</select>
 		</div>
 
-		<!-- Color ramp picker -->
 		<div class="space-y-1">
 			<div class="flex items-center justify-between">
 				<span class="text-muted-foreground">{t('cog.colorRamp')}</span>
@@ -273,12 +252,11 @@ const histogramBars = $derived.by(() => {
 				</span>
 			</div>
 
-			<!-- Pinned quick-access (only when no search active) -->
 			{#if !rampQuery}
 				<div class="grid grid-cols-2 gap-1">
-					{#each PINNED_RAMPS as id}
+					{#each PINNED_RAMPS as id (id)}
 						<button
-							class="flex flex-col items-stretch rounded border px-1 py-0.5 transition-colors {single.bandConfig.colorRamp === id ? 'border-primary bg-muted' : 'border-transparent hover:border-border'}"
+							class="flex flex-col items-stretch rounded border px-1 py-0.5 transition-colors {props.bandConfig.colorRamp === id ? 'border-primary bg-muted' : 'border-transparent hover:border-border'}"
 							onclick={() => setRamp(id)}
 							title={id}
 						>
@@ -291,7 +269,6 @@ const histogramBars = $derived.by(() => {
 				</div>
 			{/if}
 
-			<!-- Search + all-ramps scroll list -->
 			<input
 				type="search"
 				placeholder={t('cog.colorRampSearch')}
@@ -300,9 +277,9 @@ const histogramBars = $derived.by(() => {
 				oninput={(e) => (rampQuery = (e.target as HTMLInputElement).value)}
 			/>
 			<div class="max-h-40 overflow-y-auto rounded border border-border">
-				{#each filteredRamps as id}
+				{#each filteredRamps as id (id)}
 					<button
-						class="flex w-full items-center gap-2 px-1.5 py-0.5 text-left text-[11px] transition-colors {single.bandConfig.colorRamp === id ? 'bg-muted' : 'hover:bg-muted/60'}"
+						class="flex w-full items-center gap-2 px-1.5 py-0.5 text-left text-[11px] transition-colors {props.bandConfig.colorRamp === id ? 'bg-muted' : 'hover:bg-muted/60'}"
 						onclick={() => setRamp(id)}
 						title={id}
 					>
@@ -313,40 +290,8 @@ const histogramBars = $derived.by(() => {
 			</div>
 		</div>
 	{/if}
-{/if}
 
-{#if isMulti && multi}
-	<!-- STAC asset → channel picker for MultiCOG composites. -->
-	<div class="mb-2 text-muted-foreground">{t('map.multiCogBands')}</div>
-	<div class="space-y-1">
-		{#each [
-			{ ch: 'r' as const, label: 'R', color: 'text-red-400' },
-			{ ch: 'g' as const, label: 'G', color: 'text-green-400' },
-			{ ch: 'b' as const, label: 'B', color: 'text-blue-400' },
-			{ ch: 'a' as const, label: 'A', color: 'text-muted-foreground' }
-		] as row}
-			<div class="flex items-center gap-2">
-				<span class="w-3 font-bold {row.color}">{row.label}</span>
-				<select
-					class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-					value={multi.composite[row.ch] ?? ''}
-					onchange={(e) =>
-						multi.onCompositeChange(row.ch, (e.target as HTMLSelectElement).value)}
-				>
-					{#if row.ch === 'a'}
-						<option value="">{t('map.multiCogChannelNone')}</option>
-					{/if}
-					{#each multi.assets as asset (asset.key)}
-						<option value={asset.key}>{multiAssetLabel(asset)}</option>
-					{/each}
-				</select>
-			</div>
-		{/each}
-	</div>
-{/if}
-
-	{#if rescaleApplicable}
-		<!-- GPU LinearRescale slider with histogram overlay. -->
+	{#if props.rescaleApplicable}
 		<div class="mt-2 space-y-1 border-t border-border pt-2">
 			<div class="flex items-center justify-between">
 				<span class="text-muted-foreground">{t('cog.rescale')}</span>
@@ -362,7 +307,7 @@ const histogramBars = $derived.by(() => {
 				min={0}
 				max={1}
 				step={0.01}
-				value={[rescale.min, rescale.max]}
+				value={[props.rescale.min, props.rescale.max]}
 				histogram={histogramBars}
 				formatLabel={fmtRescale}
 				onValueChange={setRescaleRange}
@@ -377,7 +322,7 @@ const histogramBars = $derived.by(() => {
 						max="1"
 						step="0.01"
 						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
-						value={rescale.min}
+						value={props.rescale.min}
 						oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
 					/>
 				</label>
@@ -389,7 +334,7 @@ const histogramBars = $derived.by(() => {
 						max="1"
 						step="0.01"
 						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
-						value={rescale.max}
+						value={props.rescale.max}
 						oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
 					/>
 				</label>

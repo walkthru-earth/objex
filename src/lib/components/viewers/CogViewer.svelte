@@ -29,6 +29,7 @@ import {
 	resolveProj4Def,
 	selectCogPipeline
 } from '../../utils/cog.js';
+import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import CogControls from './CogControls.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -43,6 +44,38 @@ let showControls = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let cogInfo = $state<CogInfo | null>(null);
 let bandConfig = $state<BandConfig | null>(null);
+let resolvedHrefForControls = $state<string | null>(null);
+let probedBandCount = $state<number | null>(null);
+
+const cogControlsAssets = $derived.by<CogAsset[]>(() => {
+	const href = resolvedHrefForControls;
+	if (!href) return [];
+	return [syntheticSelfAsset(href, probedBandCount ?? undefined)];
+});
+
+const cogControlsComposite = $derived.by<ChannelComposite>(() => {
+	const bc = bandConfig;
+	if (!bc) {
+		return {
+			r: { assetKey: 'self', bandIndex: 0 },
+			g: { assetKey: 'self', bandIndex: 0 },
+			b: { assetKey: 'self', bandIndex: 0 }
+		};
+	}
+	if (bc.mode === 'rgb') {
+		return {
+			r: { assetKey: 'self', bandIndex: bc.rBand ?? 0 },
+			g: { assetKey: 'self', bandIndex: bc.gBand ?? 0 },
+			b: { assetKey: 'self', bandIndex: bc.bBand ?? 0 }
+		};
+	}
+	const i = bc.band ?? 0;
+	return {
+		r: { assetKey: 'self', bandIndex: i },
+		g: { assetKey: 'self', bandIndex: i },
+		b: { assetKey: 'self', bandIndex: i }
+	};
+});
 let histogram = $state.raw<Uint32Array | null>(null);
 let histogramTick = $state(0);
 let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
@@ -113,6 +146,8 @@ $effect(() => {
 		geotiffRef = null;
 		proj4DefRef = null;
 		resolvedHttpsUrl = null;
+		resolvedHrefForControls = null;
+		probedBandCount = null;
 		loading = true;
 		error = null;
 		cogInfo = null;
@@ -179,6 +214,7 @@ async function loadCog(map: maplibregl.Map) {
 		const url = await buildHttpsUrlAsync(tab);
 		if (signal.aborted) return;
 		resolvedHttpsUrl = url;
+		resolvedHrefForControls = url;
 
 		// Pre-flight: read first IFD to check if tiled (single range request).
 		let isTiled = true;
@@ -233,6 +269,7 @@ async function loadCog(map: maplibregl.Map) {
 
 			// Set default band config
 			bandConfig = defaultBandConfig(preflightGeotiff.count, sampleFormatRef);
+			probedBandCount = preflightGeotiff.count;
 		}
 
 		if (!isTiled && preflightGeotiff) {
@@ -449,6 +486,31 @@ function handleRescaleChange(next: RescaleConfig) {
 	buildAndAddLayer(mapRef, geotiffRef, abortController.signal);
 }
 
+// ─── Unified picker change handlers ──────────────────────────────
+
+function handleCompositeChange(next: ChannelComposite): void {
+	if (!bandConfig) return;
+	if (bandConfig.mode === 'rgb') {
+		handleConfigChange({
+			...bandConfig,
+			rBand: next.r.bandIndex,
+			gBand: next.g.bandIndex,
+			bBand: next.b.bandIndex
+		});
+	} else {
+		handleConfigChange({ ...bandConfig, band: next.r.bandIndex });
+	}
+}
+
+function handleModeChange(m: 'rgb' | 'single'): void {
+	if (!bandConfig) return;
+	handleConfigChange({ ...bandConfig, mode: m });
+}
+
+function handleBandConfigChange(next: BandConfig): void {
+	handleConfigChange(next);
+}
+
 // ─── Cleanup ─────────────────────────────────────────────────────
 
 function cleanup() {
@@ -468,6 +530,8 @@ function cleanup() {
 	proj4DefRef = null;
 	pixelValue = null;
 	resolvedHttpsUrl = null;
+	resolvedHrefForControls = null;
+	probedBandCount = null;
 }
 
 $effect(() => {
@@ -546,10 +610,17 @@ onDestroy(cleanup);
 		<!-- Band/Color controls panel -->
 		{#if showControls && bandConfig}
 			<CogControls
-				mode="single"
-				bandCount={cogInfo.bandCount}
+				assets={cogControlsAssets}
+				composite={cogControlsComposite}
+				onCompositeChange={handleCompositeChange}
+				presets={[]}
+				activePresetId=""
+				onPresetChange={() => {}}
+				mode={bandConfig?.mode ?? 'rgb'}
+				onModeChange={handleModeChange}
 				{bandConfig}
-				onConfigChange={handleConfigChange}
+				bandCount={probedBandCount ?? cogInfo.bandCount}
+				onBandConfigChange={handleBandConfigChange}
 				{rescale}
 				rescaleApplicable={rescaleApplicable}
 				onRescaleChange={handleRescaleChange}

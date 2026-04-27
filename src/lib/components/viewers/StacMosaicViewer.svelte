@@ -13,6 +13,14 @@ import { connectionStore } from '../../stores/connections.svelte.js';
 import { settings } from '../../stores/settings.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
+import {
+	applyPreset,
+	availablePresets,
+	compositeFromUrl,
+	compositeToUrl,
+	PRESETS,
+	presetMatchesComposite
+} from '../../utils/channel-composite.js';
 import { resolveCloudUrl } from '../../utils/cloud-url.js';
 import {
 	type BandConfig,
@@ -32,6 +40,13 @@ import {
 	resolveProj4Def,
 	selectCogPipeline
 } from '../../utils/cog.js';
+import {
+	type ChannelComposite,
+	type CogAsset,
+	extractCogAssets,
+	isSingleAssetComposite,
+	pickNaturalColorComposite
+} from '../../utils/cog-asset.js';
 import { isAbortError } from '../../utils/error.js';
 import { LruCache } from '../../utils/lru.js';
 import {
@@ -55,6 +70,7 @@ import {
 } from '../../utils/stac-facets.js';
 import type { StacSource } from '../../utils/stac-source.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import MapContainer from './map/MapContainer.svelte';
 import StacDatetimeBar from './stac/StacDatetimeBar.svelte';
@@ -89,6 +105,16 @@ let probedBandCount = false;
 // re-query needed.
 let availableAssets = $state.raw<RasterBandAsset[]>([]);
 let mosaicAssetKey = $state<string | null>(null);
+
+// Unified RGB picker state (parallel to availableAssets / mosaicAssetKey for
+// the single-asset path). `composite.r.assetKey` is mirrored into the
+// `mosaicAssetKey` machinery so the existing buildMosaicSourceMeta path keeps
+// working until the multi-asset path lands.
+let cogAssets = $state.raw<CogAsset[]>([]);
+let composite = $state.raw<ChannelComposite | null>(null);
+let activePresetId = $state<string>('');
+
+const presetsForMosaic = $derived(availablePresets(cogAssets));
 
 // ─── Pixel inspection ──────────────────────────────────────────────
 let pixelValue = $state<PixelValue | null>(null);
@@ -464,6 +490,9 @@ function resetViewer(): void {
 	probedBandCount = false;
 	availableAssets = [];
 	mosaicAssetKey = null;
+	cogAssets = [];
+	composite = null;
+	activePresetId = '';
 	pixelValue = null;
 	pixelSourceId = null;
 	inspecting = false;
@@ -796,6 +825,28 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 							const matched = probed.find((a) => a.href === defaultHref);
 							mosaicAssetKey = matched?.key ?? probed[0].key;
 						}
+						// Also seed the unified RGB picker state. URL hash takes
+						// priority, otherwise natural-color default.
+						const nextCogAssets = extractCogAssets(probe);
+						cogAssets = nextCogAssets;
+						const params = getUrlViewParams();
+						const fromUrl = compositeFromUrl(params, nextCogAssets);
+						if (fromUrl && isSingleAssetComposite(fromUrl)) {
+							composite = fromUrl;
+							const presetId = params.get('preset');
+							activePresetId = presetId && PRESETS.find((p) => p.id === presetId) ? presetId : '';
+						} else {
+							const picked = pickNaturalColorComposite(nextCogAssets);
+							if (picked) {
+								composite = picked.composite;
+								activePresetId = picked.source === 'rgb-bands' ? 'natural-color' : '';
+							}
+						}
+						// Mirror composite.r.assetKey into the existing single-asset
+						// mosaic state so buildMosaicSourceMeta keeps working.
+						if (composite && isSingleAssetComposite(composite)) {
+							mosaicAssetKey = composite.r.assetKey;
+						}
 						break;
 					}
 				}
@@ -987,6 +1038,36 @@ function handleConfigChange(next: BandConfig): void {
 	histogram = null;
 	sourceHistograms.clear();
 	bumpPipeline();
+}
+
+function syncCompositeToUrl(c: ChannelComposite | null, presetId: string | null): void {
+	if (!c) {
+		updateUrlViewParams('map', null);
+		return;
+	}
+	updateUrlViewParams('map', compositeToUrl(c, presetId));
+}
+
+function setComposite(next: ChannelComposite): void {
+	composite = next;
+	const matching = PRESETS.find((p) => presetMatchesComposite(p, next, cogAssets));
+	activePresetId = matching?.id ?? '';
+	syncCompositeToUrl(next, activePresetId || null);
+
+	// Single-asset path: feed the existing setMosaicAssetKey machinery.
+	if (isSingleAssetComposite(next)) {
+		setMosaicAssetKey(next.r.assetKey);
+	}
+	// Multi-asset path is added in Task 10.
+}
+
+function setPreset(id: string): void {
+	const preset = PRESETS.find((p) => p.id === id);
+	if (!preset) return;
+	const next = applyPreset(cogAssets, preset);
+	if (!next) return;
+	activePresetId = id;
+	setComposite(next);
 }
 
 /**
@@ -1322,19 +1403,25 @@ onDestroy(cleanup);
 			</button>
 		</div>
 
-		{#if showControls && bandConfig}
+		{#if showControls && composite}
 			<CogControls
-				mode="single"
-				bandCount={detectedBandCount}
+				assets={cogAssets}
+				{composite}
+				onCompositeChange={setComposite}
+				presets={presetsForMosaic}
+				{activePresetId}
+				onPresetChange={setPreset}
+				mode={bandConfig?.mode ?? 'rgb'}
+				onModeChange={(m) => {
+					if (bandConfig) handleConfigChange({ ...bandConfig, mode: m });
+				}}
 				{bandConfig}
-				onConfigChange={handleConfigChange}
+				bandCount={detectedBandCount}
+				onBandConfigChange={handleConfigChange}
 				{rescale}
-				rescaleApplicable={bandConfig.mode === 'single'}
+				rescaleApplicable={bandConfig ? bandConfig.mode === 'single' : false}
 				onRescaleChange={handleRescaleChange}
 				{histogram}
-				assets={availableAssets}
-				assetKey={mosaicAssetKey}
-				onAssetChange={setMosaicAssetKey}
 			/>
 		{/if}
 
