@@ -1443,8 +1443,57 @@ export async function resolveProj4Def(
 }
 
 /**
+ * Standard Web Mercator ground resolution (meters per screen pixel) at a given
+ * zoom and latitude. Equivalent to MapLibre's `metersPerPixel`. Use this to
+ * pick a COG overview level that matches what's painted on screen.
+ */
+export function mapResolutionMetersPerPixel(zoom: number, latitude: number): number {
+	return (156543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
+}
+
+/**
+ * Pick the coarsest overview whose pixel size is ≤ `targetMetersPerPixel`,
+ * matching lazycogs' `_select_overview`. Walks `geotiff.overviews` in
+ * finest → coarsest order (the documented sort) and returns the last entry
+ * that still satisfies the constraint. Returns `null` to mean "use full
+ * resolution" (either the COG has no overviews, the target is already finer
+ * than native, or every overview is coarser than the target — never
+ * upsample).
+ *
+ * The COG's affine `a` component is the X-pixel-size in the COG's native CRS
+ * units. For Web Mercator and other meter-based CRSes this is meters/pixel
+ * and lines up directly with `mapResolutionMetersPerPixel`. For degree-based
+ * CRSes (EPSG:4326) the comparison is against degrees/pixel, so callers
+ * should derive the target in the same units.
+ */
+export function selectOverviewForResolution(
+	geotiff: GeoTIFFType,
+	targetMetersPerPixel: number
+): Overview | null {
+	if (!geotiff.overviews.length) return null;
+
+	const nativeRes = Math.abs(geotiff.transform[0]);
+	if (targetMetersPerPixel <= nativeRes) return null;
+
+	let selected: Overview | null = null;
+	for (const overview of geotiff.overviews) {
+		if (Math.abs(overview.transform[0]) <= targetMetersPerPixel) {
+			selected = overview;
+		} else {
+			break;
+		}
+	}
+	return selected;
+}
+
+/**
  * Read pixel values at a given lng/lat from a GeoTIFF.
  * Converts WGS84 → source CRS → pixel coords, fetches the tile, reads all bands.
+ *
+ * If `options.overview` is supplied, the read happens against that overview
+ * level instead of the full-resolution image (so the inspected value matches
+ * the overview deck.gl is currently painting on screen). Pass `null` /
+ * `undefined` to keep the legacy full-resolution behaviour.
  */
 export async function readPixelAtLngLat(
 	geotiff: GeoTIFFType,
@@ -1453,7 +1502,8 @@ export async function readPixelAtLngLat(
 	proj4Def: string | null,
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	pool: any,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	options?: { overview?: Overview | null }
 ): Promise<PixelValue | null> {
 	// Convert WGS84 to source CRS
 	let srcX = lng;
@@ -1468,16 +1518,22 @@ export async function readPixelAtLngLat(
 		}
 	}
 
+	// Read against the selected overview if one was supplied, else full res.
+	const source: Pick<
+		GeoTIFFType,
+		'index' | 'height' | 'width' | 'tileWidth' | 'tileHeight' | 'fetchTile'
+	> = options?.overview ?? geotiff;
+
 	// Get pixel indices (row, col)
-	const [row, col] = geotiff.index(srcX, srcY);
-	if (row < 0 || row >= geotiff.height || col < 0 || col >= geotiff.width) return null;
+	const [row, col] = source.index(srcX, srcY);
+	if (row < 0 || row >= source.height || col < 0 || col >= source.width) return null;
 
 	// Compute tile indices
-	const tileX = Math.floor(col / geotiff.tileWidth);
-	const tileY = Math.floor(row / geotiff.tileHeight);
+	const tileX = Math.floor(col / source.tileWidth);
+	const tileY = Math.floor(row / source.tileHeight);
 
 	// Fetch tile
-	const tile = await geotiff.fetchTile(tileX, tileY, { pool, signal });
+	const tile = await source.fetchTile(tileX, tileY, { pool, signal });
 	const arr = tile.array;
 
 	// Read all band values at this pixel
