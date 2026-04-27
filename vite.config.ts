@@ -75,7 +75,31 @@ export default defineConfig({
 	},
 	server: {
 		port: 5173,
-		strictPort: true
+		strictPort: true,
+		// Cross-Origin Isolation enables OPFS FileSystemSyncAccessHandle in
+		// workers (DuckDB-WASM uses this for its OPFS-backed database and
+		// temp_directory spill). Without these headers the API is silently
+		// unavailable in the worker and DuckDB falls back to MEMFS, which
+		// then OOMs on the WASM heap with no spill target.
+		//
+		// COEP=credentialless (not require-corp) so we can still fetch cross-
+		// origin S3 buckets and STAC APIs that do not send a Cross-Origin-
+		// Resource-Policy header (e.g. source.coop, public AWS S3). With
+		// require-corp those fetches fail and httpfs surfaces them as 404s.
+		// credentialless loads cross-origin resources without credentials but
+		// still grants the page crossOriginIsolated=true so OPFS works.
+		headers: {
+			'Cross-Origin-Opener-Policy': 'same-origin',
+			'Cross-Origin-Embedder-Policy': 'credentialless'
+		}
+	},
+	preview: {
+		port: 4173,
+		strictPort: true,
+		headers: {
+			'Cross-Origin-Opener-Policy': 'same-origin',
+			'Cross-Origin-Embedder-Policy': 'credentialless'
+		}
 	},
 	worker: {
 		format: 'es'

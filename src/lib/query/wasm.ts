@@ -44,6 +44,22 @@ function elapsed(start: number): string {
 }
 
 let dbPromise: Promise<any> | null = null;
+const opfsState: { active: boolean; reasons: string[] } = { active: false, reasons: [] };
+let initSummaryLogged = false;
+
+function logInitSummary() {
+	if (initSummaryLogged) return;
+	initSummaryLogged = true;
+	const coi = typeof globalThis !== 'undefined' && (globalThis as any).crossOriginIsolated === true;
+	if (opfsState.active) {
+		log(`▶ DB mode: OPFS-backed (spill enabled), crossOriginIsolated=${coi}`);
+	} else {
+		logWarn(
+			`▶ DB mode: IN-MEMORY (no spill — OOMs at WASM heap ceiling), crossOriginIsolated=${coi}`
+		);
+		for (const r of opfsState.reasons) logWarn(`  ↳ ${r}`);
+	}
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -63,7 +79,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 async function getDB() {
 	if (dbPromise) {
-		log('getDB → cached');
+		logInitSummary();
 		return dbPromise;
 	}
 
@@ -100,6 +116,137 @@ async function getDB() {
 		);
 		log(`getDB → instantiated in ${elapsed(t0)}`);
 
+		// Open an OPFS-backed database so DuckDB can spill blocks to disk under
+		// memory pressure. In-memory mode caps at the WASM heap (~1.3-3.1 GiB
+		// depending on browser), with no temp_directory backing — large
+		// aggregations / sorts then OOM. OPFS gives DuckDB a real filesystem
+		// for paged storage, lifting the budget to the user's disk quota.
+		//
+		// Why register a handle instead of just `path: 'opfs://...'`: on the
+		// pinned 1.33.1-dev53.0 build, the URL-scheme path opens silently as a
+		// virtual MEMFS file, so the DB stays in-memory. Registering the handle
+		// via DuckDBDataProtocol.BROWSER_FSACCESS (OPFS) and opening it by the
+		// registered name forces DuckDB onto OPFS and lets it spill blocks.
+		// Falls back to in-memory if OPFS is unavailable (private mode, older
+		// browsers, cross-origin isolation issues).
+		const hasOpfs =
+			typeof navigator !== 'undefined' &&
+			typeof navigator.storage !== 'undefined' &&
+			typeof navigator.storage.getDirectory === 'function';
+		const isCOI =
+			typeof globalThis !== 'undefined' && (globalThis as any).crossOriginIsolated === true;
+		if (!isCOI) {
+			opfsState.reasons.push(
+				'crossOriginIsolated=false — page is missing COOP/COEP headers. OPFS sync handles will throw inside the worker. Restart the dev server so vite.config.ts headers take effect, then hard-reload.'
+			);
+		}
+		let opfsActive = false;
+		if (hasOpfs) {
+			// Pin the OPFS filename to the duckdb-wasm version. Bumping
+			// duckdb-wasm can change the on-disk storage version, and reusing a
+			// stale file then throws "not a valid DuckDB database file" inside
+			// the worker. Worse, on Chrome the failed open keeps the
+			// FileSystemSyncAccessHandle alive, so even a same-tab retry
+			// (`removeEntry` + recreate) reads back the old state and trips
+			// "Access Handles cannot be created if there is another open Access
+			// Handle" on every fallback path. A version-pinned filename sidesteps
+			// the whole recovery problem: a new wasm build always gets a fresh
+			// file, and the old file just becomes an orphan we can reap below.
+			// Sanitize the version into a filename-safe slug.
+			const dbVersionSlug = DUCKDB_VERSION.replace(/[^a-zA-Z0-9._-]/g, '-');
+			const dbName = `objex-duckdb-v${dbVersionSlug}.db`;
+			const accessMode = (duckdb as any).DuckDBAccessMode?.READ_WRITE ?? 1;
+			const protocol = (duckdb as any).DuckDBDataProtocol?.BROWSER_FSACCESS;
+			const root = await navigator.storage.getDirectory();
+
+			// Reap orphan DBs from prior wasm versions. They are unreachable
+			// once the version slug bumps, so leaving them around silently
+			// burns OPFS quota. removeEntry throws NoModificationAllowedError
+			// while a sync access handle is still open against the file —
+			// that only matters for the file we're actively using, and we
+			// skip that one.
+			try {
+				const orphans: string[] = [];
+				for await (const [name, handle] of (root as any).entries()) {
+					if (handle.kind === 'file' && /^objex-duckdb(-.*)?\.db$/.test(name) && name !== dbName) {
+						orphans.push(name);
+					}
+				}
+				for (const name of orphans) {
+					try {
+						await root.removeEntry(name);
+						log(`getDB → reaped orphan OPFS db "${name}"`);
+					} catch (rmErr) {
+						logWarn(
+							`getDB → could not reap orphan OPFS db "${name}":`,
+							(rmErr as Error)?.message ?? rmErr
+						);
+					}
+				}
+			} catch (enumErr) {
+				logWarn(
+					'getDB → could not enumerate OPFS root for orphan cleanup:',
+					(enumErr as Error)?.message ?? enumErr
+				);
+			}
+
+			// Path A — registered FileSystemFileHandle. This is the fully wired
+			// OPFS path on duckdb-wasm 1.29+. It needs the real handle (passing
+			// null silently registers a non-OPFS file and the open() reverts to
+			// MEMFS, which is why earlier attempts kept reporting "in-memory
+			// mode" in OOM errors).
+			if (protocol !== undefined) {
+				const tOpenA = performance.now();
+				try {
+					const fileHandle = await root.getFileHandle(dbName, { create: true });
+					await db.registerFileHandle(dbName, fileHandle, protocol, true);
+					await withTimeout(
+						db.open({ path: dbName, accessMode }),
+						INIT_TIMEOUT_MS,
+						'DuckDB OPFS open (registered handle)'
+					);
+					opfsActive = true;
+					log(`getDB → OPFS via registered handle in ${elapsed(tOpenA)}`);
+				} catch (err) {
+					const msg = (err as Error)?.message ?? String(err);
+					logWarn('getDB → OPFS via registered handle failed:', msg);
+					opfsState.reasons.push(`registered-handle path: ${msg}`);
+				}
+			} else {
+				logWarn('getDB → DuckDBDataProtocol.BROWSER_FSACCESS missing in this build');
+				opfsState.reasons.push('DuckDBDataProtocol.BROWSER_FSACCESS missing in this WASM build');
+			}
+
+			// Path B — URL-scheme fallback. Some duckdb-wasm builds wire OPFS
+			// internally on `opfs://` paths without needing manual registration.
+			if (!opfsActive) {
+				const tOpenB = performance.now();
+				try {
+					await withTimeout(
+						db.open({ path: `opfs://${dbName}`, accessMode }),
+						INIT_TIMEOUT_MS,
+						'DuckDB OPFS open (url scheme)'
+					);
+					opfsActive = true;
+					log(`getDB → OPFS via opfs:// scheme in ${elapsed(tOpenB)}`);
+				} catch (err) {
+					const msg = (err as Error)?.message ?? String(err);
+					logWarn('getDB → OPFS via opfs:// scheme failed:', msg);
+					opfsState.reasons.push(`opfs:// scheme path: ${msg}`);
+				}
+			}
+
+			if (!opfsActive) {
+				logWarn('getDB → all OPFS paths failed, falling back to in-memory');
+			}
+		} else {
+			log('getDB → OPFS unavailable (no navigator.storage), using in-memory DB');
+			opfsState.reasons.push(
+				'navigator.storage.getDirectory is unavailable (private mode, older browser, or non-secure context)'
+			);
+		}
+		opfsState.active = opfsActive;
+
 		// Load httpfs for remote file access and spatial for ST_ReadSHP
 		const conn = await db.connect();
 		try {
@@ -132,12 +279,51 @@ async function getDB() {
 			} catch {
 				logWarn('force_download_threshold not available');
 			}
+			// Memory tuning is only applied when OPFS spill is actually wired.
+			// Without OPFS, capping memory_limit below the WASM heap ceiling
+			// just makes queries OOM sooner with no upside (DuckDB still cannot
+			// spill, and TableViewer's existing workloads need the full ~3 GiB
+			// heap). preserve_insertion_order = false is the one tuning that
+			// helps both modes — it skips buffering full result sets to re-sort
+			// on output, a real OOM source on big scans.
+			try {
+				const sets = [`SET preserve_insertion_order = false`];
+				if (opfsActive) {
+					const cores = navigator.hardwareConcurrency || 4;
+					const threads = Math.max(1, Math.min(4, Math.floor(cores / 2)));
+					sets.push(`SET memory_limit = '2GB'`);
+					sets.push(`SET threads = ${threads}`);
+					sets.push(`SET temp_directory = '.tmp'`);
+				} else {
+					// Even without OPFS spill, set a temp_directory hint so DuckDB's
+					// OOM error message stops claiming "no temporary directory is
+					// specified" (misleading, since at this layer of WASM the path
+					// is just MEMFS — same heap as the query engine). The string
+					// is purely cosmetic for the error message; DuckDB will still
+					// fail at the WASM heap ceiling. Cap threads conservatively to
+					// reduce per-query peak memory (each thread keeps its own
+					// hash-aggregate / sort buffer alive).
+					const cores = navigator.hardwareConcurrency || 4;
+					const threads = Math.max(1, Math.min(2, Math.floor(cores / 2)));
+					sets.push(`SET threads = ${threads}`);
+					sets.push(`SET temp_directory = '.tmp'`);
+				}
+				await conn.query(`${sets.join('; ')};`);
+				log(
+					opfsActive
+						? `getDB → memory_limit=2GB, temp_directory=.tmp (OPFS), preserve_insertion_order=false`
+						: `getDB → preserve_insertion_order=false, threads capped, temp_directory=.tmp (no OPFS — leaving memory_limit at defaults)`
+				);
+			} catch (err) {
+				logWarn('memory tuning not available:', (err as Error)?.message ?? err);
+			}
 			log(`getDB → extensions loaded in ${elapsed(tExt)}`);
 		} finally {
 			await conn.close();
 		}
 
 		log(`getDB → ready (total ${elapsed(t0)})`);
+		logInitSummary();
 		return db;
 	})();
 
@@ -1000,6 +1186,87 @@ export class WasmQueryEngine implements QueryEngine {
 		};
 
 		return { result, cancel };
+	}
+
+	/**
+	 * Streaming variant of `queryCancellable`. Yields one chunk per Arrow
+	 * RecordBatch so peak memory tracks one batch instead of the full result.
+	 * Used by `stac-source-parquet` to ingest large catalogs progressively
+	 * without OOMing the WASM heap. Cancellation routes through `conn.cancelSent`
+	 * and `signal.aborted`; the connection is always closed in `finally`.
+	 */
+	async *queryStream(
+		connId: string,
+		sql: string,
+		signal?: AbortSignal
+	): AsyncIterable<QueryResult> {
+		const t0 = performance.now();
+		const sqlPreview = sql.length > 120 ? `${sql.slice(0, 120)}…` : sql;
+		log(`queryStream → ${sqlPreview}`);
+		const db = await getDB();
+		const conn: any = await db.connect();
+		const onAbort = () => {
+			try {
+				conn?.cancelSent?.();
+			} catch {
+				/* noop */
+			}
+		};
+		signal?.addEventListener('abort', onAbort, { once: true });
+		try {
+			if (connId) {
+				await this.configureStorage(conn, connId, sql);
+			}
+			const reader = await conn.send(sql);
+			let cols: string[] = [];
+			let types: string[] = [];
+			let decimalCols: Array<{ name: string; scale: number }> = [];
+			let first = true;
+			let total = 0;
+			const batches = reader[Symbol.asyncIterator]();
+			while (true) {
+				if (signal?.aborted) throw new QueryCancelledError();
+				const { value: batch, done } = await batches.next();
+				if (done) break;
+				if (first && batch.schema) {
+					cols = batch.schema.fields.map((f: any) => f.name);
+					types = batch.schema.fields.map((f: any) => String(f.type));
+					decimalCols = [];
+					for (let i = 0; i < cols.length; i++) {
+						const s = decimalScale(types[i]);
+						if (s >= 0) decimalCols.push({ name: cols[i], scale: s });
+					}
+					first = false;
+				}
+				const rows: Record<string, any>[] = [];
+				for (const row of batch.toArray()) {
+					const json: Record<string, any> =
+						typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+					for (const key in json) {
+						if (json[key] instanceof Uint8Array) {
+							json[key] = (json[key] as Uint8Array).slice();
+						}
+					}
+					for (const { name, scale } of decimalCols) {
+						json[name] = formatDecimal(json[name], scale);
+					}
+					rows.push(json);
+				}
+				total += rows.length;
+				yield { columns: cols, types, rowCount: rows.length, rows };
+			}
+			log(`queryStream → done in ${elapsed(t0)}, ${total} rows total`);
+		} catch (err) {
+			if (signal?.aborted || err instanceof QueryCancelledError) {
+				log(`queryStream → cancelled after ${elapsed(t0)}`);
+				throw new QueryCancelledError();
+			}
+			logWarn(`queryStream → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
+			throw err;
+		} finally {
+			signal?.removeEventListener('abort', onAbort);
+			await conn?.close?.();
+		}
 	}
 
 	queryForMapCancellable(

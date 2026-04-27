@@ -74,6 +74,16 @@ export interface QueryEngine {
 		findGeoCol: (schema: SchemaField[]) => string | null
 	): Promise<{ schema: SchemaField[]; geomCol: string | null; crs: string | null }>;
 	queryCancellable?(connId: string, sql: string): QueryHandle;
+	/**
+	 * Streaming variant of `queryCancellable`. Yields one `QueryResult`-shaped
+	 * chunk per Arrow RecordBatch instead of materializing the full row set
+	 * before returning. Peak memory tracks one batch (~64 KiB rows) rather
+	 * than the full result, which avoids DuckDB-WASM OOMs on large parquet
+	 * scans. The first chunk carries the schema (`columns` / `types`); later
+	 * chunks repeat them so consumers don't need to track first-batch state.
+	 * Cancellation aborts the inner DuckDB cursor.
+	 */
+	queryStream?(connId: string, sql: string, signal?: AbortSignal): AsyncIterable<QueryResult>;
 	queryForMapCancellable?(
 		connId: string,
 		sql: string,
