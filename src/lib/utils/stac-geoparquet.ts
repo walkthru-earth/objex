@@ -29,6 +29,48 @@ export interface StacBboxStruct {
 /** Generic Record shape representing a single stac-geoparquet row after DuckDB decoding. */
 export type StacGeoparquetRow = Record<string, unknown>;
 
+/**
+ * Recursively convert Arrow nested cells (StructRow, ListVector, MapVector)
+ * to plain JS arrays / objects so downstream `Array.isArray()` / property
+ * destructuring / `Object.entries()` work the way library consumers expect.
+ *
+ * DuckDB-WASM bundles apache-arrow v17 and surfaces nested cells as Arrow
+ * proxies even after `Row.toJSON()` (a known v17 quirk on LIST<STRUCT> and
+ * nested STRUCTs). Without this conversion:
+ *   - `Array.isArray(properties.bands)` returns false, so `extractCogAssets`'s
+ *     item-level bands fallback never runs (NAIP-style 4-band catalogs collapse
+ *     to a single "Band 1" picker)
+ *   - destructured `{xmin, ymin, ...}` reads from a `bbox` StructRow may yield
+ *     undefined, so `flattenStacBbox` returns null and `buildMosaicSourceMeta`
+ *     drops every item (mosaic never fits to bounds)
+ *
+ * Plain JS values pass through unchanged.
+ */
+function plainifyArrowValue(value: unknown): unknown {
+	if (value === null || value === undefined) return value;
+	const t = typeof value;
+	if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint') return value;
+	if (value instanceof Uint8Array || value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+		return value;
+	}
+	if (Array.isArray(value)) return value.map(plainifyArrowValue);
+	const obj = value as { toJSON?: () => unknown; toArray?: () => unknown[] };
+	if (typeof obj.toJSON === 'function') {
+		return plainifyArrowValue(obj.toJSON());
+	}
+	if (typeof obj.toArray === 'function') {
+		return obj.toArray().map(plainifyArrowValue);
+	}
+	if (t === 'object') {
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+			out[k] = plainifyArrowValue(v);
+		}
+		return out;
+	}
+	return value;
+}
+
 export interface StacRowToItemOptions {
 	/**
 	 * Decoder for the geometry column. Accepts a Uint8Array of WKB bytes and
@@ -230,6 +272,16 @@ export function stacRowToItem(
 	opts: StacRowToItemOptions = {}
 ): StacItem {
 	const { wkbParser, wkbColumn = 'geom_wkb', geometryColumn = 'geometry' } = opts;
+
+	// Coerce Arrow proxies (StructRow, list Vector) on the nested STAC columns
+	// to plain JS so downstream consumers can rely on Array.isArray / destructure.
+	// Cheap (only walks the small set of struct/list cells per row) and idempotent
+	// for callers that already pass plain JSON rows.
+	for (const key of ['bbox', 'assets', 'links', 'bands', 'stac_extensions'] as const) {
+		if (row[key] !== undefined && row[key] !== null) {
+			(row as Record<string, unknown>)[key] = plainifyArrowValue(row[key]);
+		}
+	}
 
 	let geometry: unknown = row[geometryColumn];
 	if (!geometry) {
