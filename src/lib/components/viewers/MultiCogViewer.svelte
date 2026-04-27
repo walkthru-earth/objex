@@ -42,6 +42,7 @@ import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import { buildRgbLayer } from './cog/buildRgbLayer.js';
+import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
 import MapContainer from './map/MapContainer.svelte';
 
 let { tab, classified }: { tab: Tab; classified?: StacRoutableKind } = $props();
@@ -648,49 +649,17 @@ onDestroy(cleanup);
 		{/if}
 	{/if}
 
-	{#if pixelValue}
-		<div
-			class="absolute bottom-2 left-2 z-10 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			<div class="mb-1 flex items-center justify-between gap-3">
-				<span class="font-medium">{t('cog.pixelValue')}</span>
-				<button
-					class="text-muted-foreground hover:text-card-foreground"
-					onclick={() => (pixelValue = null)}
-				>
-					&times;
-				</button>
-			</div>
-			<div class="space-y-0.5 text-muted-foreground">
-				<div>{pixelValue.lat.toFixed(6)}&deg;, {pixelValue.lng.toFixed(6)}&deg;</div>
-			</div>
-			<div class="mt-1.5 space-y-0.5">
-				{#each pixelValue.entries as entry (entry.channel)}
-					<div class="flex justify-between gap-2">
-						<span class="text-muted-foreground">
-							{entry.channel}
-							<span class="text-[10px]">({entry.assetKey})</span>
-						</span>
-						<span class="font-mono tabular-nums">
-							{#if entry.value == null}
-								-
-							{:else if Number.isInteger(entry.value)}
-								{entry.value}
-							{:else}
-								{entry.value.toFixed(4)}
-							{/if}
-						</span>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	{#if inspecting}
-		<div
-			class="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
-		>
-			{t('cog.reading')}
-		</div>
-	{/if}
+	<PixelInspectorPanel
+		lng={pixelValue?.lng ?? null}
+		lat={pixelValue?.lat ?? null}
+		rows={pixelValue
+			? (pixelValue.entries.map((e) => ({
+					label: e.channel,
+					sublabel: e.assetKey,
+					value: e.value
+				})) satisfies PixelInspectorRow[])
+			: null}
+		onClose={() => (pixelValue = null)}
+		{inspecting}
+	/>
 </div>
