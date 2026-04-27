@@ -90,14 +90,36 @@ function clearRange(): void {
 	emit(undefined, undefined);
 }
 
-const minInputValue = $derived(isoToDateInput(state.datetime?.min));
-const maxInputValue = $derived(isoToDateInput(state.datetime?.max));
+/** `YYYY-MM-DD` for today (UTC) — used as the max-input default. */
+function todayDateInput(): string {
+	return new Date().toISOString().slice(0, 10);
+}
+
+// Display defaults when the user has not set a filter yet:
+//   - min input falls back to the earliest datetime in the loaded data
+//     (`facet.min`), so the input hints at the available range instead of
+//     showing `mm / dd / yyyy`.
+//   - max input falls back to "today" so the visible window always extends
+//     to "now" regardless of whether items in the current viewport are
+//     stale. Both fallbacks are display-only — the actual `state.datetime`
+//     stays undefined until the user picks a value, so an empty `state`
+//     means "no filter" not "filter by today".
+const minInputValue = $derived(
+	isoToDateInput(state.datetime?.min) || (facet ? isoToDateInput(facet.min) : '')
+);
+const maxInputValue = $derived(isoToDateInput(state.datetime?.max) || todayDateInput());
 const isActive = $derived(Boolean(state.datetime?.min || state.datetime?.max));
 
 function fmtDate(ms: number): string {
 	if (!Number.isFinite(ms)) return '-';
 	return formatDate(ms);
 }
+
+const granularityLabel = $derived.by((): string | null => {
+	if (!facet) return null;
+	const word = t(`stac.granularity.${facet.granularity}`);
+	return t('stac.granularityLabel', { granularity: word });
+});
 </script>
 
 <div
@@ -143,6 +165,9 @@ function fmtDate(ms: number): string {
 			formatLabel={fmtDate}
 			onValueCommit={setSlider}
 		/>
+		{#if granularityLabel}
+			<div class="text-[10px] text-muted-foreground">{granularityLabel}</div>
+		{/if}
 	{:else}
 		<div class="text-[10px] text-muted-foreground">{t('stac.facetNoneAvailable')}</div>
 	{/if}
