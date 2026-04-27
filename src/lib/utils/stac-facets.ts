@@ -161,9 +161,20 @@ export interface EnumFacet {
 }
 
 /**
- * Datetime facet, with min/max for slider bounds and a fixed-width histogram
- * the UI can render under a range slider. `bins.length` is always
- * `DATETIME_HISTOGRAM_BINS` so consumers can layout without checking.
+ * Calendar-aligned bin granularity for the datetime histogram. Picked
+ * automatically from the loaded items' time span so callers never see a
+ * span-vs-resolution mismatch (e.g. month bins on a 30-day window or day bins
+ * on a 20-year archive). See `pickGranularity` for the breakpoints.
+ */
+export type DatetimeGranularity = 'day' | 'week' | 'month' | 'year';
+
+/**
+ * Datetime facet, with min/max for slider bounds and a calendar-aligned
+ * histogram the UI can render under a range slider. Each bin spans one
+ * `granularity` unit (UTC day, ISO week starting Monday, calendar month, or
+ * calendar year). `bins[i]` is the count of items whose `datetime` falls
+ * inside the bin starting at `binEdges[i]` (epoch ms, UTC). `bins.length ===
+ * binEdges.length`, capped at `DATETIME_HISTOGRAM_BINS_MAX`.
  */
 export interface DatetimeFacet {
 	kind: 'datetime';
@@ -173,7 +184,12 @@ export interface DatetimeFacet {
 	/** Latest datetime, ISO 8601. */
 	max: string;
 	count: number;
+	/** Per-bin counts. Length matches `binEdges.length`. */
 	bins: number[];
+	/** Auto-picked calendar granularity for each histogram bucket. */
+	granularity: DatetimeGranularity;
+	/** Epoch ms (UTC) of each bin's start boundary. Same length as `bins`. */
+	binEdges: number[];
 }
 
 export type Facet = NumericFacet | EnumFacet | DatetimeFacet;
@@ -185,7 +201,21 @@ export type EnumFacetField =
 	| 'instruments'
 	| 'assetRoles';
 
+/**
+ * Soft cap on histogram bin count. The actual count is derived from the span
+ * + granularity (e.g. a 5-year span at month granularity emits 60 bins, a
+ * 90-day span at day granularity emits 90 bins). Spans that would exceed the
+ * cap are clamped here, the next coarser granularity should already have been
+ * picked by `pickGranularity` so this only protects against pathological
+ * inputs.
+ */
+export const DATETIME_HISTOGRAM_BINS_MAX = 64;
+
+/** @deprecated Retained for backward compatibility. Use `DATETIME_HISTOGRAM_BINS_MAX`. */
 export const DATETIME_HISTOGRAM_BINS = 32;
+
+const MS_PER_DAY = 86_400_000;
+const MS_PER_YEAR = MS_PER_DAY * 365.25;
 
 /** Result of `buildFacets`: every facet that has variance in the input set. */
 export interface FacetSet {
@@ -238,6 +268,74 @@ function buildEnumFacet(views: StacItemView[], field: EnumFacetField): EnumFacet
 	return { kind: 'enum', field, values };
 }
 
+/**
+ * Pick a calendar granularity from the time span. Inspired by lazycogs's
+ * `_TemporalGrouper` family: short windows surface daily / weekly cadence,
+ * long archives roll up to month / year so each bin still represents a
+ * meaningful slice of data.
+ */
+export function pickGranularity(spanMs: number): DatetimeGranularity {
+	if (spanMs <= 90 * MS_PER_DAY) return 'day';
+	if (spanMs <= 2 * MS_PER_YEAR) return 'week';
+	if (spanMs <= 20 * MS_PER_YEAR) return 'month';
+	return 'year';
+}
+
+/** Floor `t` to the start of its containing UTC day (00:00:00.000Z). */
+function floorUtcDay(t: number): number {
+	const d = new Date(t);
+	return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/** Floor `t` to the Monday 00:00 UTC that starts its ISO week. */
+function floorIsoWeek(t: number): number {
+	const dayStart = floorUtcDay(t);
+	// JS getUTCDay: Sun=0, Mon=1, ..., Sat=6. ISO weeks start on Monday.
+	const dow = new Date(dayStart).getUTCDay();
+	const offsetDays = (dow + 6) % 7; // Mon→0, Tue→1, ..., Sun→6
+	return dayStart - offsetDays * MS_PER_DAY;
+}
+
+/** Floor `t` to the 1st of its UTC month at 00:00. */
+function floorUtcMonth(t: number): number {
+	const d = new Date(t);
+	return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+}
+
+/** Floor `t` to Jan 1 of its UTC year at 00:00. */
+function floorUtcYear(t: number): number {
+	const d = new Date(t);
+	return Date.UTC(d.getUTCFullYear(), 0, 1);
+}
+
+function floorBin(t: number, g: DatetimeGranularity): number {
+	switch (g) {
+		case 'day':
+			return floorUtcDay(t);
+		case 'week':
+			return floorIsoWeek(t);
+		case 'month':
+			return floorUtcMonth(t);
+		case 'year':
+			return floorUtcYear(t);
+	}
+}
+
+/** Advance `t` to the start of the next bin at granularity `g`. */
+function nextBin(t: number, g: DatetimeGranularity): number {
+	const d = new Date(t);
+	switch (g) {
+		case 'day':
+			return t + MS_PER_DAY;
+		case 'week':
+			return t + 7 * MS_PER_DAY;
+		case 'month':
+			return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+		case 'year':
+			return Date.UTC(d.getUTCFullYear() + 1, 0, 1);
+	}
+}
+
 function buildDatetimeFacet(views: StacItemView[]): DatetimeFacet | null {
 	const timestamps: number[] = [];
 	for (const v of views) {
@@ -253,24 +351,77 @@ function buildDatetimeFacet(views: StacItemView[]): DatetimeFacet | null {
 		if (t > max) max = t;
 	}
 	if (min === max) return null;
-	const bins = new Array<number>(DATETIME_HISTOGRAM_BINS).fill(0);
-	const span = max - min;
+
+	let granularity = pickGranularity(max - min);
+	let binEdges = computeBinEdges(min, max, granularity);
+
+	// Defensive clamp, if a pathological input would emit more than
+	// `DATETIME_HISTOGRAM_BINS_MAX` bins at the picked granularity, step up
+	// to the next coarser granularity until we fit.
+	while (binEdges.length > DATETIME_HISTOGRAM_BINS_MAX && granularity !== 'year') {
+		granularity = coarsenGranularity(granularity);
+		binEdges = computeBinEdges(min, max, granularity);
+	}
+
+	const bins = new Array<number>(binEdges.length).fill(0);
 	for (const t of timestamps) {
-		// Clamp to [0, BINS-1]: t === max should land in the last bin, not bin BINS.
-		const idx = Math.min(
-			DATETIME_HISTOGRAM_BINS - 1,
-			Math.floor(((t - min) / span) * DATETIME_HISTOGRAM_BINS)
-		);
+		const idx = findBinIndex(binEdges, t);
 		bins[idx]++;
 	}
+
 	return {
 		kind: 'datetime',
 		field: 'datetime',
 		min: new Date(min).toISOString(),
 		max: new Date(max).toISOString(),
 		count: timestamps.length,
-		bins
+		bins,
+		granularity,
+		binEdges
 	};
+}
+
+function coarsenGranularity(g: DatetimeGranularity): DatetimeGranularity {
+	switch (g) {
+		case 'day':
+			return 'week';
+		case 'week':
+			return 'month';
+		case 'month':
+		case 'year':
+			return 'year';
+	}
+}
+
+/** Compute calendar-aligned bin start edges covering `[min, max]` inclusive. */
+function computeBinEdges(min: number, max: number, g: DatetimeGranularity): number[] {
+	const edges: number[] = [];
+	let cursor = floorBin(min, g);
+	const stop = max;
+	// Hard upper-bound the loop in case of malformed input. The defensive
+	// while loop above will coarsen and retry if we hit this.
+	for (let i = 0; i < DATETIME_HISTOGRAM_BINS_MAX * 4 && cursor <= stop; i++) {
+		edges.push(cursor);
+		cursor = nextBin(cursor, g);
+	}
+	return edges;
+}
+
+/**
+ * Locate the bin containing `t` via binary search on bin start edges.
+ * Returns the index of the largest edge ≤ t, clamped into `[0, edges.length-1]`.
+ */
+function findBinIndex(edges: number[], t: number): number {
+	if (t <= edges[0]) return 0;
+	if (t >= edges[edges.length - 1]) return edges.length - 1;
+	let lo = 0;
+	let hi = edges.length - 1;
+	while (lo < hi) {
+		const mid = (lo + hi + 1) >>> 1;
+		if (edges[mid] <= t) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo;
 }
 
 /**
