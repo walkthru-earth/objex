@@ -1593,7 +1593,7 @@ onDestroy(cleanup);
 				bandCount={detectedBandCount}
 				onBandConfigChange={handleConfigChange}
 				{rescale}
-				rescaleApplicable={bandConfig ? bandConfig.mode === 'single' : false}
+				rescaleApplicable={!!bandConfig}
 				onRescaleChange={handleRescaleChange}
 				{histogram}
 			/>
