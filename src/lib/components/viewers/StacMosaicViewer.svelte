@@ -26,6 +26,7 @@ import {
 	type BandConfig,
 	buildBandRenderPipeline,
 	buildDataTypeLabel,
+	buildHistogramFromGeotiff,
 	type CustomTileData,
 	clampBounds,
 	cleanupNativeBitmap,
@@ -36,6 +37,7 @@ import {
 	HISTOGRAM_BIN_COUNT,
 	normalizeCogGeotiff,
 	type PixelValue,
+	percentileFromHistogram,
 	type RescaleConfig,
 	readPixelAtLngLat,
 	resolveProj4Def,
@@ -97,6 +99,14 @@ let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
 let detectedBandCount = $state<number>(3);
 let detectedDataType = $state<string>('');
 let probedBandCount = false;
+// On the multi-asset path (per-item MultiCOGLayer mosaic) the per-tile baker
+// in `cog.ts` is bypassed, so `recordSourceHistogram` never receives bins and
+// `aggregateSources()` keeps `histogram = null`. Fall back to a one-shot bake
+// from the smallest overview of the first committed item's R-channel COG.
+// Tracks `${rAssetKey}:${firstViewId}` so a preset / R-channel swap or a fresh
+// viewport rebakes; `userTouchedRescale` gates the auto-contrast reseed.
+let multiHistogramKey: string | null = null;
+let userTouchedRescale = false;
 // ─── Asset picker (mosaic uses ONE COG per item) ──────────────────
 // `availableAssets` is seeded from the first item that arrives so the user
 // can pick which STAC asset (`visual` / `red` / `nir` / ...) drives the
@@ -603,6 +613,8 @@ function resetViewer(): void {
 	bounds = undefined;
 	bandConfig = null;
 	histogram = null;
+	multiHistogramKey = null;
+	userTouchedRescale = false;
 	rescale = { ...DEFAULT_RESCALE };
 	hasFittedOnce = false;
 	showControls = false;
@@ -1201,6 +1213,7 @@ function resetFilters(): void {
 function handleConfigChange(next: BandConfig): void {
 	bandConfig = next;
 	histogram = null;
+	multiHistogramKey = null;
 	sourceHistograms.clear();
 	bumpPipeline();
 }
@@ -1251,6 +1264,12 @@ function setPreset(id: string): void {
 	const next = applyPreset(cogAssets, preset);
 	if (!next) return;
 	activePresetId = id;
+	// New preset = new R-channel = new data distribution. Reset the
+	// "user touched the slider" flag so the next bake's p2/p98 reseeds
+	// rescale, otherwise switching truecolor → vegetation keeps the
+	// previous truecolor's auto-contrast on a band where it doesn't fit.
+	userTouchedRescale = false;
+	multiHistogramKey = null;
 	setComposite(next);
 }
 
@@ -1268,6 +1287,8 @@ function setMosaicAssetKey(nextKey: string): void {
 	bandConfig = null;
 	probedBandCount = false;
 	histogram = null;
+	multiHistogramKey = null;
+	userTouchedRescale = false;
 	sourceHistograms.clear();
 	geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: SOURCE_CACHE_MAX });
 	presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX });
@@ -1330,6 +1351,8 @@ function recordSourceHistogram(
 
 function aggregateSources(): void {
 	if (sourceHistograms.size === 0) {
+		// Don't clobber a histogram baked by the multi-asset path.
+		if (composite && !isSingleAssetComposite(composite) && histogram) return;
 		histogram = null;
 		return;
 	}
@@ -1340,8 +1363,64 @@ function aggregateSources(): void {
 	histogram = summed;
 }
 
+// Multi-asset bake: pick the first committed item's R-channel COG, build a
+// 64-bin histogram from its smallest overview. Keyed on `rAsset:viewId` so a
+// preset swap (R asset changes) or a fresh viewport (first view rotates) fires
+// a new bake. Also reseeds rescale to p2/p98 when the user has not touched the
+// slider, so vegetation / SWIR composites land with auto-contrast instead of
+// the previous truecolor's `{0, 0.05}` lingering on uint16 reflectance.
+$effect(() => {
+	const c = composite;
+	const views = committedViews as StacItemView[];
+	if (!c || isSingleAssetComposite(c) || views.length === 0) {
+		multiHistogramKey = null;
+		return;
+	}
+	const first = views[0];
+	const itemAssets = extractCogAssets(first.raw);
+	const rAsset = itemAssets.find((a) => a.key === c.r.assetKey);
+	if (!rAsset) return;
+	const key = `${c.r.assetKey}:${first.id}`;
+	if (multiHistogramKey === key) return;
+	multiHistogramKey = key;
+	const signal = abortController.signal;
+	void (async () => {
+		try {
+			const url = await presignHref(rAsset.href);
+			if (signal.aborted || multiHistogramKey !== key) return;
+			let promise = geotiffCache.get(rAsset.href);
+			if (!promise) {
+				promise = (async () => {
+					const g = await GeoTIFF.fromUrl(url);
+					normalizeCogGeotiff(g);
+					return g;
+				})();
+				geotiffCache.set(rAsset.href, promise);
+			}
+			const geotiff = await promise;
+			if (signal.aborted || multiHistogramKey !== key) return;
+			const bins = await buildHistogramFromGeotiff(geotiff, signal);
+			if (signal.aborted || multiHistogramKey !== key) return;
+			if (bins) {
+				histogram = bins;
+				if (!userTouchedRescale) {
+					const lo = percentileFromHistogram(bins, 0.02);
+					const hi = percentileFromHistogram(bins, 0.98);
+					if (lo !== null && hi !== null && hi > lo) {
+						rescale = { min: lo, max: hi };
+						bumpPipeline();
+					}
+				}
+			}
+		} catch (err) {
+			console.warn('[StacMosaicViewer] multi-asset histogram bake failed', { key, err });
+		}
+	})();
+});
+
 function handleRescaleChange(next: RescaleConfig): void {
 	rescale = next;
+	userTouchedRescale = true;
 	bumpPipeline();
 }
 
