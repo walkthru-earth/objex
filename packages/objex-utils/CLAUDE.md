@@ -27,6 +27,8 @@ Re-exports from `src/lib/`:
 - **utils/format**: `formatFileSize()`, `formatDate()`, `formatValue()`, `getFileExtension()`, `jsonReplacerBigInt()`
 - **utils/hex**: `HexRow` (type), `generateHexDump()`
 - **utils/column-types**: `TypeCategory` (type), `classifyType()`, `typeBadgeClass()`, `typeColor()`, `typeLabel()`
+- **utils/channel-composite**: `PresetDef` (type), `PRESETS`, `applyPreset()`, `availablePresets()`, `compositeFromUrl()`, `compositeToUrl()`, `presetMatchesComposite()`. URL round-trip + preset library for the unified RGB picker (Natural color / False-color IR / SWIR / Vegetation / Agriculture).
+- **utils/cog-asset**: `CogAsset` / `ChannelRef` / `ChannelComposite` (types), `extractCogAssets()`, `syntheticSelfAsset()`, `pickNaturalColorComposite()`, `isSingleAssetComposite()`, `allChannelsBand0()`. Pure TS, no Svelte. Reads `raster:bands.length` and `eo:bands` without network. Powers the per-channel band picker shared by `CogViewer`, `MultiCogViewer`, `StacMosaicViewer`.
 - **utils/cloud-url**: `resolveCloudUrl()`, `getNativeScheme()`, `safeDecodeURIComponent()`
 - **utils/file-sort**: `SortConfig` (type), `SortDirection` (type), `SortField` (type), `sortFileEntries()`, `toggleSortField()`
 - **utils/export**: `serializeToCsv()`, `serializeToJson()`, `escapeCsvField()`, `exportToCsv()`, `exportToJson()`
