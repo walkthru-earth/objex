@@ -91,3 +91,52 @@ index 13109e9f4baebd00631c065f9956bcccb8b85e99..4e2f09ff44647465901dfb05e876fcf9
          });
      }
      renderLayers() {
+diff --git a/dist/multi-cog-layer.js b/dist/multi-cog-layer.js
+index 1a17586fddcf72b51e536ad619995d3b6b67a605..e38f382d373bb5a521c4213a1cd8a1165f8a2aeb 100644
+--- a/dist/multi-cog-layer.js
++++ b/dist/multi-cog-layer.js
+@@ -604,17 +604,41 @@ function createBandTexture(device, array) {
+     if (array.layout !== "pixel-interleaved") {
+         throw new Error("Band-separate layout not yet supported in MultiCOGLayer");
+     }
+-    const { data, width, height } = array;
++    let { data, width, height } = array;
+     let format;
+     if (data instanceof Uint8Array || data instanceof Uint8ClampedArray) {
+         format = "r8unorm";
+     }
+     else if (data instanceof Uint16Array) {
+-        format = "r16unorm";
++        // objex patch: r16unorm requires EXT_texture_norm16, which Firefox on
++        // macOS does not enable on its WebGL2 context. Without the extension
++        // the texStorage call rejects internalformat 0x822A (GL_R16) and the
++        // texture is never specified, so MultiCOGLayer renders transparent
++        // tiles for every uint16 band (e.g. Sentinel-2 raw reflectance B*).
++        // When the device cannot use r16unorm, convert to a Float32Array
++        // (divided by 65535 to preserve r16unorm's normalized [0,1] sampling
++        // semantics) and upload as r32float instead. R32F is core in WebGL2
++        // and supported on every backend luma.gl ships. Linear filtering is
++        // available via OES_texture_float_linear, present in modern browsers;
++        // when absent the texture still samples with nearest, which is fine
++        // for raster mosaic display.
++        if (device.isTextureFormatSupported && !device.isTextureFormatSupported("r16unorm")) {
++            const f = new Float32Array(data.length);
++            for (let i = 0; i < data.length; i++)
++                f[i] = data[i] / 65535;
++            data = f;
++            format = "r32float";
++        }
++        else {
++            format = "r16unorm";
++        }
++    }
++    else if (data instanceof Float32Array) {
++        format = "r32float";
+     }
+     else {
+         throw new Error(`Unsupported typed array type: ${data.constructor.name}. ` +
+-            "Currently only Uint8Array and Uint16Array are supported.");
++            "Currently only Uint8Array, Uint16Array, and Float32Array are supported.");
+     }
+     return device.createTexture({
+         data,

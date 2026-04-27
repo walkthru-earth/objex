@@ -12,7 +12,7 @@ patchedDependencies:
     hash: c95ffac09b3a4c614ae237f5bcf6facd9941840442660dc5677f81c2e65632ef
     path: patches/@carbonplan__zarr-layer@0.4.3.patch
   '@developmentseed/deck.gl-geotiff@0.6.0-alpha.1':
-    hash: a3a884578e609b992b72107a4f9bfb90f5100aa7369f502572b3d6e987d1cf12
+    hash: c7e59e97293c05e8e273425cae02df527bb3f1571c01e30066c4a6483c431c97
     path: patches/@developmentseed__deck.gl-geotiff@0.6.0-alpha.1.patch
 
 importers:
@@ -66,7 +66,7 @@ importers:
         version: 9.3.1(@deck.gl/core@9.3.1)(@loaders.gl/core@4.4.1)(@luma.gl/core@9.3.3)(@luma.gl/engine@9.3.3(@luma.gl/core@9.3.3)(@luma.gl/shadertools@9.3.3(@luma.gl/core@9.3.3)))(@luma.gl/gltf@9.3.3(@luma.gl/core@9.3.3)(@luma.gl/engine@9.3.3(@luma.gl/core@9.3.3)(@luma.gl/shadertools@9.3.3(@luma.gl/core@9.3.3)))(@luma.gl/shadertools@9.3.3(@luma.gl/core@9.3.3)))(@luma.gl/shadertools@9.3.3(@luma.gl/core@9.3.3))
       '@developmentseed/deck.gl-geotiff':
         specifier: 0.6.0-alpha.1
-        version: 0.6.0-alpha.1(patch_hash=a3a884578e609b992b72107a4f9bfb90f5100aa7369f502572b3d6e987d1cf12)(cc41b3d1ec34e9745cd6b1d5b8768f1b)
+        version: 0.6.0-alpha.1(patch_hash=c7e59e97293c05e8e273425cae02df527bb3f1571c01e30066c4a6483c431c97)(cc41b3d1ec34e9745cd6b1d5b8768f1b)
       '@developmentseed/deck.gl-raster':
         specifier: 0.6.0-alpha.1
         version: 0.6.0-alpha.1(73ff38b4564261239fadf42479eeaf08)
@@ -5597,7 +5597,7 @@ snapshots:
 
   '@developmentseed/affine@0.6.0-alpha.1': {}
 
-  '@developmentseed/deck.gl-geotiff@0.6.0-alpha.1(patch_hash=a3a884578e609b992b72107a4f9bfb90f5100aa7369f502572b3d6e987d1cf12)(cc41b3d1ec34e9745cd6b1d5b8768f1b)':
+  '@developmentseed/deck.gl-geotiff@0.6.0-alpha.1(patch_hash=c7e59e97293c05e8e273425cae02df527bb3f1571c01e30066c4a6483c431c97)(cc41b3d1ec34e9745cd6b1d5b8768f1b)':
     dependencies:
       '@cogeotiff/core': 9.5.0
       '@deck.gl/core': 9.3.1

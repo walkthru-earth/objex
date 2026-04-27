@@ -21,6 +21,7 @@ import {
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
+	defaultRescaleForGeotiff,
 	fitCogBounds,
 	normalizeCogGeotiff,
 	type RescaleConfig
@@ -46,10 +47,16 @@ let error = $state<string | null>(null);
 let showControls = $state(false);
 let bounds = $state<[number, number, number, number] | undefined>();
 let activePresetId = $state<string>('natural-color');
-// Sentinel-2 L2A reflectance is scaled uint16 (raw / 10000 = reflectance).
-// After the default uint normalization the slider operates on 0..1, so 0.3
-// keeps typical land surfaces in the visible range without clipping.
+// Default rescale is bit-depth aware: uint8 visual COGs (Sentinel-2 `visual`,
+// NAIP `image`) want max=0.3, uint16 reflectance bands (S2 raw `nir`/`swir`/`red`)
+// want ~0.05 because r16unorm divides raw values by 65535, leaving typical
+// reflectance ~0.012-0.046 in shader space. The actual default is reseeded
+// from the first preflighted GeoTIFF in `buildAndAddLayer`. Until the user
+// drags the slider, preset/composite swaps continue to refresh the default
+// so switching from a uint8 visual to a uint16 multi-asset preset doesn't
+// render near-black tiles.
 let rescale = $state<RescaleConfig>({ min: 0, max: 0.3 });
+let userTouchedRescale = false;
 
 let assets = $state.raw<CogAsset[]>([]);
 let composite = $state.raw<ChannelComposite | null>(null);
@@ -115,6 +122,7 @@ function resetViewer(): void {
 	bounds = undefined;
 	activePresetId = 'natural-color';
 	rescale = { min: 0, max: 0.3 };
+	userTouchedRescale = false;
 	hasFittedOnce = false;
 	showControls = false;
 }
@@ -270,35 +278,55 @@ async function buildAndAddLayer(
 		rescale: { ...rescale }
 	});
 
-	// For single-asset composites, pre-open the GeoTIFF so buildRgbLayer can
-	// run selectCogPipeline and honor per-channel bandIndex. Multi-asset
-	// composites use MultiCOGLayer which only reads band 0 anyway, so no
-	// preflight is needed there.
+	// Pre-open the R-channel GeoTIFF on every path. For single-asset composites
+	// this lets buildRgbLayer run selectCogPipeline and honor per-channel
+	// bandIndex. For multi-asset composites (MultiCOGLayer) the GeoTIFF object
+	// is not consumed by the layer, but inspecting its tags lets us pick a
+	// bit-depth-appropriate default rescale so uint16 reflectance bands don't
+	// render near-black against a slider tuned for uint8 visuals.
 	let preflightGeotiff: GeoTIFF | null = null;
-	if (isSingleAssetComposite(c)) {
-		const assetKey = c.r.assetKey;
-		const asset = assets.find((a) => a.key === assetKey);
-		if (asset) {
-			let promise = geotiffCache.get(assetKey);
-			if (!promise) {
-				promise = (async () => {
-					const url = await presignHref(asset.href);
-					const g = await GeoTIFF.fromUrl(url);
-					normalizeCogGeotiff(g);
-					return g;
-				})();
-				geotiffCache.set(assetKey, promise);
-			}
-			try {
-				preflightGeotiff = await promise;
-			} catch (err) {
-				console.warn('[MultiCogViewer] preflight GeoTIFF open failed', { assetKey, err });
-				geotiffCache.delete(assetKey);
-				preflightGeotiff = null;
-			}
-			if (signal.aborted) return;
+	const rChannelKey = c.r.assetKey;
+	const rAsset = assets.find((a) => a.key === rChannelKey);
+	if (rAsset) {
+		let promise = geotiffCache.get(rChannelKey);
+		if (!promise) {
+			promise = (async () => {
+				const url = await presignHref(rAsset.href);
+				const g = await GeoTIFF.fromUrl(url);
+				normalizeCogGeotiff(g);
+				return g;
+			})();
+			geotiffCache.set(rChannelKey, promise);
+		}
+		try {
+			preflightGeotiff = await promise;
+		} catch (err) {
+			console.warn('[MultiCogViewer] preflight GeoTIFF open failed', {
+				assetKey: rChannelKey,
+				err
+			});
+			geotiffCache.delete(rChannelKey);
+			preflightGeotiff = null;
+		}
+		if (signal.aborted) return;
+	}
+
+	if (preflightGeotiff && !userTouchedRescale) {
+		const next = defaultRescaleForGeotiff(preflightGeotiff);
+		if (next.min !== rescale.min || next.max !== rescale.max) {
+			console.debug('[MultiCogViewer] reseeding rescale from preflight', {
+				assetKey: rChannelKey,
+				prev: { ...rescale },
+				next
+			});
+			rescale = next;
 		}
 	}
+
+	// Multi-asset path doesn't consume the GeoTIFF object; only single-asset
+	// flows it through to selectCogPipeline. Drop the reference so buildRgbLayer
+	// doesn't try to translate per-channel bandIndex on a path that can't honor it.
+	const preflightForLayer = isSingleAssetComposite(c) ? preflightGeotiff : null;
 
 	const { layer, kind } = await buildRgbLayer({
 		id: `multicog-${tab.id}-v${version}`,
@@ -309,7 +337,7 @@ async function buildAndAddLayer(
 		pool,
 		epsgResolver,
 		signal,
-		preflightGeotiff,
+		preflightGeotiff: preflightForLayer,
 		onLoad: ({ bounds: nextBounds }) => {
 			if (version !== layerVersion || signal.aborted) return;
 			if (nextBounds) {
@@ -327,9 +355,14 @@ async function buildAndAddLayer(
 	console.debug('[MultiCogViewer] buildAndAddLayer built', {
 		version,
 		kind,
-		layerId: (layer as { id?: string }).id
+		layerId: (layer as { id?: string }).id,
+		hasOverlay: !!overlayRef
 	});
 	if (overlayRef) {
+		console.debug('[MultiCogViewer] overlayRef.setProps swapping layer', {
+			version,
+			layerId: (layer as { id?: string }).id
+		});
 		overlayRef.setProps({ layers: [layer] });
 		return;
 	}
@@ -339,7 +372,12 @@ async function buildAndAddLayer(
 		layers: [layer],
 		onError: (err: Error) => {
 			if (signal.aborted) return;
-			console.error('[MultiCogViewer] MapboxOverlay error', err);
+			console.error('[MultiCogViewer] MapboxOverlay error', {
+				name: err?.name,
+				message: err?.message,
+				stack: err?.stack,
+				err
+			});
 			if (!error) {
 				error = err?.message || String(err);
 				loading = false;
@@ -347,6 +385,10 @@ async function buildAndAddLayer(
 		}
 	});
 	overlayRef = overlay;
+	console.debug('[MultiCogViewer] addControl initial overlay', {
+		version,
+		layerId: (layer as { id?: string }).id
+	});
 	map.addControl(overlay as unknown as maplibregl.IControl);
 }
 
@@ -366,22 +408,31 @@ function setPreset(id: string): void {
 	const a = composite?.a;
 	composite = a ? { ...next, a } : next;
 	activePresetId = id;
+	// Asset references changed: let the next preflight reseed a bit-depth-
+	// appropriate default rescale (uint8 visual → 0.3, uint16 reflectance → 0.05).
+	userTouchedRescale = false;
 	console.debug('[MultiCogViewer] setPreset', { id, composite });
 	syncCompositeToUrl(composite, id);
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
 
 function setComposite(next: ChannelComposite): void {
+	const rAssetChanged = composite?.r.assetKey !== next.r.assetKey;
 	composite = next;
 	const matching = PRESETS.find((p) => presetMatchesComposite(p, next, assets));
 	activePresetId = matching?.id ?? '';
-	console.debug('[MultiCogViewer] setComposite', { next, activePresetId });
+	// Only reseed the rescale default when the R-channel asset changed, because
+	// that's the asset we preflight; band-index-only swaps shouldn't stomp the
+	// user's slider.
+	if (rAssetChanged) userTouchedRescale = false;
+	console.debug('[MultiCogViewer] setComposite', { next, activePresetId, rAssetChanged });
 	syncCompositeToUrl(next, activePresetId || null);
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
 
 function handleRescaleChange(next: RescaleConfig): void {
 	rescale = next;
+	userTouchedRescale = true;
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
 

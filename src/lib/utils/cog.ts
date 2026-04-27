@@ -208,6 +208,34 @@ export function isRescaleActive(cfg: RescaleConfig): boolean {
 }
 
 /**
+ * Pick a sensible default `RescaleConfig` for a freshly opened COG. The slider
+ * operates in normalized shader space [0, 1], but the GPU's hardware
+ * normalization (`r8unorm` / `r16unorm` in `MultiCOGLayer`, or the library
+ * default uint pipeline elsewhere) collapses raw integer values onto that
+ * range by dividing by the format's max (255 for uint8, 65535 for uint16).
+ *
+ * For uint8 visual COGs (Sentinel-2 `visual` TCI, NAIP `image`) the natural
+ * land brightness sits around raw 50-100, so `max: 0.3` (≈ raw 76) gives a
+ * nicely contrasted preview. For uint16 reflectance bands (Sentinel-2 raw
+ * `nir` / `swir16` / `red`, Landsat C2 L2 `*_B*`) typical land surfaces sit at
+ * raw 800-3000 (reflectance × 10000), which is `0.012-0.046` after r16unorm.
+ * `max: 0.3` would render those near-black; `max: 0.05` (≈ raw 3277) keeps
+ * vegetation, soil, and water in the visible range while leaving headroom for
+ * brighter targets.
+ *
+ * Float / int sample formats fall back to the conservative `{0, 1}` no-op so
+ * the user can dial in their own range via the slider.
+ */
+export function defaultRescaleForGeotiff(geotiff: GeoTIFFType): RescaleConfig {
+	const tags = geotiff.cachedTags;
+	const sampleFormat = tags.sampleFormat?.[0] ?? 1;
+	if (sampleFormat !== 1) return { ...DEFAULT_RESCALE };
+	const bps = tags.bitsPerSample?.[0] ?? 8;
+	if (bps <= 8) return { min: 0, max: 0.3 };
+	return { min: 0, max: 0.05 };
+}
+
+/**
  * Build a `getTileData` + `renderTile` pair that reuses the library-default
  * uint pipeline (via `inferRenderPipeline`) and appends `LinearRescale` to the
  * returned render pipeline. Only safe to use when the default pipeline would
