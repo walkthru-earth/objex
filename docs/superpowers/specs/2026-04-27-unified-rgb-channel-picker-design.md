@@ -1,7 +1,13 @@
 # Unified RGB Channel Picker — Design
 
 Date: 2026-04-27
-Status: draft, awaiting user review
+Status: approved, scope locked
+
+## Scope decisions (locked 2026-04-27)
+
+1. **Mosaic**: true multi-asset mosaic from day one. Each item in the mosaic renders through `MultiCOGLayer` (or `COGLayer` when the composite collapses to one asset). The legacy single-asset `MosaicLayer` path is replaced by a per-item layer factory wired through a new `StacItemLayer` set built from the same `buildRgbLayer` helper used by `CogViewer` / `MultiCogViewer`.
+2. **NDVI preset**: hidden entirely. Not in the preset list. Wire in a follow-up slice.
+3. **`Single band` mode**: kept as an explicit toggle inside `CogControls` (not folded into a preset). Single-band rendering with colormap stays reachable from the panel as it is today.
 
 ## Problem
 
@@ -48,8 +54,9 @@ Single `Preset ▾` above the channel rows:
 - `SWIR` (SWIR2/SWIR1/Red)
 - `Vegetation` (NIR/SWIR1/Red)
 - `Agriculture` (SWIR1/NIR/Blue)
-- `NDVI` — single-band derived; toggles to single-band+colormap mode (RdYlGn ramp) on `(NIR - Red) / (NIR + Red)`. **Out of scope for this slice**, listed so the panel layout reserves room. Wire after the layer-dispatch refactor lands.
 - `Custom` (auto-selected when user manually edits any channel)
+
+NDVI / single-band derived presets are explicitly **not** in the list for this slice. They will be wired as a follow-up.
 
 Presets that don't resolve on the current item are hidden. Preset application calls `resolvePresetComposite(assets, slotTriple)` (already exists) and writes the resolved `(asset, band)` pairs into channel state.
 
@@ -189,10 +196,9 @@ Rendering tree:
 
 1. `Preset ▾` (when `presets.length > 0`)
 2. Three `<ChannelPicker>` rows (R/G/B), optional 4th (A) if `composite.a` is set or the panel exposes an "add alpha" affordance — keep the current MultiCog parity (always show A row when `assets.length ≥ 4`).
-3. Single-band ramp picker — rendered only when `singleBand` is non-null (NDVI preset, future colormap mode). Hidden by default; not part of the RGB path.
-4. Rescale slider with histogram overlay.
-
-The single/multi mode toggle button (`RGB` / `Single band`) is removed. Single-band rendering becomes a *preset* (NDVI, etc.) that flips the panel into single-band mode through `singleBand` prop. Out-of-scope for this slice; keep the dead branch behind a feature toggle.
+3. Mode toggle (`RGB` / `Single band`) — kept as today. When `Single band` is selected, the three `ChannelPicker` rows hide and a single band selector + ramp picker appears in their place.
+4. Single-band band selector + ramp picker (107-entry sprite, search, pinned grid) — rendered when mode is `Single band`. Identical to today's panel.
+5. Rescale slider with histogram overlay.
 
 ### Modified: `src/lib/components/viewers/CogViewer.svelte`
 
@@ -210,12 +216,25 @@ The single/multi mode toggle button (`RGB` / `Single band`) is removed. Single-b
 
 ### Modified: `src/lib/components/viewers/StacMosaicViewer.svelte`
 
-This is the largest delta. Today's mosaic is single-asset-per-source (`MosaicLayer`). To support `ChannelComposite`:
+This is the largest delta. Today's mosaic uses `MosaicLayer` (single-asset-per-source). With true multi-asset mosaic from day one, every item in the mosaic needs to render through whichever layer the composite implies:
 
-- The mosaic asset picker (today's "Asset ▾" above the RGB toggle) becomes the same three `ChannelPicker` rows.
-- `MosaicLayer` accepts one source (one asset per item). For mixed-asset composites, each item needs `MultiCOGLayer`. **Decision**: mosaic stays single-asset for this slice — the unified picker constrains the user to `isSingleAssetComposite(composite) === true` (asset dropdowns on G and B are slaved to R; only band index is independent). This preserves the fast `MosaicLayer` path and matches today's behaviour. Multi-asset mosaic is a follow-up that requires either a custom `MosaicMultiCOGLayer` or per-item `MultiCOGLayer` instancing.
-- Net user-visible change in this slice: mosaic gains *per-band-index* selection within the chosen asset (NAIP `image` band 4 NIR mosaic is now possible); cross-asset composition is not.
-- Internally the asset picker logic (`extractMosaicAssets`, `setMosaicAssetKey`, swap-in-place) stays. `bandConfig` reseed on asset change still fires. The per-channel band-index UI becomes a no-op when `bandCount === 1` (S2 per-band, Landsat) and active when `bandCount > 1` (S2 `visual`, NAIP).
+- Single-asset composite (all R/G/B point to same asset) → keep `MosaicLayer` for that case (fastest path; preserves today's behaviour for S2 `visual` mosaic, NAIP, single-band-per-asset mosaics).
+- Multi-asset composite (R/G/B point to different assets) → switch to a per-item `MultiCOGLayer` set. Render mode dispatched by `isSingleAssetComposite(composite)`.
+
+**Architecture for multi-asset mosaic:**
+
+- New helper `buildMosaicLayers(items, composite, ...)` returns either `[MosaicLayer]` (single-asset path, today's behaviour) or `[MultiCOGLayer, MultiCOGLayer, ...]` (one per item, multi-asset path).
+- The per-item `MultiCOGLayer` path loses `MosaicLayer`'s automatic tile-cache eviction. Compensate by:
+  - Capping the rendered set to `mosaicItemLimit` (existing setting).
+  - Bounding `geotiffCache` and `presignCache` via `LruCache` (cap = SOURCE_CACHE_MAX = 64) keyed by `(itemId, assetKey)`.
+  - Wiring each `MultiCOGLayer.onTileError` and `onTileUnload`-equivalent (range-aborts) into the same eviction signals MosaicLayer used.
+  - Throttling layer rebuilds the same way `MultiCogViewer.scheduleLayerRebuild` does today (REBUILD_INTERVAL_MS = 750) so rescale-slider drags don't spawn N overlapping rebuilds.
+- The mosaic asset picker (today's "Asset ▾" above the RGB toggle) is replaced by the same three `ChannelPicker` rows (and optional A row). Asset choice and band index are both independent per channel.
+- `availableAssets` (mosaic-wide) is computed from `extractCogAssets(firstItemWithRasters)` and recomputed whenever a new item enters the committed set with assets the previous representative didn't have.
+- On any composite change, the existing in-place swap path (today's `setMosaicAssetKey`) is generalized: `setMosaicComposite(next)` remaps `committedViews[].raw` through `buildMosaicSourceMeta` for every channel asset that changed, drops affected `geotiffCache` / `presignCache` entries, clears `bandConfig` + `probedBandCount`, and bumps `pipelineGen`. No viewport re-query, no pagination loss.
+- URL round-trip uses the same `compositeFromUrl` / `compositeToUrl` shape (`r=&g=&b=&band_r=&band_g=&band_b=&preset=`).
+
+**Performance ceiling for multi-asset mosaic** (documented, not enforced this slice): with N items and 3 distinct assets, the worst case is 3N COG range-request streams. The existing `mosaicItemLimit` (default 100) bounds N. If the user picks a composite that brings range request count above an empirical threshold (~300), surface a HUD warning. Tracker issue if a hard cap is needed later.
 
 ## Layer dispatch summary
 
@@ -226,7 +245,8 @@ This is the largest delta. Today's mosaic is single-asset-per-source (`MosaicLay
 | 3 distinct assets, all band 0 | `MultiCOGLayer` | Today MultiCogViewer's only mode |
 | 3 distinct assets, custom band indices | `MultiCOGLayer` band-0-only | **Known Limitation** — would need library change. Disable band picker when `!isSingleAsset && bandCount > 1` and surface a tooltip. |
 | Mosaic, single asset, any band index | `MosaicLayer` | New: per-band-index inside chosen asset |
-| Mosaic, multi-asset | not built | Out of scope |
+| Mosaic, multi-asset, all band 0 | per-item `MultiCOGLayer` set | New, day one |
+| Mosaic, multi-asset, custom band index | per-item `MultiCOGLayer` set, band-0-only on multi-asset rows | Same library limitation as MultiCog above |
 
 ## Performance plan
 
@@ -246,7 +266,6 @@ This is the largest delta. Today's mosaic is single-asset-per-source (`MosaicLay
 | Removed / inlined | Reason |
 |---|---|
 | `CogControls` `mode='multi'` branch | Subsumed by `ChannelPicker` rows |
-| `CogControls` `RGB` / `Single band` toggle buttons | Single-band mode becomes a preset |
 | `MultiCogViewer.PRESETS`, `setPreset`, `setChannel`, `syncCompositeToUrl` | Moved to `channel-composite.ts`, shared across all three viewers |
 | `MultiCogViewer` standalone preset `<select>` (top-right) | Lives in `CogControls` only |
 | `CogViewer`'s ad-hoc `bandConfig` rgb selector logic | Replaced by `ChannelPicker` over synthetic `self` asset |
@@ -262,36 +281,36 @@ This is the largest delta. Today's mosaic is single-asset-per-source (`MosaicLay
 ## Build sequence
 
 1. Add `utils/cog-asset.ts` (`CogAsset`, `extractCogAssets`, `pickNaturalColorComposite`, `syntheticSelfAsset`, `isSingleAssetComposite`).
-2. Add `utils/channel-composite.ts` (`PRESETS`, `availablePresets`, `applyPreset`, URL helpers). Move from MultiCogViewer.
+2. Add `utils/channel-composite.ts` (`PRESETS` minus NDVI, `availablePresets`, `applyPreset`, URL helpers). Move from MultiCogViewer.
 3. Add `components/viewers/cog/ChannelPicker.svelte`.
-4. Add `components/viewers/cog/buildRgbLayer.ts`.
-5. Refactor `CogControls.svelte` to the new prop shape, drop discriminated union. Render three `ChannelPicker` rows + preset.
+4. Add `components/viewers/cog/buildRgbLayer.ts` (single-asset → COGLayer / patch existing layer; multi-asset → MultiCOGLayer).
+5. Refactor `CogControls.svelte` to the new prop shape, drop discriminated union. Render three `ChannelPicker` rows + preset; keep the `RGB` / `Single band` toggle and the existing single-band ramp picker as-is.
 6. Refactor `MultiCogViewer.svelte` to use new shared modules. Verify Element84 S2 + Landsat + NAIP items render correctly with new defaults. Verify URL round-trip backwards compatible.
 7. Refactor `CogViewer.svelte` to use `ChannelPicker` over synthetic self-asset.
-8. Refactor `StacMosaicViewer.svelte`. Asset choice slaves G and B to R; band-index per channel becomes independent. Verify atomic asset swap (current `setMosaicAssetKey` path) still works.
-9. Update `viewers/CLAUDE.md` and `utils/CLAUDE.md` with new file table entries, mermaid edges, and the unified panel description.
-10. Run `pnpm -w run format && pnpm -w run lint:fix && pnpm -w run check`. Manually exercise: CogViewer (NAIP single-tif), MultiCogViewer (S2 item, NAIP item via STAC, Landsat item), StacMosaicViewer (S2 collection, NAIP collection, Landsat collection). Confirm:
+8. Refactor `StacMosaicViewer.svelte` — single-asset path (preserves today's `MosaicLayer` behaviour with the new `ChannelPicker` UI replacing the old "Asset ▾" header). Verify atomic asset swap still works.
+9. Add multi-asset mosaic path to `StacMosaicViewer`: per-item `MultiCOGLayer` set when `!isSingleAssetComposite(composite)`. Wire LRU caches keyed by `(itemId, assetKey)`, throttle layer rebuilds on rescale-slider drags, dispatch by composite shape on every change.
+10. Update `viewers/CLAUDE.md` and `utils/CLAUDE.md` with new file table entries, mermaid edges, and the unified panel description.
+11. Run `pnpm -w run format && pnpm -w run lint:fix && pnpm -w run check`. Manually exercise: CogViewer (NAIP single-tif), MultiCogViewer (S2 item, NAIP item via STAC, Landsat item), StacMosaicViewer (S2 collection single-asset `visual`, S2 collection multi-asset `red/green/blue`, NAIP collection single-asset `image`, Landsat collection multi-asset `red/green/blue`). Confirm:
     - Default load shows natural color with no clicks.
     - Switching presets works on every collection where `availablePresets` is non-empty.
     - URL `#map?r=...&band_r=2&...` round-trips on reload.
     - Band dropdown collapses to plain text when `bandCount === 1`.
     - NAIP `image` exposes bands 1-4 in the dropdown; band 4 (NIR) selectable on R for false-color.
+    - Multi-asset mosaic on Landsat C2 L2 renders without console floods, abort errors stay filtered, pan/zoom does not leak `MultiCOGLayer` instances.
 
 ## Known limitations / out of scope
 
 - **Mixed-asset + custom band index per channel** is not supported (`MultiCOGLayer` reads band 0). Surface as a disabled band dropdown with a tooltip when the composite spans multiple assets and any of them has `bandCount > 1`.
-- **Multi-asset mosaic** stays out of scope. Mosaic preserves single-asset-per-source.
-- **NDVI preset** listed in the preset list but disabled. Wiring single-band-derived expressions through the layer pipeline is a separate slice.
+- **NDVI preset** is hidden. Wiring single-band-derived expressions through the layer pipeline is a separate slice.
 - **Eager probing of all assets** when `raster:bands` is absent is intentionally not done. Lazy probe only the picked asset.
+- **Multi-asset mosaic memory ceiling**: per-item `MultiCOGLayer` instancing trades MosaicLayer's tile-cache eviction for a layer-instance-per-item model. Bounded by `mosaicItemLimit` and per-source LRU caches; document the soft warning threshold.
 
 ## Risks
 
-- Mosaic refactor is invasive: the asset picker semantics change (R is the master, G/B slaved). If a user has a saved URL with `g=green&b=blue` from MultiCog and applies it to a mosaic tab, the URL parser must collapse it to single-asset (use R, drop G/B). Document the rule in `compositeFromUrl` for mosaic kind.
+- Mosaic refactor is invasive: replacing single-asset `MosaicLayer` with per-item `MultiCOGLayer` for multi-asset composites is the largest mechanical change in this slice. Risk surface: tile-cache eviction symmetry, abort controller scoping, layer-instance lifetime under pan/zoom. Land single-asset path first (which preserves `MosaicLayer`), then multi-asset, behind the same composite-shape dispatch.
 - Removing `CogControls` discriminated union breaks any external consumer of `objex` lib that reads `mode='single' | 'multi'`. The components live in `src/lib/components/viewers/`, which IS published. Audit `lib/index.ts` exports — `CogControls` is not currently exported, so the change is internal.
 - Single-band ramp UI moves from a top-level mode to a preset. Users with muscle memory for the `Single band` button lose it. Mitigation: keep the toggle as a hidden affordance in v1 or expose `Colorize single band` as a preset.
 
 ## Open questions for review
 
-1. **Mosaic constraint** — is "G/B asset slaved to R" acceptable for this slice, or do you want true multi-asset mosaic from the start? (The latter is a much bigger lift; tracker issue if deferred.)
-2. **NDVI preset** — keep visible-but-disabled, hide entirely until wired, or fold it into a follow-up slice? Spec currently says hide.
-3. **`Single band` mode** — kept reachable through a "Colorize single band" preset, or removed entirely from this slice and restored later? Spec currently says removed (single-band rendering reachable only via single-band-with-colormap preset, future).
+Resolved — see "Scope decisions" at top.
