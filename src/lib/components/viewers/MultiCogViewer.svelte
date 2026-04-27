@@ -24,7 +24,10 @@ import {
 	defaultRescaleForGeotiff,
 	fitCogBounds,
 	normalizeCogGeotiff,
-	type RescaleConfig
+	type PixelValue,
+	type RescaleConfig,
+	readPixelAtLngLat,
+	resolveProj4Def
 } from '../../utils/cog.js';
 import {
 	type ChannelComposite,
@@ -65,6 +68,20 @@ let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let hasFittedOnce = false;
 let presignCache = new Map<string, Promise<string>>();
+
+// Pixel inspection: same UX as CogViewer / StacMosaicViewer. Click → read one
+// pixel from each active composite channel's GeoTIFF and show channel/asset/value.
+type MultiPixelEntry = {
+	channel: 'R' | 'G' | 'B' | 'A';
+	assetKey: string;
+	bandIndex: number;
+	value: number | null;
+};
+type MultiPixelValue = { lng: number; lat: number; entries: MultiPixelEntry[] };
+let pixelValue = $state<MultiPixelValue | null>(null);
+let inspecting = $state(false);
+let proj4DefRef: string | null = null;
+let clickHandlerRef: ((e: maplibregl.MapMouseEvent) => void) | null = null;
 // Per-asset-key GeoTIFF cache. Opening the GeoTIFF up-front lets buildRgbLayer
 // run selectCogPipeline (which inspects sampleFormat / band count) and emit a
 // custom getTileData/renderTile pair that honors per-channel bandIndex picks.
@@ -112,6 +129,7 @@ function resetViewer(): void {
 			/* already destroyed */
 		}
 	}
+	removeClickHandler();
 	overlayRef = null;
 	assets = [];
 	composite = null;
@@ -125,6 +143,87 @@ function resetViewer(): void {
 	userTouchedRescale = false;
 	hasFittedOnce = false;
 	showControls = false;
+	pixelValue = null;
+	inspecting = false;
+	proj4DefRef = null;
+}
+
+function removeClickHandler(): void {
+	if (mapRef && clickHandlerRef) {
+		mapRef.off('click', clickHandlerRef);
+	}
+	clickHandlerRef = null;
+}
+
+async function ensureGeotiff(assetKey: string): Promise<GeoTIFF | null> {
+	const asset = assets.find((a) => a.key === assetKey);
+	if (!asset) return null;
+	let promise = geotiffCache.get(assetKey);
+	if (!promise) {
+		promise = (async () => {
+			const url = await presignHref(asset.href);
+			const g = await GeoTIFF.fromUrl(url);
+			normalizeCogGeotiff(g);
+			return g;
+		})();
+		geotiffCache.set(assetKey, promise);
+	}
+	try {
+		return await promise;
+	} catch (err) {
+		console.warn('[MultiCogViewer] ensureGeotiff failed', { assetKey, err });
+		geotiffCache.delete(assetKey);
+		return null;
+	}
+}
+
+function setupClickHandler(map: maplibregl.Map): void {
+	removeClickHandler();
+	const handler = async (e: maplibregl.MapMouseEvent) => {
+		const c = composite;
+		if (!c) return;
+		const channels: { channel: 'R' | 'G' | 'B' | 'A'; ref: typeof c.r | undefined }[] = [
+			{ channel: 'R', ref: c.r },
+			{ channel: 'G', ref: c.g },
+			{ channel: 'B', ref: c.b },
+			{ channel: 'A', ref: c.a }
+		];
+		const active = channels.filter(
+			(x): x is { channel: 'R' | 'G' | 'B' | 'A'; ref: NonNullable<typeof c.r> } => Boolean(x.ref)
+		);
+		const signal = abortController.signal;
+		inspecting = true;
+		try {
+			const entries = await Promise.all(
+				active.map(async ({ channel, ref }): Promise<MultiPixelEntry> => {
+					const geotiff = await ensureGeotiff(ref.assetKey);
+					if (!geotiff || signal.aborted) {
+						return { channel, assetKey: ref.assetKey, bandIndex: ref.bandIndex, value: null };
+					}
+					try {
+						const result: PixelValue | null = await readPixelAtLngLat(
+							geotiff,
+							e.lngLat.lng,
+							e.lngLat.lat,
+							proj4DefRef,
+							pool,
+							signal
+						);
+						const v = result?.values?.[ref.bandIndex] ?? null;
+						return { channel, assetKey: ref.assetKey, bandIndex: ref.bandIndex, value: v };
+					} catch {
+						return { channel, assetKey: ref.assetKey, bandIndex: ref.bandIndex, value: null };
+					}
+				})
+			);
+			if (signal.aborted) return;
+			pixelValue = { lng: e.lngLat.lng, lat: e.lngLat.lat, entries };
+		} finally {
+			inspecting = false;
+		}
+	};
+	clickHandlerRef = handler;
+	map.on('click', handler);
 }
 
 function scheduleLayerRebuild(map: maplibregl.Map, signal: AbortSignal): void {
@@ -323,6 +422,17 @@ async function buildAndAddLayer(
 		}
 	}
 
+	// Resolve proj4 once for pixel inspection. All band assets in a STAC Item
+	// share the same source CRS so the R-channel preflight is sufficient.
+	if (preflightGeotiff && proj4DefRef === null) {
+		try {
+			proj4DefRef = await resolveProj4Def(preflightGeotiff.crs, signal);
+		} catch {
+			proj4DefRef = null;
+		}
+		if (signal.aborted) return;
+	}
+
 	// Multi-asset path doesn't consume the GeoTIFF object; only single-asset
 	// flows it through to selectCogPipeline. Drop the reference so buildRgbLayer
 	// doesn't try to translate per-channel bandIndex on a path that can't honor it.
@@ -390,6 +500,7 @@ async function buildAndAddLayer(
 		layerId: (layer as { id?: string }).id
 	});
 	map.addControl(overlay as unknown as maplibregl.IControl);
+	setupClickHandler(map);
 }
 
 function syncCompositeToUrl(c: ChannelComposite | null, presetId: string | null): void {
@@ -442,6 +553,7 @@ function cleanup(): void {
 		clearTimeout(rebuildTimer);
 		rebuildTimer = null;
 	}
+	removeClickHandler();
 	if (mapRef && overlayRef) {
 		try {
 			mapRef.removeControl(overlayRef as unknown as maplibregl.IControl);
@@ -456,6 +568,9 @@ function cleanup(): void {
 	composite = null;
 	presignCache.clear();
 	geotiffCache.clear();
+	pixelValue = null;
+	inspecting = false;
+	proj4DefRef = null;
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
 		try {
@@ -529,5 +644,51 @@ onDestroy(cleanup);
 				showAlpha={assets.length >= 4}
 			/>
 		{/if}
+	{/if}
+
+	{#if pixelValue}
+		<div
+			class="absolute bottom-2 left-2 z-10 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
+		>
+			<div class="mb-1 flex items-center justify-between gap-3">
+				<span class="font-medium">{t('cog.pixelValue')}</span>
+				<button
+					class="text-muted-foreground hover:text-card-foreground"
+					onclick={() => (pixelValue = null)}
+				>
+					&times;
+				</button>
+			</div>
+			<div class="space-y-0.5 text-muted-foreground">
+				<div>{pixelValue.lat.toFixed(6)}&deg;, {pixelValue.lng.toFixed(6)}&deg;</div>
+			</div>
+			<div class="mt-1.5 space-y-0.5">
+				{#each pixelValue.entries as entry (entry.channel)}
+					<div class="flex justify-between gap-2">
+						<span class="text-muted-foreground">
+							{entry.channel}
+							<span class="text-[10px]">({entry.assetKey})</span>
+						</span>
+						<span class="font-mono tabular-nums">
+							{#if entry.value == null}
+								-
+							{:else if Number.isInteger(entry.value)}
+								{entry.value}
+							{:else}
+								{entry.value.toFixed(4)}
+							{/if}
+						</span>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	{#if inspecting}
+		<div
+			class="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
+		>
+			{t('cog.reading')}
+		</div>
 	{/if}
 </div>
