@@ -20,6 +20,7 @@ import {
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
 	inspectCogTags,
+	mapResolutionMetersPerPixel,
 	needsCustomPipelineForConfig,
 	normalizeCogGeotiff,
 	type PixelValue,
@@ -27,10 +28,12 @@ import {
 	readPixelAtLngLat,
 	renderNonTiledBitmap,
 	resolveProj4Def,
-	selectCogPipeline
+	selectCogPipeline,
+	selectOverviewForResolution
 } from '../../utils/cog.js';
 import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
 import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
+import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import CogControls from './CogControls.svelte';
 import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
@@ -87,6 +90,11 @@ let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
 let isPaletteIndexed = $state(false);
 let pixelValue = $state<PixelValue | null>(null);
 let inspecting = $state(false);
+// Storage smoke-test result for the primary asset href. Inspired by
+// lazycogs `_smoketest_store`, surfaces auth / CORS / bucket failures at
+// open time as a small amber pill, never blocks the layer mount.
+let smokeWarning = $state<string | null>(null);
+let smokeProbed = false;
 
 let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
@@ -159,6 +167,8 @@ $effect(() => {
 		rescale = { ...DEFAULT_RESCALE };
 		isPaletteIndexed = false;
 		pixelValue = null;
+		smokeWarning = null;
+		smokeProbed = false;
 		bounds = undefined;
 		hasFittedOnce = false;
 		showControls = false;
@@ -188,7 +198,12 @@ function setupClickHandler(map: maplibregl.Map) {
 	detachInspector = attachPixelInspector<PixelValue>(map, {
 		probe: async ({ lng, lat, signal }) => {
 			if (!geotiffRef) return null;
-			return readPixelAtLngLat(geotiffRef, lng, lat, proj4DefRef, pool, signal);
+			// matches overview shown on screen
+			const targetRes = mapResolutionMetersPerPixel(map.getZoom(), lat);
+			const overview = selectOverviewForResolution(geotiffRef, targetRes);
+			return readPixelAtLngLat(geotiffRef, lng, lat, proj4DefRef, pool, signal, {
+				overview
+			});
 		},
 		onStart: () => {
 			inspecting = true;
@@ -210,6 +225,23 @@ async function loadCog(map: maplibregl.Map) {
 		if (signal.aborted) return;
 		resolvedHttpsUrl = url;
 		resolvedHrefForControls = url;
+
+		// One-shot storage smoke-test. lazycogs-style probe surfaces auth /
+		// CORS / bucket failures at open time as an amber pill, never blocks
+		// the layer mount. Aborts via the viewer's existing controller.
+		if (!smokeProbed) {
+			smokeProbed = true;
+			void (async () => {
+				try {
+					const result = await smokeTestHref(url, signal);
+					if (signal.aborted) return;
+					if (!result.ok) smokeWarning = result.reason;
+				} catch (err) {
+					if (err instanceof DOMException && err.name === 'AbortError') return;
+					smokeWarning = err instanceof Error ? err.message : String(err);
+				}
+			})();
+		}
 
 		// Pre-flight: read first IFD to check if tiled (single range request).
 		let isTiled = true;
@@ -569,6 +601,15 @@ onDestroy(cleanup);
 				class="pointer-events-auto max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200"
 			>
 				{error}
+			</div>
+		{/if}
+
+		{#if smokeWarning && !error}
+			<div
+				class="pointer-events-auto max-w-sm rounded bg-amber-900/80 px-2 py-1 text-xs text-amber-100"
+				title={t('stac.smokeWarningHint')}
+			>
+				{t('stac.smokeWarning', { reason: smokeWarning })}
 			</div>
 		{/if}
 	</div>

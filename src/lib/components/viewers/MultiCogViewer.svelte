@@ -24,12 +24,14 @@ import {
 	createEpsgResolver,
 	defaultRescaleForGeotiff,
 	fitCogBounds,
+	mapResolutionMetersPerPixel,
 	normalizeCogGeotiff,
 	type PixelValue,
 	percentileFromHistogram,
 	type RescaleConfig,
 	readPixelAtLngLat,
-	resolveProj4Def
+	resolveProj4Def,
+	selectOverviewForResolution
 } from '../../utils/cog.js';
 import {
 	type ChannelComposite,
@@ -40,6 +42,7 @@ import {
 } from '../../utils/cog-asset.js';
 import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import { isStacItem, type StacItem, type StacRoutableKind } from '../../utils/stac.js';
+import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
@@ -92,6 +95,9 @@ type MultiPixelValue = { lng: number; lat: number; entries: MultiPixelEntry[] };
 let pixelValue = $state<MultiPixelValue | null>(null);
 let inspecting = $state(false);
 let proj4DefRef: string | null = null;
+// Storage smoke-test result for the primary R-channel asset.
+let smokeWarning = $state<string | null>(null);
+let smokeProbed = false;
 let detachInspector: (() => void) | null = null;
 // Per-asset-key GeoTIFF cache. Opening the GeoTIFF up-front lets buildRgbLayer
 // run selectCogPipeline (which inspects sampleFormat / band count) and emit a
@@ -159,6 +165,8 @@ function resetViewer(): void {
 	pixelValue = null;
 	inspecting = false;
 	proj4DefRef = null;
+	smokeWarning = null;
+	smokeProbed = false;
 }
 
 function removeClickHandler(): void {
@@ -196,6 +204,11 @@ function setupClickHandler(map: maplibregl.Map): void {
 		probe: async ({ lng, lat, signal }) => {
 			const c = composite;
 			if (!c) return null;
+			// Match the overview that's currently on screen so the pixel readout
+			// reflects the visible decimation level. Computed once per click and
+			// re-picked per-channel because per-asset COGs may have different
+			// pyramids (Sentinel-2 SWIR is 20 m native, true color is 10 m).
+			const targetRes = mapResolutionMetersPerPixel(map.getZoom(), lat);
 			const channels: { channel: 'R' | 'G' | 'B' | 'A'; ref: typeof c.r | undefined }[] = [
 				{ channel: 'R', ref: c.r },
 				{ channel: 'G', ref: c.g },
@@ -212,13 +225,15 @@ function setupClickHandler(map: maplibregl.Map): void {
 						return { channel, assetKey: ref.assetKey, bandIndex: ref.bandIndex, value: null };
 					}
 					try {
+						const overview = selectOverviewForResolution(geotiff, targetRes);
 						const result: PixelValue | null = await readPixelAtLngLat(
 							geotiff,
 							lng,
 							lat,
 							proj4DefRef,
 							pool,
-							signal
+							signal,
+							{ overview }
 						);
 						const v = result?.values?.[ref.bandIndex] ?? null;
 						return { channel, assetKey: ref.assetKey, bandIndex: ref.bandIndex, value: v };
@@ -351,6 +366,29 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 			error = t('map.multiCogMissingBands');
 			loading = false;
 			return;
+		}
+
+		// One-shot storage smoke-test against the R-channel asset. lazycogs-style
+		// probe surfaces auth / CORS / bucket failures at open time as an amber
+		// pill, fires in parallel with the rest of the load. Aborts via the
+		// viewer's existing controller.
+		if (!smokeProbed) {
+			smokeProbed = true;
+			const rAsset = next.find((a) => a.key === composite!.r.assetKey);
+			if (rAsset) {
+				void (async () => {
+					try {
+						const url = await presignHref(rAsset.href);
+						const result = await smokeTestHref(url, signal);
+						if (gen !== loadGen || signal.aborted) return;
+						if (!result.ok) smokeWarning = result.reason;
+					} catch (err) {
+						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (gen !== loadGen) return;
+						smokeWarning = err instanceof Error ? err.message : String(err);
+					}
+				})();
+			}
 		}
 
 		if (Array.isArray(item.bbox) && item.bbox.length >= 4) {
@@ -655,6 +693,14 @@ onDestroy(cleanup);
 		{#if error}
 			<div class="pointer-events-auto max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200">
 				{error}
+			</div>
+		{/if}
+		{#if smokeWarning && !error}
+			<div
+				class="pointer-events-auto max-w-sm rounded bg-amber-900/80 px-2 py-1 text-xs text-amber-100"
+				title={t('stac.smokeWarningHint')}
+			>
+				{t('stac.smokeWarning', { reason: smokeWarning })}
 			</div>
 		{/if}
 	</div>

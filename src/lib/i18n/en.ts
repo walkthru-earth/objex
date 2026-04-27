@@ -489,6 +489,9 @@ export const en: Record<string, string> = {
 	'stac.stageEmpty': 'No items in view',
 	'stac.stageError': 'Error',
 	'stac.stageSuperseded': 'Previous fetch superseded by new pan',
+	'stac.smokeWarning': 'Storage probe failed, {reason}',
+	'stac.smokeWarningHint':
+		'A representative COG could not be reached. Check connection credentials, bucket CORS, or whether the asset href resolves.',
 	'stac.modeViewportApi': 'Mode, viewport refresh on pan, STAC API',
 	'stac.modeViewportParquet': 'Mode, viewport refresh on pan, stac-geoparquet',
 	'stac.modeStatic': 'Mode, static catalog (one-shot fetch, client-side bbox clipping)',

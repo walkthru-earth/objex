@@ -487,6 +487,9 @@ export const ar: Record<string, string> = {
 	'stac.stageEmpty': 'لا توجد عناصر في العرض',
 	'stac.stageError': 'خطأ',
 	'stac.stageSuperseded': 'تم استبدال الجلب السابق بتحريك جديد',
+	'stac.smokeWarning': 'فشل اختبار التخزين، {reason}',
+	'stac.smokeWarningHint':
+		'تعذّر الوصول إلى أحد ملفات COG التمثيلية. تحقّق من بيانات الاعتماد للاتصال، أو CORS للحاوية، أو من صحة عنوان الأصل.',
 	'stac.modeViewportApi': 'الوضع، تحديث عند التحريك، STAC API',
 	'stac.modeViewportParquet': 'الوضع، تحديث عند التحريك، stac-geoparquet',
 	'stac.modeStatic': 'الوضع، كتالوج ثابت (جلب لمرة واحدة، قص محلي حسب النطاق)',
