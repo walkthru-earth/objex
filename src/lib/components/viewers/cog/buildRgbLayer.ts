@@ -86,6 +86,14 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 	const assetByKey = new Map(opts.assets.map((a) => [a.key, a]));
 	const c = opts.composite;
 
+	console.debug('[buildRgbLayer]', {
+		id: opts.id,
+		composite: c,
+		single: isSingleAssetComposite(c),
+		assetKeys: opts.assets.map((a) => a.key),
+		hasPreflightGeotiff: !!opts.preflightGeotiff
+	});
+
 	if (isSingleAssetComposite(c)) {
 		const asset = assetByKey.get(c.r.assetKey);
 		if (!asset) throw new Error(`unknown asset key: ${c.r.assetKey}`);
@@ -116,6 +124,11 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 				band: 0,
 				colorRamp: 'viridis'
 			};
+			console.debug('[buildRgbLayer] cog single-asset with preflight', {
+				id: opts.id,
+				bandConfig,
+				url
+			});
 			const pipeline = selectCogPipeline(opts.preflightGeotiff, {
 				bandConfig,
 				rescale: opts.rescale
@@ -131,6 +144,10 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 			});
 			return { kind: 'cog', layer };
 		}
+		console.debug('[buildRgbLayer] cog single-asset (library default pipeline)', {
+			id: opts.id,
+			url
+		});
 		// Fallback: no preflight GeoTIFF supplied. COGLayer's typed prop surface
 		// does not include `renderPipeline` (only `getTileData` + `renderTile`),
 		// so we cannot apply the band render pipeline statically here. Without
@@ -164,7 +181,10 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 	for (const ref of [c.r, c.g, c.b, c.a].filter((x): x is NonNullable<typeof c.a> => Boolean(x))) {
 		if (sources[ref.assetKey]) continue;
 		const asset = assetByKey.get(ref.assetKey);
-		if (!asset) continue;
+		if (!asset) {
+			console.warn('[buildRgbLayer] missing asset for ref', ref);
+			continue;
+		}
 		const url = await opts.resolveHref(asset.href);
 		if (opts.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 		sources[ref.assetKey] = { url };
@@ -177,6 +197,12 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 	};
 	if (c.a && sources[c.a.assetKey]) compositeSpec.a = c.a.assetKey;
 
+	console.debug('[buildRgbLayer] multicog sources resolved', {
+		sourceKeys: Object.keys(sources),
+		composite: compositeSpec,
+		urls: Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, v.url]))
+	});
+
 	const layer = new MultiCOGLayer({
 		id: opts.id,
 		sources,
@@ -186,6 +212,10 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 		epsgResolver: opts.epsgResolver,
 		signal: opts.signal,
 		onGeoTIFFLoad: (_tiffs, info) => {
+			console.debug('[buildRgbLayer] MultiCOG onGeoTIFFLoad', {
+				id: opts.id,
+				bounds: info.geographicBounds
+			});
 			opts.onLoad?.({
 				kind: 'multicog',
 				bounds: info.geographicBounds

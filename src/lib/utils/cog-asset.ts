@@ -55,15 +55,25 @@ const NON_DATA_ROLES = new Set(['thumbnail', 'overview', 'metadata']);
  * Enumerate every TIFF/COG asset on a STAC Item, keeping multi-band assets
  * (NAIP `image`, S2 `visual` TCI) alongside single-band per-band assets.
  *
- * Reads `raster:bands.length` and `eo:bands[].common_name` for band metadata
- * without making any network requests. When `raster:bands` is present,
- * `bandCount` is `length` and `bandCountKnown` is true. When absent, falls
- * back to `eo:bands.length`. When neither is present, defaults to 1 with
- * `bandCountKnown: false` so callers can lazily probe on first pick.
+ * Reads band metadata from (in priority order):
+ *   1. `asset.bands` (STAC 1.1 unified bands array)
+ *   2. `asset['raster:bands']` (STAC 1.0 raster extension)
+ *   3. `asset['eo:bands']` (STAC 1.0 eo extension)
+ *   4. `item.properties.bands` (STAC 1.1 item-level bands, applies to all
+ *      assets that do not override) — covers catalogs like the Hamilton
+ *      NAIP-style 3-inch where each item has 4 bands but the single `data`
+ *      asset carries no band metadata of its own.
+ *
+ * `bandCount` is set when any of the above provides one; otherwise defaults
+ * to 1 with `bandCountKnown: false` so callers can lazily probe on first pick.
  */
 export function extractCogAssets(item: StacItem): CogAsset[] {
 	const out: CogAsset[] = [];
 	const assets = item.assets ?? {};
+	const props = (item.properties ?? {}) as Record<string, unknown>;
+	const itemBands = Array.isArray(props.bands)
+		? (props.bands as Array<Record<string, unknown>>)
+		: undefined;
 	for (const [key, asset] of Object.entries(assets)) {
 		if (!asset?.href) continue;
 		const mediaType = typeof asset.type === 'string' ? asset.type : undefined;
@@ -75,13 +85,30 @@ export function extractCogAssets(item: StacItem): CogAsset[] {
 		const rasterBands = Array.isArray(assetExt['raster:bands'])
 			? (assetExt['raster:bands'] as Array<Record<string, unknown>>)
 			: undefined;
-		const bandCount = rasterBands?.length ?? eoBands?.length;
+		const assetBands11 = Array.isArray(assetExt.bands)
+			? (assetExt.bands as Array<Record<string, unknown>>)
+			: undefined;
+		// `bandCount` source priority: STAC 1.1 unified `bands` → `raster:bands`
+		// → `eo:bands` → item-level `properties.bands`. Item-level `bands` is the
+		// fallback that lets catalogs (Hamilton NAIP-style 4-band COGs) which
+		// keep band metadata at the item-properties level expose band picks.
+		const bandCount =
+			assetBands11?.length ?? rasterBands?.length ?? eoBands?.length ?? itemBands?.length;
 		const bandCountKnown = typeof bandCount === 'number' && bandCount > 0;
-		const eoCommon = (eoBands ?? []).map((b) => {
-			const c = b?.common_name;
-			return typeof c === 'string' ? c.toLowerCase() : '';
-		});
-		const dtype = rasterBands?.[0]?.data_type;
+		// `eoCommon` is independent of bandCount source: prefer `eo:bands` (the
+		// only field guaranteed to carry common_name pre-STAC 1.1), then the
+		// STAC 1.1 unified `bands` (which may include common_name), then the
+		// item-level fallback. raster:bands typically has no common_name so we
+		// skip it for this lookup.
+		const commonSource = eoBands ?? assetBands11 ?? itemBands;
+		const eoCommon = commonSource
+			? commonSource.map((b) => {
+					const c = (b as Record<string, unknown>)?.common_name;
+					return typeof c === 'string' ? c.toLowerCase() : '';
+				})
+			: [];
+		const dtypeSource = rasterBands ?? assetBands11 ?? itemBands;
+		const dtype = (dtypeSource?.[0] as Record<string, unknown> | undefined)?.data_type;
 		out.push({
 			key,
 			href: asset.href,

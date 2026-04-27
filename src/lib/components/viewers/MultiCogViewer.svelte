@@ -1,6 +1,6 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { DecoderPool } from '@developmentseed/geotiff';
+import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '../../i18n/index.svelte.js';
@@ -22,12 +22,14 @@ import {
 	cleanupNativeBitmap,
 	createEpsgResolver,
 	fitCogBounds,
+	normalizeCogGeotiff,
 	type RescaleConfig
 } from '../../utils/cog.js';
 import {
 	type ChannelComposite,
 	type CogAsset,
 	extractCogAssets,
+	isSingleAssetComposite,
 	pickNaturalColorComposite
 } from '../../utils/cog-asset.js';
 import { isStacItem, type StacItem, type StacRoutableKind } from '../../utils/stac.js';
@@ -56,6 +58,12 @@ let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let hasFittedOnce = false;
 let presignCache = new Map<string, Promise<string>>();
+// Per-asset-key GeoTIFF cache. Opening the GeoTIFF up-front lets buildRgbLayer
+// run selectCogPipeline (which inspects sampleFormat / band count) and emit a
+// custom getTileData/renderTile pair that honors per-channel bandIndex picks.
+// Without this, the single-asset multi-band path (e.g. Sentinel-2 `visual`,
+// NAIP `image`) silently falls back to bands 0/1/2 regardless of the picker.
+let geotiffCache = new Map<string, Promise<GeoTIFF>>();
 let loadGen = 0;
 let layerVersion = 0;
 let rebuildTimer: number | null = null;
@@ -101,6 +109,7 @@ function resetViewer(): void {
 	assets = [];
 	composite = null;
 	presignCache = new Map();
+	geotiffCache = new Map();
 	loading = true;
 	error = null;
 	bounds = undefined;
@@ -200,6 +209,11 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 		// Hydrate composite: URL params first, then natural-color default.
 		const params = getUrlViewParams();
 		const fromUrl = compositeFromUrl(params, next);
+		console.debug('[MultiCogViewer] loadItem', {
+			assetKeys: next.map((a) => `${a.key}(bands=${a.bandCount},common=${a.eoCommon[0] ?? ''})`),
+			urlParams: Object.fromEntries(params.entries()),
+			fromUrl
+		});
 		if (fromUrl) {
 			composite = fromUrl;
 			const presetId = params.get('preset');
@@ -210,6 +224,7 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 			composite = picked?.composite ?? null;
 			activePresetId = picked?.source === 'rgb-bands' ? 'natural-color' : '';
 		}
+		console.debug('[MultiCogViewer] composite seeded', { composite, activePresetId });
 
 		if (!composite) {
 			error = t('map.multiCogMissingBands');
@@ -249,7 +264,43 @@ async function buildAndAddLayer(
 	const c = composite;
 	if (!c) return;
 
-	const { layer } = await buildRgbLayer({
+	console.debug('[MultiCogViewer] buildAndAddLayer start', {
+		version,
+		composite: c,
+		rescale: { ...rescale }
+	});
+
+	// For single-asset composites, pre-open the GeoTIFF so buildRgbLayer can
+	// run selectCogPipeline and honor per-channel bandIndex. Multi-asset
+	// composites use MultiCOGLayer which only reads band 0 anyway, so no
+	// preflight is needed there.
+	let preflightGeotiff: GeoTIFF | null = null;
+	if (isSingleAssetComposite(c)) {
+		const assetKey = c.r.assetKey;
+		const asset = assets.find((a) => a.key === assetKey);
+		if (asset) {
+			let promise = geotiffCache.get(assetKey);
+			if (!promise) {
+				promise = (async () => {
+					const url = await presignHref(asset.href);
+					const g = await GeoTIFF.fromUrl(url);
+					normalizeCogGeotiff(g);
+					return g;
+				})();
+				geotiffCache.set(assetKey, promise);
+			}
+			try {
+				preflightGeotiff = await promise;
+			} catch (err) {
+				console.warn('[MultiCogViewer] preflight GeoTIFF open failed', { assetKey, err });
+				geotiffCache.delete(assetKey);
+				preflightGeotiff = null;
+			}
+			if (signal.aborted) return;
+		}
+	}
+
+	const { layer, kind } = await buildRgbLayer({
 		id: `multicog-${tab.id}-v${version}`,
 		assets,
 		composite: c,
@@ -258,6 +309,7 @@ async function buildAndAddLayer(
 		pool,
 		epsgResolver,
 		signal,
+		preflightGeotiff,
 		onLoad: ({ bounds: nextBounds }) => {
 			if (version !== layerVersion || signal.aborted) return;
 			if (nextBounds) {
@@ -272,6 +324,11 @@ async function buildAndAddLayer(
 		}
 	});
 
+	console.debug('[MultiCogViewer] buildAndAddLayer built', {
+		version,
+		kind,
+		layerId: (layer as { id?: string }).id
+	});
 	if (overlayRef) {
 		overlayRef.setProps({ layers: [layer] });
 		return;
@@ -282,6 +339,7 @@ async function buildAndAddLayer(
 		layers: [layer],
 		onError: (err: Error) => {
 			if (signal.aborted) return;
+			console.error('[MultiCogViewer] MapboxOverlay error', err);
 			if (!error) {
 				error = err?.message || String(err);
 				loading = false;
@@ -308,6 +366,7 @@ function setPreset(id: string): void {
 	const a = composite?.a;
 	composite = a ? { ...next, a } : next;
 	activePresetId = id;
+	console.debug('[MultiCogViewer] setPreset', { id, composite });
 	syncCompositeToUrl(composite, id);
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
@@ -316,6 +375,7 @@ function setComposite(next: ChannelComposite): void {
 	composite = next;
 	const matching = PRESETS.find((p) => presetMatchesComposite(p, next, assets));
 	activePresetId = matching?.id ?? '';
+	console.debug('[MultiCogViewer] setComposite', { next, activePresetId });
 	syncCompositeToUrl(next, activePresetId || null);
 	if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
 }
@@ -344,6 +404,7 @@ function cleanup(): void {
 	assets = [];
 	composite = null;
 	presignCache.clear();
+	geotiffCache.clear();
 	const maybeDestroy = pool as unknown as { destroy?: () => void; terminate?: () => void } | null;
 	if (maybeDestroy?.destroy) {
 		try {

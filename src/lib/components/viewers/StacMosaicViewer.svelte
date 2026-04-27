@@ -318,7 +318,23 @@ const mosaicLayer = $derived.by(() => {
 				const bps = geotiff.cachedTags.bitsPerSample?.[0] ?? 8;
 				detectedBandCount = count;
 				detectedDataType = buildDataTypeLabel(sf, bps);
-				bandConfig = defaultBandConfig(count, sf);
+				const seeded = defaultBandConfig(count, sf);
+				// If the user already has a single-asset composite (URL hash, or
+				// natural-color default with eo:bands ordering), seed `bandConfig`
+				// with those band picks so the first render honors them instead
+				// of overwriting with `defaultBandConfig`'s 0/1/2.
+				const cur = composite;
+				if (cur && isSingleAssetComposite(cur) && seeded.mode === 'rgb') {
+					const lim = Math.max(0, count - 1);
+					bandConfig = {
+						...seeded,
+						rBand: Math.min(cur.r.bandIndex, lim),
+						gBand: Math.min(cur.g.bandIndex, lim),
+						bBand: Math.min(cur.b.bandIndex, lim)
+					};
+				} else {
+					bandConfig = seeded;
+				}
 			}
 			return geotiff;
 		},
@@ -1211,11 +1227,30 @@ function setComposite(next: ChannelComposite): void {
 	activePresetId = matching?.id ?? '';
 	syncCompositeToUrl(next, activePresetId || null);
 
-	// Single-asset path: feed the existing setMosaicAssetKey machinery.
+	// Single-asset path: feed the existing setMosaicAssetKey machinery, then
+	// mirror per-channel bandIndex into `bandConfig` so `selectCogPipeline`'s
+	// RGB branch reads the user's picks. Without this mirror, the picker's
+	// per-band dropdown (e.g. Hamilton 4-band NAIP COG: pick band 4 as Red)
+	// updates `composite` + URL state but the rendered tiles keep using the
+	// default 0/1/2 band order seeded by `defaultBandConfig()`.
 	if (isSingleAssetComposite(next)) {
 		setMosaicAssetKey(next.r.assetKey);
+		if (bandConfig && bandConfig.mode === 'rgb') {
+			if (
+				bandConfig.rBand !== next.r.bandIndex ||
+				bandConfig.gBand !== next.g.bandIndex ||
+				bandConfig.bBand !== next.b.bandIndex
+			) {
+				bandConfig = {
+					...bandConfig,
+					rBand: next.r.bandIndex,
+					gBand: next.g.bandIndex,
+					bBand: next.b.bandIndex
+				};
+				bumpPipeline();
+			}
+		}
 	}
-	// Multi-asset path is added in Task 10.
 }
 
 function setPreset(id: string): void {
