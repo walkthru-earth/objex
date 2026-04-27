@@ -23,6 +23,8 @@ graph TD
         MSQL[markdown-sql.ts<br/>parseMarkdownDocument]
         COG[cog.ts<br/>safeClamp, clampBounds, renderNonTiledBitmap]
         COGP[cog-pure.ts<br/>SF_LABELS, safeClamp, clampBounds, buildDataTypeLabel, CogInfo, GeoBounds]
+        CA[cog-asset.ts<br/>CogAsset, ChannelRef, ChannelComposite, extractCogAssets]
+        CCM[channel-composite.ts<br/>PRESETS, applyPreset, compositeFromUrl, compositeToUrl]
     end
     subgraph "Internal only"
         DECK[deck.ts<br/>createGeoArrowOverlay, createGeoArrowLayers]
@@ -48,6 +50,8 @@ graph TD
     CU --> URL
     FMT --> EXP
     LS --> stores
+    CA --> CCM
+    STAC --> CA
 ```
 
 | File | Key Exports | Used by |
@@ -91,6 +95,8 @@ graph TD
 | `evidence-context.ts` | `EvidenceContext` | MarkdownViewer |
 | `clipboard.ts` | `copyToClipboard()`, `wireCodeCopyButtons()` | TabBar, CodeViewer, NotebookViewer, MarkdownViewer, lib/index.ts |
 | `cog-pure.ts` | `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `CogInfo`, `GeoBounds`. Dependency-free subset of `cog.ts` — zero `@developmentseed/*`, `proj4`, or `maplibre-gl` imports. `objex-utils` MUST import from here (not `cog.ts`) or tsup will preserve bare side-effect imports for the heavy deps in the bundled output and break consumer Vite pre-bundles (see walkthru-earth/objex#11). `cog.ts` re-exports these same bindings so in-repo callers keep working. | objex-utils, cog.ts (re-export) |
+| `cog-asset.ts` | `CogAsset`, `ChannelRef`, `ChannelComposite`, `extractCogAssets()`, `syntheticSelfAsset()`, `pickNaturalColorComposite()` (visual-asset → rgb-bands → fallback priority), `isSingleAssetComposite()`, `allChannelsBand0()`. Pure TS, no Svelte. Reads `raster:bands.length` and `eo:bands` without network. Published via objex-utils. | CogViewer (synthetic self asset), MultiCogViewer, StacMosaicViewer, CogControls, lib/index.ts |
+| `channel-composite.ts` | `PresetDef`, `PRESETS` (Natural color / False-color IR / SWIR / Vegetation / Agriculture; NDVI deliberately excluded), `availablePresets(assets)`, `applyPreset(assets, preset)`, `compositeFromUrl(params, assets)`, `compositeToUrl(composite, presetId)`, `presetMatchesComposite()`. Pure TS. URL format: `r=&g=&b=&band_r=&band_g=&band_b=&a=&band_a=&preset=` with `band_*` defaulting to 0 so legacy MultiCog URLs round-trip. | MultiCogViewer, StacMosaicViewer, lib/index.ts |
 | `cog.ts` | re-exports `SF_LABELS`, `safeClamp()`, `clampBounds()`, `buildDataTypeLabel()`, `CogInfo`, `GeoBounds` from `cog-pure.ts`; plus `fitCogBounds()`, `getMaxTextureSize()`, `cleanupNativeBitmap()`, `renderNonTiledBitmap()`, `BandConfig`, `PixelValue`, `ColorRampId` (= `ColormapName`, 107 entries), `defaultBandConfig()` (caps RGB defaults at bandCount ≤ 4; default single-band ramp is `terrain` for int/float, `viridis` for uint), `isDefaultBandConfig()`, `needsCustomPipelineForConfig()` (forces CPU path when `geotiff.count > 4`, or `=== 4` in RGB mode to bake alpha=255 and avoid band-4-as-alpha), `CustomGetTileDataOptions` + `HISTOGRAM_BIN_COUNT`, `createConfigurableGetTileData(geotiff, config, opts?)` (RGB bakes RGBA; single-band normalizes band N into `r`, reserves `r=0` for nodata, emits a 64-bin histogram via `opts.onHistogram`), `createCustomGetTileData(geotiff, opts?)`, `buildCustomRenderTile(config, rescale?)` (RGB → `{image}`; single-band → `[Sampler2DArrayPrecision, FilterNoDataVal, LinearRescale?, Colormap]` with sprite-backed `colormapTexture` + `colormapIndex` looked up via `COLORMAP_INDEX[config.colorRamp]`), `readPixelAtLngLat()`, `resolveProj4Def()`, `createEpsgResolver()`, `RescaleConfig`, `DEFAULT_RESCALE`, `isRescaleActive()`, `createRescaledPipeline()`, `buildBandRenderPipeline()` (FilterNoDataVal + LinearRescale composer for MultiCOGLayer/mosaic callers), `BandRenderPipelineOptions`, `CogTagInfo`, `inspectCogTags()`, `normalizeCogGeotiff()`, `ResolvedCogPipeline`, `SelectCogPipelineOptions` (adds `onHistogram`), `selectCogPipeline()`. The old `COLOR_RAMP_STOPS` / `interpolateRamp` / `rampToGradientCss` / `customRenderTile` exports were retired when single-band rendering moved to the GPU sprite; the file-top comment in `cog.ts` points future readers to the sprite path. `Sampler2DArrayPrecision` is a local-only shader-module shim that prepends `precision highp sampler2DArray;` at `fs:#decl` to work around a missing precision qualifier in `@developmentseed/deck.gl-raster@0.6.0-alpha.1`'s `Colormap` module (remove once upstream fixes). | CogViewer, CogControls, StacMosaicViewer, MultiCogViewer, lib/index.ts |
 | `colormap-sprite.ts` | `loadColormapSprite()` (session-level `Promise<ImageData>` decode of `@developmentseed/deck.gl-raster/gpu-modules/colormaps.png` — 256×107 PNG, 107 ramps, ~16 KB), `getColormapTexture(device)` (per-device `sampler2DArray` Texture, WeakMap-cached so viewers share one upload), `COLORMAP_SPRITE_URL` / `COLORMAP_SPRITE_LAYERS` (raw sprite metadata for UI overrides), `COLORMAP_NAMES` (107-entry sorted `ColormapName[]`). Re-exports `COLORMAP_INDEX` + `ColormapName` from `@developmentseed/deck.gl-raster/gpu-modules`. Single entry point for GPU colormap rendering; used by `cog.ts::buildCustomRenderTile` single-band branch. | cog.ts |
 | `geometry-type.ts` | `parseGeometryTypeCrs()`, `isWgs84Crs()`, `buildTransformExpr()`, `wrapWkbWithCrs()`, `GeometryTypeInfo` | query/wasm.ts, TableViewer |

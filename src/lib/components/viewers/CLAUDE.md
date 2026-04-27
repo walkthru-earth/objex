@@ -43,6 +43,12 @@ graph TD
     PMT --> PMI[pmtiles/PmtilesTileInspector]
     PMI --> SVG[pmtiles/SvgTileRenderer]
 
+    COG --> CC[CogControls]
+    SMV --> CC
+    MCV --> CC
+    CC --> CHP[cog/ChannelPicker]
+    CC --> BRL[cog/buildRgbLayer]
+
     TV --> FI[FileInfo]
     TV --> LP[LoadProgress]
     GPM --> LP
@@ -78,4 +84,10 @@ Every viewer must follow the pattern in root `CLAUDE.md` (cleanup, tabResources,
 
 ## CogControls
 
-Shared style/picker panel mounted by `CogViewer`, `StacMosaicViewer`, and `MultiCogViewer`. Discriminated-union props: `mode='single'` drives single-COG band selectors (RGB triple or single-band + color ramp picker over the 107-entry sprite) and renders the rescale slider; `mode='multi'` drives the STAC asset → channel picker (R/G/B + optional A `<select>`s populated from `RasterBandAsset[]`) and the same rescale slider. Both modes share the optional histogram overlay (`Uint32Array`, 64 bins) drawn behind the rescale `RangeSlider`. Type aliases `MultiChannel` and `AssetComposite` are exported from `CogControls.svelte` for cross-viewer reuse so callers don't redeclare the channel literal union or the composite shape. The `Style` button on every viewer toggles this same panel — no per-viewer picker template anymore. **Mosaic asset picker (single mode only)**: when `mode='single'` callers also pass `assets: RasterBandAsset[]` + `assetKey: string | null` + `onAssetChange(key)`, an "Asset" `<select>` renders above the RGB/Single tabs so the user can swap which STAC asset (`visual` / `red` / `nir` / ...) drives every item in the mosaic. The picker is hidden when `assets.length < 2` so single-COG callers (CogViewer) get the original UI. `StacMosaicViewer` populates this from `extractMosaicAssets(firstItemWithRasters)` and re-derives `committedSources` in place from `committedViews[].raw` on change — no viewport re-query, no pagination loss.
+Shared style/picker panel mounted by `CogViewer`, `MultiCogViewer`, and `StacMosaicViewer`. Single prop shape (`assets: CogAsset[]`, `composite: ChannelComposite`, `presets: PresetDef[]`, plus mode toggle for the legacy single-band ramp branch). Renders a top-of-panel preset `<select>` (Natural color / False-color IR / SWIR / Vegetation / Agriculture, NDVI intentionally excluded), then three `ChannelPicker` rows (R/G/B, optional A) when mode='rgb', then the existing single-band ramp picker (107-entry sprite, search, pinned grid) when mode='single'. The band column inside each ChannelPicker auto-collapses to plain `Band 1` text when the chosen asset's `bandCount === 1`, so Sentinel-2 / Landsat per-band assets read as one clean row while NAIP `image` / S2 `visual` exposes the full band picker. Histogram overlay + rescale slider unchanged.
+
+## viewers/cog/
+
+| Sub-directory | Files | Role | Used by |
+|---------------|-------|------|---------|
+| `viewers/cog/` | 2 | ChannelPicker (one row, two dropdowns) + buildRgbLayer (COGLayer ↔ MultiCOGLayer dispatch). | CogControls, MultiCogViewer, StacMosaicViewer |
