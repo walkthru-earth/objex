@@ -10,11 +10,25 @@ interface PersistedSettings {
 	mosaicItemLimit: number;
 }
 
+/**
+ * Heuristic mobile detection. iOS Safari caps the WASM heap at ~1.8 GiB and
+ * Safari < 17.6 has no `credentialless` COEP, so OPFS spill rarely engages.
+ * A 2000-item stac-geoparquet scan with deep STRUCT `assets`/`links` columns
+ * blows the heap before the streaming engine can pace it. Default the cap
+ * lower so first-run mosaic loads succeed; users can raise it in settings.
+ */
+function isMobileLikeAtLoad(): boolean {
+	if (typeof navigator === 'undefined') return false;
+	if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+	if (typeof window === 'undefined') return false;
+	return Math.min(window.innerWidth, window.innerHeight) <= 820;
+}
+
 const SETTINGS_DEFAULTS: PersistedSettings = {
 	theme: 'system',
 	locale: 'en',
 	featureLimit: 1000,
-	mosaicItemLimit: 2000
+	mosaicItemLimit: isMobileLikeAtLoad() ? 400 : 2000
 };
 
 function loadSettings(): PersistedSettings {

@@ -286,24 +286,52 @@ async function getDB() {
 			// heap). preserve_insertion_order = false is the one tuning that
 			// helps both modes — it skips buffering full result sets to re-sort
 			// on output, a real OOM source on big scans.
+			// Mobile WebKit / Android Chrome run in a much smaller WASM heap
+			// (~1.8 GiB on iOS Safari, ~2 GiB on Android) than desktop
+			// (~3.1 GiB), AND mobile Safari < 17.6 has no `credentialless`
+			// COEP, so OPFS engages on far fewer devices. Detect with the UA
+			// hint + screen-size heuristic so we can ratchet down the limits
+			// on mobile-in-memory before the first OOM and so the user sees
+			// a usable session instead of a hard failure on the first
+			// pan/scan. Heuristic, not load-bearing for correctness.
+			const isMobileLike =
+				typeof navigator !== 'undefined' &&
+				(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+					(typeof window !== 'undefined' &&
+						Math.min(window.innerWidth, window.innerHeight) <= 820));
 			try {
 				const sets = [`SET preserve_insertion_order = false`];
+				const cores = navigator.hardwareConcurrency || 4;
 				if (opfsActive) {
-					const cores = navigator.hardwareConcurrency || 4;
-					const threads = Math.max(1, Math.min(4, Math.floor(cores / 2)));
-					sets.push(`SET memory_limit = '2GB'`);
+					// OPFS spill works: room to use multiple threads + a real
+					// memory_limit. On mobile the OPFS quota is also smaller
+					// (typically a few hundred MB by default), so still
+					// half-cap threads + memory_limit to reduce concurrent
+					// thread-local buffers.
+					const threads = Math.max(1, Math.min(isMobileLike ? 2 : 4, Math.floor(cores / 2)));
+					sets.push(`SET memory_limit = '${isMobileLike ? '900MB' : '2GB'}'`);
 					sets.push(`SET threads = ${threads}`);
 					sets.push(`SET temp_directory = '.tmp'`);
+				} else if (isMobileLike) {
+					// Mobile + no OPFS spill is the worst case: the heap caps
+					// at ~1.8 GiB on iOS Safari, queries cannot offload, and
+					// the previous "leave memory_limit at defaults" path
+					// reproduces the OOM the user is seeing. Cap memory_limit
+					// well under the heap ceiling so DuckDB's planner picks
+					// streaming / out-of-core operator variants and surfaces
+					// `Out of Memory` from inside the planner (recoverable,
+					// the worker keeps running) instead of from the WASM heap
+					// allocator (kills the worker and forces a tab reload).
+					// Threads are pinned at 1 for the same reason — every
+					// extra thread doubles the per-pipeline scratch buffers.
+					sets.push(`SET memory_limit = '900MB'`);
+					sets.push(`SET threads = 1`);
+					sets.push(`SET temp_directory = '.tmp'`);
 				} else {
-					// Even without OPFS spill, set a temp_directory hint so DuckDB's
-					// OOM error message stops claiming "no temporary directory is
-					// specified" (misleading, since at this layer of WASM the path
-					// is just MEMFS — same heap as the query engine). The string
-					// is purely cosmetic for the error message; DuckDB will still
-					// fail at the WASM heap ceiling. Cap threads conservatively to
-					// reduce per-query peak memory (each thread keeps its own
-					// hash-aggregate / sort buffer alive).
-					const cores = navigator.hardwareConcurrency || 4;
+					// Desktop + no OPFS spill: leave memory_limit at defaults
+					// so the full WASM heap (~3.1 GiB) is available for big
+					// scans. Cap threads conservatively because each thread
+					// keeps its own hash-aggregate / sort buffer alive.
 					const threads = Math.max(1, Math.min(2, Math.floor(cores / 2)));
 					sets.push(`SET threads = ${threads}`);
 					sets.push(`SET temp_directory = '.tmp'`);
@@ -311,9 +339,16 @@ async function getDB() {
 				await conn.query(`${sets.join('; ')};`);
 				log(
 					opfsActive
-						? `getDB → memory_limit=2GB, temp_directory=.tmp (OPFS), preserve_insertion_order=false`
-						: `getDB → preserve_insertion_order=false, threads capped, temp_directory=.tmp (no OPFS — leaving memory_limit at defaults)`
+						? `getDB → OPFS, memory_limit=${isMobileLike ? '900MB' : '2GB'}, mobile=${isMobileLike}`
+						: isMobileLike
+							? `getDB → mobile in-memory, memory_limit=900MB, threads=1 (no OPFS spill)`
+							: `getDB → desktop in-memory, threads capped, memory_limit at defaults`
 				);
+				if (isMobileLike && !opfsActive) {
+					opfsState.reasons.push(
+						'mobile session with no OPFS spill: memory_limit clamped to 900MB to surface OOMs from the planner instead of the WASM heap allocator. Some large-catalog stac-geoparquet queries may still fail; reduce mosaicItemLimit or open on desktop.'
+					);
+				}
 			} catch (err) {
 				logWarn('memory tuning not available:', (err as Error)?.message ?? err);
 			}
