@@ -29,6 +29,15 @@ function createTabsStore() {
 	// Used to decide which tabs stay alive in the DOM.
 	let recentOrder = $state<string[]>([]);
 
+	// True while the Sidebar is migrating an eager URL tab to a remote tab
+	// (close eager → await credentials/connection save → open remote).
+	// During this window, `tabs.items` is briefly empty, but the tab-sync
+	// effect MUST NOT clear `?url=` / `#hash` — the new viewer needs them.
+	// User-initiated tab closes happen with `migrating === false` and DO
+	// clear URL state, so subsequent Sidebar remounts (e.g. mobile Sheet
+	// open/close) don't auto-re-open the tab the user just closed.
+	let migrating = $state(false);
+
 	function touchRecent(id: string) {
 		recentOrder = [id, ...recentOrder.filter((r) => r !== id)];
 
@@ -60,6 +69,18 @@ function createTabsStore() {
 		get active(): Tab | undefined {
 			if (!activeTabId) return undefined;
 			return tabs.find((t) => t.id === activeTabId);
+		},
+
+		get migrating() {
+			return migrating;
+		},
+
+		beginMigration() {
+			migrating = true;
+		},
+
+		endMigration() {
+			migrating = false;
 		},
 
 		/**

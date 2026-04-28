@@ -94,9 +94,18 @@ async function handleAutoDetection() {
 		return;
 	}
 
+	const hasUrlParam = url.searchParams.has('url');
+
 	// A recognizable storage provider was detected. Close the eagerly-opened
 	// URL tab (if any) so we can re-open it with a proper connectionId that
 	// provides S3 credentials and endpoint config for DuckDB httpfs.
+	// Mark the close + reopen as a migration so the tab-sync effect in
+	// +page.svelte doesn't clear `?url=` / `#hash` during the empty-tabs
+	// window between close and open. We end migration in `finally` so an
+	// abandoned credential prompt or thrown error still resets the flag.
+	const isMigrating = hasUrlParam;
+	if (isMigrating) tabs.beginMigration();
+
 	if (rawUrl) {
 		const eagerTabId = eagerUrlTabId(rawUrl);
 		const eagerTab = tabs.items.find((t) => t.id === eagerTabId);
@@ -104,8 +113,6 @@ async function handleAutoDetection() {
 			tabs.close(eagerTabId);
 		}
 	}
-
-	const hasUrlParam = url.searchParams.has('url');
 
 	if (hasUrlParam) {
 		// Auto-connect immediately for ?url= param (zero-friction)
@@ -167,10 +174,12 @@ async function handleAutoDetection() {
 			syncUrlParam(conn, prefixParam || undefined);
 		} finally {
 			autoConnecting = false;
+			if (isMigrating) tabs.endMigration();
 		}
 	} else {
 		// Show indicator for hostname-detected bucket
 		detectedHost = detected;
+		if (isMigrating) tabs.endMigration();
 	}
 }
 

@@ -28,7 +28,6 @@ import {
 	clearUrlState,
 	getUrlPrefix,
 	getUrlView,
-	hasUrlParam,
 	setRawUrlParam,
 	syncUrlParam,
 	updateUrlView
@@ -237,12 +236,14 @@ $effect(() => {
 	}
 
 	if (!tab) {
-		// Preserve ?url= + #hash while a pending migration is in flight
-		// (Sidebar auto-detection awaits between tabs.close(eager) and
-		// tabs.open(remote)), otherwise the new viewer never sees them.
-		// hasUrlParam() is the authoritative signal; absence of any ?url=
-		// means user really did clear everything.
-		if (tabs.items.length === 0 && !hasUrlParam()) {
+		// Preserve ?url= + #hash ONLY while Sidebar's auto-detection is
+		// actively migrating an eager URL tab to a remote tab (the empty
+		// window between tabs.close(eager) and tabs.open(remote)). For
+		// user-initiated closes, clear URL state so the next Sidebar mount
+		// (e.g. mobile Sheet open after close) doesn't auto-re-open the
+		// tab the user just closed. `hasUrlParam()` is NOT a migration
+		// signal — it stays true after any close.
+		if (tabs.items.length === 0 && !tabs.migrating) {
 			clearUrlState();
 		}
 	} else {
