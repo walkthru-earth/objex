@@ -28,7 +28,11 @@ const SETTINGS_DEFAULTS: PersistedSettings = {
 	theme: 'system',
 	locale: 'en',
 	featureLimit: 1000,
-	mosaicItemLimit: isMobileLikeAtLoad() ? 400 : 2000
+	// Mobile is also clamped at the parquet source layer (see
+	// `stac-source-parquet.ts::lowMemoryMode`) which caps at 200 and skips
+	// ORDER BY. We mirror that here so the API/static paths (which don't
+	// have the source-side clamp) also see a small default.
+	mosaicItemLimit: isMobileLikeAtLoad() ? 200 : 2000
 };
 
 function loadSettings(): PersistedSettings {

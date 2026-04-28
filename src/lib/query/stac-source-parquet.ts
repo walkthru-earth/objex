@@ -73,12 +73,46 @@ export interface CreateParquetSourceOptions {
 	 * Off by default — never enable in shipped UI.
 	 */
 	debugExplain?: boolean;
+	/**
+	 * Mobile / low-memory mode. When true the source caps the effective
+	 * LIMIT (regardless of the caller's request) and skips
+	 * `ORDER BY datetime DESC` so DuckDB can stop reading after the first
+	 * N parquet rows instead of fully materializing every row's STRUCT
+	 * `assets` column to compute a Top-N. The trade-off: items are
+	 * returned in file order, not freshness order. Defaults to a
+	 * mobile-UA detection at module load when undefined.
+	 */
+	lowMemoryMode?: boolean;
+	/** Hard cap on `req.limit` when `lowMemoryMode` is on. Default 200. */
+	lowMemoryLimit?: number;
+}
+
+/**
+ * Default mobile detection used when `lowMemoryMode` is not explicitly set.
+ * iOS Safari caps the WASM heap at ~1.8 GiB and rarely engages OPFS spill
+ * (`credentialless` COEP only landed in 17.6), so STRUCT-heavy stac-geoparquet
+ * scans OOM during the parquet decode before any rows reach the consumer.
+ */
+function detectLowMemoryDefault(): boolean {
+	if (typeof navigator === 'undefined') return false;
+	if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+	if (typeof window === 'undefined') return false;
+	return Math.min(window.innerWidth, window.innerHeight) <= 820;
 }
 
 export interface QueryStacGeoparquetOptions {
 	signal?: AbortSignal;
 	/** Hard cap on rows. Matches `hydrateStacItems` default. */
 	limit?: number;
+	/**
+	 * When true, omit `ORDER BY datetime DESC` from the SQL. Sorting forces
+	 * DuckDB's Top-N operator to read every row's heavy STRUCT `assets`
+	 * column before the LIMIT engages, which OOMs the WASM heap on mobile
+	 * Safari (~1.8 GiB cap, no OPFS spill). Without the sort the parquet
+	 * scan can stop after the first N rows in file order. The trade-off:
+	 * the user sees the first N items by file order, not the freshest N.
+	 */
+	skipOrderBy?: boolean;
 	/**
 	 * Hive-partitioning context resolved at source construction. When
 	 * `enabled === true` the runtime FROM target is a `read_parquet` glob
@@ -348,7 +382,13 @@ async function* streamQuery(
 	};
 	const datetimeWhere = buildDatetimeWhere(datetime, datetimeAvailability);
 	const whereClause = joinWhere([buildBboxWhere(bbox), datetimeWhere]);
-	const orderClause = available.has('datetime') ? ' ORDER BY datetime DESC' : '';
+	// `ORDER BY datetime DESC LIMIT N` is a Top-N: DuckDB still has to read
+	// every row's STRUCT `assets` payload before the limit engages. On a
+	// mobile WASM heap (~1.8 GiB ceiling, no OPFS spill) that OOMs in the
+	// parquet decoder before any rows reach the consumer. `skipOrderBy`
+	// trades freshness ordering for early-exit at LIMIT.
+	const orderClause =
+		opts.skipOrderBy || !available.has('datetime') ? '' : ' ORDER BY datetime DESC';
 
 	const safeLimit = Math.max(1, Math.floor(Number(limit) || DEFAULT_LIMIT));
 	const sql = `SELECT ${selectList} FROM ${fromTarget}${whereClause}${orderClause} LIMIT ${safeLimit}`;
@@ -437,6 +477,8 @@ export function createParquetSource(
 	options: CreateParquetSourceOptions = {}
 ): StacSource {
 	const requestedHive = options.useHivePartitioning === true;
+	const lowMemoryMode = options.lowMemoryMode ?? detectLowMemoryDefault();
+	const lowMemoryLimit = Math.max(1, Math.floor(options.lowMemoryLimit ?? 200));
 	const capabilities: StacSourceCapabilities = {
 		kind: 'parquet',
 		label: requestedHive ? 'stac-geoparquet (hive)' : 'stac-geoparquet',
@@ -481,13 +523,21 @@ export function createParquetSource(
 			const { datetime: _pushed, ...residualRest } = req.filter ?? {};
 			const residual: FacetState = residualRest;
 			let totalSoFar = 0;
+			// On mobile, clamp the LIMIT regardless of caller request and
+			// drop the ORDER BY so the parquet scan can early-exit. The
+			// caller's higher cap (e.g. 2000) would still trigger the
+			// 858 MB / 1.8 GiB OOM during STRUCT materialization.
+			const effectiveLimit = lowMemoryMode
+				? Math.min(req.limit ?? lowMemoryLimit, lowMemoryLimit)
+				: req.limit;
 			for await (const chunk of streamQuery(tab, connId, {
 				signal: req.signal,
-				limit: req.limit,
+				limit: effectiveLimit,
 				bbox: req.bbox,
 				datetime: req.filter?.datetime,
 				hive: { enabled: hiveEnabled },
-				debugExplain: options.debugExplain
+				debugExplain: options.debugExplain,
+				skipOrderBy: lowMemoryMode
 			})) {
 				if (req.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 				totalSoFar += chunk.items.length;
