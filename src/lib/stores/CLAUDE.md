@@ -24,7 +24,7 @@ Stores use shared utilities from `../utils/`:
 |------|--------|--------|
 | `connections.svelte.ts` | `connectionStore`, `DuplicateConnectionError`, `ConnectionWriteResult` | url.ts, browser-azure, browser-cloud, storage/index, ConnectionDialog, Sidebar, TableToolbar, +page.svelte |
 | `credentials.svelte.ts` | `credentialStore` | url.ts, browser-azure, browser-cloud, Sidebar, query/wasm |
-| `tabs.svelte.ts` | `tabs`, `eagerUrlTabId(url)` | StatusBar, TabBar, Sidebar, FileTreeSidebar, +page.svelte |
+| `tabs.svelte.ts` | `tabs` (incl. `tabs.migrating` getter + `tabs.beginMigration()` / `tabs.endMigration()` — set by `Sidebar::handleAutoDetection` across the eager-close → remote-open window so the tab-sync `$effect` in `+page.svelte` knows not to wipe `?url=`/`#hash` while `tabs.items` is briefly empty; user-initiated closes leave the flag false so URL clears cleanly), `eagerUrlTabId(url)` | StatusBar, TabBar, Sidebar, FileTreeSidebar, +page.svelte |
 | `tab-resources.svelte.ts` | `tabResources` | CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, ModelViewer, GeoParquetMapViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, ZarrMapViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer, PmtilesViewer |
 | `files.svelte.ts` | `files` | StatusBar |
 | `browser.svelte.ts` | `browser` | StatusBar, Sidebar, FileTreeSidebar, +page.svelte |
