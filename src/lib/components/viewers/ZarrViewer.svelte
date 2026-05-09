@@ -10,7 +10,7 @@ import {
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrlAsync } from '$lib/utils/url.js';
-import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
+import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import {
 	computeChunkCount,
 	computeChunkSize,
@@ -30,8 +30,8 @@ let { tab }: { tab: Tab } = $props();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
-const urlView = getUrlView();
-let viewMode = $state<'inspect' | 'map'>(urlView === 'map' ? 'map' : 'inspect');
+type ZarrViewMode = 'inspect' | 'map';
+let viewMode = $state<ZarrViewMode>(pickViewMode<ZarrViewMode>(['inspect', 'map'], 'inspect'));
 
 let hierarchy = $state.raw<ZarrHierarchy | null>(null);
 let selectedNode = $state<ZarrNode | null>(null);

@@ -32,7 +32,7 @@ import {
 	buildStorageUrl,
 	canStreamDirectly
 } from '$lib/utils/url.js';
-import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
+import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { findGeoColumn, findGeoColumnFromRows, parseWKB, toBinary } from '$lib/utils/wkb.js';
 import FileInfo from './FileInfo.svelte';
 import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
@@ -56,9 +56,9 @@ let historyVisible = $state(false);
 let hasGeo = $state(false);
 let isStac = $state(false);
 // Restore view mode from URL hash if present
-const urlView = getUrlView();
-let viewMode = $state<'table' | 'map' | 'stac' | 'info'>(
-	urlView === 'map' ? 'map' : urlView === 'stac' ? 'stac' : urlView === 'info' ? 'info' : 'table'
+type TableViewMode = 'table' | 'map' | 'stac' | 'info';
+let viewMode = $state<TableViewMode>(
+	pickViewMode<TableViewMode>(['table', 'map', 'stac', 'info'], 'table')
 );
 let sqlQuery = $state('');
 let customSql = $state('');

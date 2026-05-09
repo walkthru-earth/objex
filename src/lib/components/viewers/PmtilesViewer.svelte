@@ -12,7 +12,7 @@ import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPmtiles, type PmtilesMetadata } from '$lib/utils/pmtiles';
 import { buildHttpsUrlAsync } from '$lib/utils/url.js';
-import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
+import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -25,10 +25,7 @@ let pmtilesInstance = $state<PMTiles | null>(null);
 let pmtilesUrl = $state('');
 
 // Read initial view from URL hash
-const urlView = getUrlView();
-let viewMode = $state<ViewMode>(
-	urlView === 'archive' ? 'archive' : urlView === 'inspector' ? 'inspector' : 'map'
-);
+let viewMode = $state<ViewMode>(pickViewMode<ViewMode>(['map', 'archive', 'inspector'], 'map'));
 
 // Tile inspector initial coordinates (set when navigating from archive)
 let inspectorZ = $state<number | undefined>();
