@@ -527,7 +527,7 @@ async function tryAddGeoZarrLayer(
 		const zarrInfoSnapshot = $state.snapshot(geoZarrInfo) as GeoZarrInfo;
 		const layer = new ZarrLayer({
 			id: `geozarr-${tab.id}`,
-			source: group,
+			node: group,
 			variable: zarrInfoSnapshot.variantPath || undefined,
 			selection: {},
 			epsgResolver: dsZarrEpsg,

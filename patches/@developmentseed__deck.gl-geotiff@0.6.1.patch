@@ -1,9 +1,9 @@
 diff --git a/dist/cog-layer.js b/dist/cog-layer.js
-index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..cabcbbadb8c19349b7a153950b5c579fae0be1d8 100644
+index 5c3deb11ec6cc27e14c988db4d0b63a98108f80e..38d847595385e079ec7c33e065d0689f67a28707 100644
 --- a/dist/cog-layer.js
 +++ b/dist/cog-layer.js
-@@ -70,12 +70,16 @@ export class COGLayer extends CompositeLayer {
-         const tms = generateTileMatrixSet(geotiff, sourceProjection);
+@@ -49,12 +49,16 @@ export class COGLayer extends RasterTileLayer {
+             : parseWkt(crs);
          // @ts-expect-error - proj4 typings are incomplete and don't support
          // wkt-parser input
 -        const converter4326 = proj4(sourceProjection, "EPSG:4326");
@@ -12,53 +12,33 @@ index d787b8953fc5a6d63995290eaaa0c0eca5c2c543..cabcbbadb8c19349b7a153950b5c579f
 +        // causing 360 deg round-trip errors and unconvergeable mesh refinement.
 +        // See https://github.com/developmentseed/deck.gl-raster/issues/366
 +        const converter4326 = proj4(sourceProjection, "+proj=longlat +datum=WGS84 +over");
-         const forwardTo4326 = (x, y) => converter4326.forward([x, y], false);
-         const inverseFrom4326 = (x, y) => converter4326.inverse([x, y], false);
+         const projectTo4326 = (x, y) => converter4326.forward([x, y], false);
+         const projectFrom4326 = (x, y) => converter4326.inverse([x, y], false);
          // @ts-expect-error - proj4 typings are incomplete and don't support
          // wkt-parser input
 -        const converter3857 = proj4(sourceProjection, "EPSG:3857");
 +        const converter3857 = proj4(sourceProjection, "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +over");
-         const forwardTo3857 = makeClampedForwardTo3857((x, y) => converter3857.forward([x, y], false), forwardTo4326);
-         const inverseFrom3857 = (x, y) => converter3857.inverse([x, y], false);
-         if (this.props.onGeoTIFFLoad) {
-@@ -251,7 +255,7 @@ export class COGLayer extends CompositeLayer {
-                 });
-             }
-         }
--        const { maxRequests, maxCacheSize, maxCacheByteSize, debounceTime, refinementStrategy, } = this.props;
-+        const { maxRequests, maxCacheSize, maxCacheByteSize, debounceTime, refinementStrategy, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
-         return new TileLayer({
-             id: `cog-tile-layer-${this.id}`,
-             TilesetClass: TileMatrixSetTilesetFactory,
-@@ -262,6 +266,10 @@ export class COGLayer extends CompositeLayer {
-             maxCacheSize,
-             maxRequests,
-             refinementStrategy,
-+            ...(typeof onViewportLoad === "function" && { onViewportLoad }),
-+            ...(typeof onTileLoad === "function" && { onTileLoad }),
-+            ...(typeof onTileError === "function" && { onTileError }),
-+            ...(typeof onTileUnload === "function" && { onTileUnload }),
-         });
-     }
-     renderLayers() {
+         const projectTo3857 = makeClampedForwardTo3857((x, y) => converter3857.forward([x, y], false), projectTo4326);
+         const projectFrom3857 = (x, y) => converter3857.inverse([x, y], false);
+         const units = sourceProjection.units;
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index fe6d5a8d773e5d22500deb6a9d7814ea0dd01e9a..7577a0186c61f95c6775b603bcd0781d02c877be 100644
+index 7f8e9064a4ac7c08c286d7d2eac14ebbb8440dc6..19509d94e16bb4fc4a0fa380f69a0a5e3a890968 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -6,4 +6,5 @@ export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
- export { type MosaicSource, MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d";
+ export { type MosaicSource, MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d.js";
  export type { MultiCOGLayerProps, MultiCOGSourceConfig, } from "./multi-cog-layer.js";
  export { MultiCOGLayer } from "./multi-cog-layer.js";
 +export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index bd207d158f794e2956b46dc7c30be80f21ab7848..5ade2dbc3e79cce33146b6d5644b8850a4f8cd84 100644
+index dfc4e3cd9ed2d6a1e08f4266b8cdeaf0b0fedaac..578cf01e60b944a9c376b32dc43b1522d1c02583 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -3,4 +3,9 @@ export * as texture from "./geotiff/texture.js";
  export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
- export { MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d";
+ export { MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d.js";
  export { MultiCOGLayer } from "./multi-cog-layer.js";
 +// objex patch: re-export inferRenderPipeline so consumers can build the
 +// library-default uint pipeline and append modules (e.g. LinearRescale) without
@@ -68,7 +48,7 @@ index bd207d158f794e2956b46dc7c30be80f21ab7848..5ade2dbc3e79cce33146b6d5644b8850
  //# sourceMappingURL=index.js.map
 \ No newline at end of file
 diff --git a/dist/mosaic-layer/mosaic-layer.js b/dist/mosaic-layer/mosaic-layer.js
-index 13109e9f4baebd00631c065f9956bcccb8b85e99..4e2f09ff44647465901dfb05e876fcf9cb7b612f 100644
+index 61cb2e215f819b6215bf4ec20243c40c7cc81071..a0904f2f206fb8f3a563e2f8247ce18f27247baa 100644
 --- a/dist/mosaic-layer/mosaic-layer.js
 +++ b/dist/mosaic-layer/mosaic-layer.js
 @@ -12,7 +12,7 @@ export class MosaicLayer extends CompositeLayer {
@@ -76,14 +56,15 @@ index 13109e9f4baebd00631c065f9956bcccb8b85e99..4e2f09ff44647465901dfb05e876fcf9
      static defaultProps = defaultProps;
      renderTileLayer(mosaicSources, renderSource) {
 -        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, } = this.props;
-+        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
++        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, debounceTime, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
          class MosaicTileset2DFactory extends MosaicTileset2D {
              constructor(opts) {
                  super(mosaicSources, opts);
-@@ -46,6 +46,10 @@ export class MosaicLayer extends CompositeLayer {
+@@ -46,6 +46,11 @@ export class MosaicLayer extends CompositeLayer {
                  const { source, signal, data: userData } = data;
                  return renderSource(source, { data: userData, signal });
              },
++            ...(typeof debounceTime === "number" && { debounceTime }),
 +            ...(typeof onViewportLoad === "function" && { onViewportLoad }),
 +            ...(typeof onTileLoad === "function" && { onTileLoad }),
 +            ...(typeof onTileError === "function" && { onTileError }),
@@ -92,10 +73,10 @@ index 13109e9f4baebd00631c065f9956bcccb8b85e99..4e2f09ff44647465901dfb05e876fcf9
      }
      renderLayers() {
 diff --git a/dist/multi-cog-layer.js b/dist/multi-cog-layer.js
-index 1a17586fddcf72b51e536ad619995d3b6b67a605..e38f382d373bb5a521c4213a1cd8a1165f8a2aeb 100644
+index a3aef00d9331ecc0a1e3d699fb3aaab2bae54c52..5a91f90b177e55d6d79941d4ec85b76c4b551b7d 100644
 --- a/dist/multi-cog-layer.js
 +++ b/dist/multi-cog-layer.js
-@@ -604,17 +604,41 @@ function createBandTexture(device, array) {
+@@ -606,17 +606,41 @@ function createBandTexture(device, array) {
      if (array.layout !== "pixel-interleaved") {
          throw new Error("Band-separate layout not yet supported in MultiCOGLayer");
      }

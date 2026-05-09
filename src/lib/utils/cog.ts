@@ -1,4 +1,4 @@
-import type { GetTileDataOptions, MinimalDataT } from '@developmentseed/deck.gl-geotiff';
+import type { GetTileDataOptions, MinimalTileData } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
 import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
 import {
@@ -28,27 +28,6 @@ import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colorma
 export { buildDataTypeLabel, type CogInfo, clampBounds, type GeoBounds, SF_LABELS, safeClamp };
 
 // ─── Constants ───────────────────────────────────────────────────
-
-/**
- * Patches a GLSL ES 3.00 compile error in `@developmentseed/deck.gl-raster`
- * v0.6.0-alpha.1. The `Colormap` shader module injects
- * `uniform sampler2DArray colormapTexture;` without a precision qualifier,
- * which the Apple-GPU path of luma.gl's WebGL2 backend rejects with
- * `ERROR: 'sampler2DArray' : No precision specified`. In GLSL ES 3.00,
- * every sampler type other than `sampler2D`/`samplerCube` needs explicit
- * precision in fragment shaders.
- *
- * Chain this module immediately BEFORE `Colormap` in the renderPipeline so
- * the combined `fs:#decl` inject emits the precision declaration first,
- * then the sampler uniform. Remove once upstream ships the precision fix.
- */
-const Sampler2DArrayPrecision = {
-	name: 'sampler2darray-precision',
-	fs: '',
-	inject: {
-		'fs:#decl': 'precision highp sampler2DArray;\n'
-	}
-} as const;
 
 // `SF_LABELS` moved to `./cog-pure.ts` (re-exported above) so that
 // `objex-utils` can consume it without pulling in heavy COG deps.
@@ -343,25 +322,27 @@ export function createRescaledPipeline(
 	getTileData: (
 		image: GeoTIFFType | Overview,
 		options: GetTileDataOptions
-	) => Promise<MinimalDataT>;
-	renderTile: (data: MinimalDataT) => RenderTileResult;
+	) => Promise<MinimalTileData>;
+	renderTile: (data: MinimalTileData) => RenderTileResult;
 } {
 	let builtFor: Device | null = null;
 	let defaultGetTileData:
-		| ((image: GeoTIFFType | Overview, options: GetTileDataOptions) => Promise<MinimalDataT>)
+		| ((image: GeoTIFFType | Overview, options: GetTileDataOptions) => Promise<MinimalTileData>)
 		| null = null;
-	let defaultRenderTile: ((data: MinimalDataT) => RenderTileResult) | null = null;
+	let defaultRenderTile: ((data: MinimalTileData) => RenderTileResult) | null = null;
 
 	function ensureBuilt(device: Device): void {
 		if (builtFor === device && defaultGetTileData && defaultRenderTile) return;
 		const inferred = inferRenderPipeline(geotiff, device);
-		// `inferRenderPipeline` returns generic callbacks. `MinimalDataT` is the
+		// `inferRenderPipeline` returns generic callbacks. `MinimalTileData` is the
 		// contractual superset used by COGLayer — safe upcast.
 		defaultGetTileData = inferred.getTileData as unknown as (
 			image: GeoTIFFType | Overview,
 			options: GetTileDataOptions
-		) => Promise<MinimalDataT>;
-		defaultRenderTile = inferred.renderTile as unknown as (data: MinimalDataT) => RenderTileResult;
+		) => Promise<MinimalTileData>;
+		defaultRenderTile = inferred.renderTile as unknown as (
+			data: MinimalTileData
+		) => RenderTileResult;
 		builtFor = device;
 	}
 
@@ -462,7 +443,7 @@ export function normalizeCogGeotiff(geotiff: GeoTIFFType): void {
  * Spread into `new COGLayer({ ..., ...resolved })` to activate.
  *
  * COGLayer's data-prop types are a discriminated XOR and the four pipelines we
- * dispatch to return different DataT shapes (`CustomTileData`, `MinimalDataT`).
+ * dispatch to return different DataT shapes (`CustomTileData`, `MinimalTileData`).
  * Typing this as `Record<string, any>` matches the `customProps` pattern
  * already used at the COGLayer boundary and keeps the dispatch site simple.
  */
@@ -1112,20 +1093,14 @@ export function buildCustomRenderTile(
 				props: { rescaleMin: rescale.min, rescaleMax: rescale.max }
 			});
 		}
-		pipeline.push(
-			// Precision shim must come before Colormap, its `fs:#decl` inject
-			// declares `precision highp sampler2DArray;` so the subsequent
-			// sampler uniform compiles on WebGL2 / Apple GPU.
-			{ module: Sampler2DArrayPrecision, props: {} },
-			{
-				module: Colormap,
-				props: {
-					colormapTexture: data.colormapTexture,
-					colormapIndex,
-					reversed: false
-				}
+		pipeline.push({
+			module: Colormap,
+			props: {
+				colormapTexture: data.colormapTexture,
+				colormapIndex,
+				reversed: false
 			}
-		);
+		});
 		return { image: data.imageData, renderPipeline: pipeline };
 	};
 }
