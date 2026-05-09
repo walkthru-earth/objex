@@ -93,6 +93,23 @@ export function getUrlView(): string {
 }
 
 /**
+ * Pick a viewer's `viewMode` from the current URL hash, validated against the
+ * viewer's known token vocabulary. Centralises the "is this hash one of the
+ * modes I support?" decision so each viewer doesn't reimplement string-match
+ * ternary chains, and so we have one place to enforce the invariant: an
+ * explicit hash is honoured exactly, an unknown or empty hash falls back to
+ * `defaultMode` WITHOUT rewriting the URL. Viewers that mount transiently
+ * while another viewer farther up the stack is being chosen (e.g. CodeViewer
+ * during ViewerRouter's async STAC detection) MUST NOT clobber a hash they
+ * don't understand, because that hash is owned by the eventual viewer.
+ */
+export function pickViewMode<T extends string>(validModes: readonly T[], defaultMode: T): T {
+	const view = getUrlView();
+	if (view && (validModes as readonly string[]).includes(view)) return view as T;
+	return defaultMode;
+}
+
+/**
  * Read viewer-specific params from the URL hash query-string portion.
  *
  * Format: `#<mode>?k1=v1&k2=v2`. Returns a `URLSearchParams` so callers can
