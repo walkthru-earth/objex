@@ -12,7 +12,7 @@ import { copyToClipboard } from '$lib/utils/clipboard.js';
 import { handleLoadError } from '$lib/utils/error.js';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
 import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/url.js';
-import { getUrlView, updateUrlView } from '$lib/utils/url-state.js';
+import { getUrlView, pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
 import { isStacCatalog, isStacCollection, isStacItem } from '../../utils/stac.js';
 
@@ -44,20 +44,20 @@ let error = $state<string | null>(null);
 let copied = $state(false);
 let formatted = $state(false);
 const urlView = getUrlView();
-function getInitialViewMode():
-	| 'code'
-	| 'render'
-	| 'stac-browser'
-	| 'kepler'
-	| 'maputnik'
-	| 'marimo' {
-	if (urlView === 'stac-browser') return 'stac-browser';
-	if (urlView === 'kepler') return 'kepler';
-	if (urlView === 'maputnik') return 'maputnik';
-	if (urlView === 'marimo') return 'marimo';
-	if (urlView === 'code') return 'code';
-	if (tab.extension.toLowerCase() === 'html') return 'render';
-	return 'code';
+type CodeViewMode = 'code' | 'render' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo';
+const CODE_VIEW_MODES = [
+	'code',
+	'render',
+	'stac-browser',
+	'kepler',
+	'maputnik',
+	'marimo'
+] as const satisfies readonly CodeViewMode[];
+function getInitialViewMode(): CodeViewMode {
+	const explicit = pickViewMode<CodeViewMode>(CODE_VIEW_MODES, 'code');
+	if (explicit !== 'code' || urlView === 'code') return explicit;
+	// No (or unknown) hash: default to render for HTML, code otherwise.
+	return tab.extension.toLowerCase() === 'html' ? 'render' : 'code';
 }
 let viewMode = $state(getInitialViewMode());
 
@@ -207,12 +207,17 @@ $effect(() => {
 	};
 });
 
-// Auto-switch to STAC Browser when STAC JSON is detected (unless URL explicitly set #code).
+// Auto-switch to STAC Browser when STAC JSON is detected and the user did NOT
+// request a specific view via the URL hash. Any explicit hash (#map, #stac-map,
+// #stac-browser, #code, …) MUST be honored, because while ViewerRouter's async
+// detectStac is pending it falls back to plain CodeViewer for .json tabs;
+// rewriting the hash here would race the eventual StacTabViewer mount and
+// clobber the shared link the user opened.
 // Skipped when nested in StacTabViewer since the outer wrapper owns the view toggle.
 let stacAutoSwitched = false;
 $effect(() => {
 	if (nested) return;
-	if (isStacJson && !stacAutoSwitched && viewMode === 'code' && urlView !== 'code') {
+	if (isStacJson && !stacAutoSwitched && viewMode === 'code' && !urlView) {
 		stacAutoSwitched = true;
 		viewMode = 'stac-browser';
 		updateUrlView('stac-browser');
@@ -349,7 +354,7 @@ async function toggleFormat() {
 	formatted = true;
 }
 
-function setViewMode(mode: 'code' | 'render' | 'stac-browser' | 'kepler' | 'maputnik' | 'marimo') {
+function setViewMode(mode: CodeViewMode) {
 	viewMode = viewMode === mode ? (isHtml ? 'render' : 'code') : mode;
 	updateUrlView(viewMode === 'render' ? '' : viewMode);
 }

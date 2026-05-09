@@ -164,6 +164,14 @@ function pickMapKind(classified: StacRoutableKind): 'mosaic' | 'multicog' | null
 
 {#if stacRoute.kind === 'stac' && viewerKind === 'table'}
 	<StacTabViewer {tab} mapKind={stacRoute.mapKind} classified={stacRoute.classified} />
+{:else if stacRoute.kind === 'pending' && (viewerKind === 'table' || viewerKind === 'code' || viewerKind === 'raw')}
+	<!-- STAC detection (sniff parquet schema or peek 256KB JSON) is in flight.
+	     Mounting TableViewer / CodeViewer here would let them read the URL hash,
+	     pick a default viewMode, and potentially write back over an explicit
+	     hash that StacTabViewer would otherwise own (e.g. `#map` on a STAC
+	     collection JSON). The pending window is short — render an empty pane
+	     until detection resolves and the right viewer takes over. -->
+	<div class="h-full"></div>
 {:else if viewerKind === 'table'}
 	<TableViewer {tab} />
 {:else if viewerKind === 'image'}
