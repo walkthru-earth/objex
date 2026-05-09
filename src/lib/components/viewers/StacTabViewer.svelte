@@ -8,7 +8,7 @@ import { connectionStore } from '../../stores/connections.svelte.js';
 import type { Tab } from '../../types.js';
 import type { StacRoutableKind } from '../../utils/stac.js';
 import { canStreamDirectly } from '../../utils/url.js';
-import { getUrlView, updateUrlView } from '../../utils/url-state.js';
+import { getUrlView, pickViewMode, updateUrlView } from '../../utils/url-state.js';
 import { Badge } from '../ui/badge/index.js';
 import { Button } from '../ui/button/index.js';
 import * as Tooltip from '../ui/tooltip/index.js';
@@ -28,7 +28,11 @@ interface Props {
 
 let { tab, mapKind, classified }: Props = $props();
 
-type ViewMode = 'map' | 'stac-map' | 'stac-browser' | 'code';
+// 'code' is the URL token for raw-content view on JSON tabs; 'table' is the
+// equivalent token on stac-geoparquet tabs. Both render the nested viewer
+// (CodeViewer for JSON, TableViewer for parquet) but the URL stays
+// semantically meaningful per filetype.
+type ViewMode = 'map' | 'stac-map' | 'stac-browser' | 'code' | 'table';
 
 interface CodeActions {
 	toggleFormat: () => Promise<void>;
@@ -70,13 +74,16 @@ const stacBadgeKey = $derived.by(() => {
 });
 
 function initialView(): ViewMode {
+	// `'map'` is conditional on `mapKind`, so it's not in the static vocabulary.
+	// Both `'code'` and `'table'` are accepted regardless of filetype so a URL
+	// shared from one type still resolves; the render branch dispatches to the
+	// appropriate inner viewer (`TableViewer` / `CodeViewer`).
+	const picked = pickViewMode<ViewMode>(['stac-map', 'stac-browser', 'code', 'table'], 'stac-map');
 	const urlView = getUrlView();
 	if (urlView === 'map' && mapKind) return 'map';
-	if (urlView === 'stac-map') return 'stac-map';
-	if (urlView === 'stac-browser') return 'stac-browser';
-	if (urlView === 'code') return 'code';
-	if (mapKind) return 'map';
-	return 'stac-map';
+	// Hash was unknown or empty: prefer the rich map view when available.
+	if (mapKind && !urlView) return 'map';
+	return picked;
 }
 
 let viewMode = $state<ViewMode>(initialView());
@@ -86,8 +93,12 @@ let codeActions = $state<CodeActions | null>(null);
 function setView(next: ViewMode) {
 	if (viewMode === next) return;
 	viewMode = next;
-	updateUrlView(next === 'map' ? 'map' : next);
+	updateUrlView(next);
 }
+
+// The "Table" / "JSON" button in the navbar writes a filetype-aware token so
+// the URL stays semantically meaningful (parquet → `#table`, json → `#code`).
+const rawContentMode: ViewMode = $derived(isParquet ? 'table' : 'code');
 </script>
 
 <Tooltip.Provider>
@@ -191,9 +202,9 @@ function setView(next: ViewMode) {
 				{/if}
 				<Button
 					size="sm"
-					variant={viewMode === 'code' ? 'default' : 'ghost'}
+					variant={viewMode === rawContentMode ? 'default' : 'ghost'}
 					class="h-7 gap-1 px-2"
-					onclick={() => setView('code')}
+					onclick={() => setView(rawContentMode)}
 				>
 					<CodeIcon class="size-3.5" />
 					{isParquet ? t('stac.viewTable') : t('stac.viewJson')}
@@ -244,7 +255,7 @@ function setView(next: ViewMode) {
 			{:else if viewMode === 'stac-browser'}
 				<StacMapViewer {tab} variant="stac-browser" />
 			{:else if isParquet}
-				<TableViewer {tab} />
+				<TableViewer {tab} nested />
 			{:else}
 				<CodeViewer {tab} nested bind:wordWrap bind:actions={codeActions} />
 			{/if}

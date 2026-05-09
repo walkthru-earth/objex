@@ -41,7 +41,11 @@ import TableGrid from './TableGrid.svelte';
 import TableStatusBar from './TableStatusBar.svelte';
 import TableToolbar from './TableToolbar.svelte';
 
-let { tab }: { tab: Tab } = $props();
+// `nested = true` when mounted inside `StacTabViewer` for a stac-geoparquet
+// tab. The outer wrapper already exposes `stac-map` / `STAC Browser` buttons,
+// so the inner `TableToolbar` hides its own STAC Map toggle to avoid
+// duplicating the same `StacMapViewer` mount.
+let { tab, nested = false }: { tab: Tab; nested?: boolean } = $props();
 
 let pageSize = $state(settings.featureLimit);
 
@@ -908,7 +912,7 @@ function setStacView() {
 		{pageSize}
 		{historyVisible}
 		{hasGeo}
-		{isStac}
+		isStac={isStac && !nested}
 		{viewMode}
 		onPrevPage={prevPage}
 		onNextPage={nextPage}
@@ -916,7 +920,7 @@ function setStacView() {
 		onToggleInfo={toggleInfo}
 		onToggleHistory={toggleHistory}
 		onToggleView={toggleView}
-		onToggleStac={setStacView}
+		onToggleStac={nested ? undefined : setStacView}
 		onPageSizeChange={handlePageSizeChange}
 	/>
 
