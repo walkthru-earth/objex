@@ -38,7 +38,7 @@ import {
 	selectOverviewForResolution
 } from '../../utils/cog.js';
 import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
-import { readGdalStats } from '../../utils/cog-histogram.js';
+import { seedRescaleFromGeotiff } from '../../utils/cog-histogram.js';
 import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
@@ -316,20 +316,20 @@ async function loadCog(map: maplibregl.Map) {
 			bandConfig = defaultBandConfig(preflightGeotiff.count, sampleFormatRef);
 			probedBandCount = preflightGeotiff.count;
 
-			// Surface GDAL_NODATA + STATISTICS_MINIMUM/MAXIMUM (when present) so the
-			// nodata hint pill and rescale slider have meaningful defaults before
-			// the first tile decodes — matches source-cooperative/cog-viewer UX.
+			// Surface GDAL_NODATA + a shader-space rescale seed (when present) so
+			// the nodata hint pill and rescale slider have meaningful defaults
+			// before the first tile decodes — matches source-cooperative/cog-viewer
+			// UX. The slider operates in normalized [0, 1] shader space, so
+			// `seedRescaleFromGeotiff` divides GDAL STATISTICS_MIN/MAX by the
+			// sample-format factor and falls back to a p2/p98 histogram + the
+			// bit-depth-aware default.
 			autoNodata = readGdalNodata(preflightGeotiff);
-			const gdalStats = readGdalStats(preflightGeotiff);
-			const band1 = gdalStats.get(1);
-			if (
-				band1 &&
-				Number.isFinite(band1.min) &&
-				Number.isFinite(band1.max) &&
-				band1.min < band1.max
-			) {
-				rescale = { min: band1.min, max: band1.max };
+			try {
+				rescale = await seedRescaleFromGeotiff(preflightGeotiff, { signal });
+			} catch {
+				// fall through, defaults remain
 			}
+			if (signal.aborted) return;
 		}
 
 		if (!isTiled && preflightGeotiff) {
