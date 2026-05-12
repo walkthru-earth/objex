@@ -170,6 +170,7 @@
 		"vite": "^7.3.3"
 	},
 	"dependencies": {
+		"@walkthru-earth/objex-utils": "workspace:*",
 		"@babylonjs/core": "^8.56.2",
 		"@babylonjs/loaders": "^8.56.2",
 		"@carbonplan/zarr-layer": "^0.4.3",

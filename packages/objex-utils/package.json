@@ -31,7 +31,8 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsup"
+		"build": "tsup && node ../../scripts/verify-objex-utils-bundle.mjs",
+		"verify-bundle": "node ../../scripts/verify-objex-utils-bundle.mjs"
 	},
 	"peerDependencies": {
 		"apache-arrow": ">=14",
