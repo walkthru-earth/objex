@@ -549,6 +549,13 @@ export const en: Record<string, string> = {
 	'cog.reading': 'Reading pixel...',
 	'cog.rescale': 'Rescale',
 	'cog.rescaleReset': 'Reset',
+	'cog.nodata.label': 'No-data',
+	'cog.nodata.auto': 'Auto',
+	'cog.nodata.value': 'Value',
+	'cog.nodata.off': 'Off',
+	'cog.nodata.autoHint': 'from file: {value}',
+	'cog.nodata.autoNone': 'no GDAL_NODATA tag',
+	'cog.nodata.valuePlaceholder': 'e.g. -9999',
 
 	// PMTiles Viewer
 	'pmtiles.mapView': 'Map',

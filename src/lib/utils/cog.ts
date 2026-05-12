@@ -167,6 +167,84 @@ export function needsCustomPipelineForConfig(geotiff: GeoTIFFType, config: BandC
 	return false;
 }
 
+// ─── Nodata configuration ───────────────────────────────────────
+
+/**
+ * User-controlled tri-state for nodata handling.
+ *
+ * - `auto` — use the value parsed from the GeoTIFF's GDAL_NODATA tag (caller
+ *   resolves via `readGdalNodata(geotiff)`).
+ * - `value` — explicit user-provided sentinel.
+ * - `off` — disable nodata filtering entirely.
+ *
+ * Default is `{ mode: 'auto' }`. The shader-level value is resolved at the
+ * viewer level (Auto pulls from the geotiff, Value uses `value`, Off → null).
+ */
+export type NodataMode = 'auto' | 'value' | 'off';
+
+export interface NodataConfig {
+	mode: NodataMode;
+	value?: number;
+}
+
+export const DEFAULT_NODATA_CONFIG: NodataConfig = { mode: 'auto' };
+
+/**
+ * Read the GDAL_NODATA tag from a GeoTIFF.
+ *
+ * GDAL convention: the tag is an ASCII string serialized via `Number()`; the
+ * literal `"nan"` (case-insensitive) round-trips to JS `NaN`. The library's
+ * `geotiff.nodata` getter already performs that `Number(rawString)` conversion,
+ * so this helper just exposes the resulting `number | null` (preserving `NaN`)
+ * behind a stable name for callers that want to drive `NodataConfig`.
+ */
+export function readGdalNodata(geotiff: GeoTIFFType): number | null {
+	return geotiff.nodata;
+}
+
+/**
+ * Custom shader module that discards pixels whose `color.r` is NaN. Float COGs
+ * commonly encode nodata as NaN, but the shipped `FilterNoDataVal` does a
+ * `color.r == nodata.value` comparison which IEEE 754 always returns false for
+ * NaN. Mirrors the reference implementation in `src/render/shader-modules.ts`.
+ *
+ * Slots into a `RasterModule[]` render pipeline the same way as the upstream
+ * modules (e.g. `LinearRescale`).
+ */
+// Typed as RasterModule['module'] (a luma.gl ShaderModule) so it composes
+// with the upstream-shipped modules. No uniforms / no getUniforms needed.
+export const FilterNaN = {
+	name: 'filterNaN',
+	inject: {
+		'fs:DECKGL_FILTER_COLOR': /* glsl */ `
+  if (isnan(color.r)) {
+    discard;
+  }
+`
+	}
+} as unknown as RasterModule['module'];
+
+/**
+ * Pick the correct nodata-discard module for a resolved nodata value.
+ *
+ * - `NaN` → `FilterNaN` (IEEE 754: `x == NaN` is always false).
+ * - finite number → `FilterNoDataVal { value: nodata / sampleScale }`.
+ * - `null` / non-finite (e.g. ±Infinity) → no module (nodata off).
+ *
+ * `sampleScale` divides the raw nodata value to put it in the same coordinate
+ * space the shader sees after hardware normalization (e.g. 255 for r8unorm,
+ * 65535 for r16unorm). Pass `1` when the shader receives raw float values.
+ */
+export function nodataModule(nodata: number | null, sampleScale = 1): RasterModule | null {
+	if (nodata === null) return null;
+	if (Number.isNaN(nodata)) return { module: FilterNaN };
+	if (!Number.isFinite(nodata)) return null;
+	return {
+		module: FilterNoDataVal,
+		props: { value: nodata / sampleScale }
+	};
+}
+
 // ─── Linear rescale (GPU shader module, default pipeline only) ───
 
 /**
@@ -366,25 +444,35 @@ export function createRescaledPipeline(
 }
 
 export interface BandRenderPipelineOptions {
-	/** Value treated as "no-data" and zeroed out by `FilterNoDataVal`. */
+	/**
+	 * Resolved nodata value. `NaN` routes through `FilterNaN`, finite numbers
+	 * through `FilterNoDataVal`, `null` / undefined / non-finite disables the
+	 * nodata stage entirely.
+	 */
 	noDataVal?: number | null;
+	/**
+	 * Hardware sample scale used to bring `noDataVal` into the shader's coord
+	 * space. Defaults to 1 (raw float). Pass 255 for r8unorm, 65535 for r16unorm.
+	 */
+	noDataSampleScale?: number;
 	/** Linear rescale applied after no-data masking. Omit for no rescaling. */
 	rescale?: RescaleConfig;
 }
 
 /**
  * Build a `renderPipeline` array for `MultiCOGLayer` / raster mosaics.
- * Combines optional `FilterNoDataVal` + `LinearRescale` stages in the order
- * the GPU expects (no-data mask first, then rescale).
+ * Combines an optional nodata-discard module + `LinearRescale` in the order
+ * the GPU expects (no-data mask first, then rescale). The nodata module is
+ * selected by `nodataModule()` so NaN sentinels route through `FilterNaN`
+ * instead of the always-false `==` comparison in `FilterNoDataVal`.
  */
 export function buildBandRenderPipeline(opts: BandRenderPipelineOptions = {}): RasterModule[] {
 	const modules: RasterModule[] = [];
-	if (opts.noDataVal !== undefined && opts.noDataVal !== null) {
-		modules.push({
-			module: FilterNoDataVal,
-			props: { noDataVal: opts.noDataVal }
-		});
-	}
+	const nodataMod =
+		opts.noDataVal !== undefined
+			? nodataModule(opts.noDataVal ?? null, opts.noDataSampleScale ?? 1)
+			: null;
+	if (nodataMod) modules.push(nodataMod);
 	if (opts.rescale && isRescaleActive(opts.rescale)) {
 		modules.push({
 			module: LinearRescale,

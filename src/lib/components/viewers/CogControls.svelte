@@ -4,7 +4,10 @@ import type { PresetDef } from '../../utils/channel-composite.js';
 import {
 	type BandConfig,
 	type ColorRampId,
+	DEFAULT_NODATA_CONFIG,
 	DEFAULT_RESCALE,
+	type NodataConfig,
+	type NodataMode,
 	type RescaleConfig
 } from '../../utils/cog.js';
 import type { ChannelComposite, ChannelRef, CogAsset } from '../../utils/cog-asset.js';
@@ -40,6 +43,16 @@ type Props = {
 	histogram?: Uint32Array | null;
 	/** Optional 4th channel UI affordance (alpha). When false, alpha row is hidden. */
 	showAlpha?: boolean;
+	/** User-selected nodata config. Default `{ mode: 'auto' }`. */
+	nodata?: NodataConfig;
+	/**
+	 * Value resolved by the viewer for Auto mode (typically the GeoTIFF's
+	 * GDAL_NODATA tag). Surfaced as a hint pill next to the segmented control.
+	 * `null` means the file has no GDAL_NODATA tag.
+	 */
+	autoNodata?: number | null;
+	/** Fired when the user changes nodata mode or value. */
+	onNodataChange?: (next: NodataConfig) => void;
 };
 
 const props: Props = $props();
@@ -136,6 +149,37 @@ function resetRescale(): void {
 
 function fmtRescale(n: number): string {
 	return n.toFixed(2);
+}
+
+const nodataCfg = $derived(props.nodata ?? DEFAULT_NODATA_CONFIG);
+
+function fmtAutoNodata(v: number | null | undefined): string {
+	if (v === null || v === undefined) return '';
+	if (Number.isNaN(v)) return 'NaN';
+	return String(v);
+}
+
+function setNodataMode(mode: NodataMode): void {
+	if (!props.onNodataChange) return;
+	if (mode === nodataCfg.mode) return;
+	if (mode === 'value') {
+		const seed =
+			typeof nodataCfg.value === 'number'
+				? nodataCfg.value
+				: typeof props.autoNodata === 'number' && Number.isFinite(props.autoNodata)
+					? props.autoNodata
+					: 0;
+		props.onNodataChange({ mode: 'value', value: seed });
+		return;
+	}
+	props.onNodataChange({ mode });
+}
+
+function setNodataValue(raw: string): void {
+	if (!props.onNodataChange) return;
+	const parsed = Number(raw);
+	if (!Number.isFinite(parsed)) return;
+	props.onNodataChange({ mode: 'value', value: parsed });
 }
 
 const histogramBars = $derived.by(() => {
@@ -339,6 +383,53 @@ const histogramBars = $derived.by(() => {
 					/>
 				</label>
 			</div>
+		</div>
+	{/if}
+
+	{#if props.onNodataChange}
+		<div class="mt-2 space-y-1 border-t border-border pt-2">
+			<div class="flex items-center justify-between">
+				<span class="text-muted-foreground">{t('cog.nodata.label')}</span>
+				{#if nodataCfg.mode === 'auto'}
+					<span class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+						{props.autoNodata === null || props.autoNodata === undefined
+							? t('cog.nodata.autoNone')
+							: t('cog.nodata.autoHint', { value: fmtAutoNodata(props.autoNodata) })}
+					</span>
+				{/if}
+			</div>
+
+			<div
+				class="flex w-full gap-1"
+				role="radiogroup"
+				aria-label={t('cog.nodata.label')}
+			>
+				{#each ['auto', 'value', 'off'] as const as mode (mode)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={nodataCfg.mode === mode}
+						class="min-h-11 flex-1 rounded px-2 py-1 text-xs transition-colors sm:min-h-0 sm:py-1.5"
+						class:bg-primary={nodataCfg.mode === mode}
+						class:text-primary-foreground={nodataCfg.mode === mode}
+						class:bg-muted={nodataCfg.mode !== mode}
+						onclick={() => setNodataMode(mode)}
+					>
+						{t(`cog.nodata.${mode}`)}
+					</button>
+				{/each}
+			</div>
+
+			{#if nodataCfg.mode === 'value'}
+				<input
+					type="number"
+					step="any"
+					placeholder={t('cog.nodata.valuePlaceholder')}
+					class="w-full rounded border border-border bg-background px-1.5 py-1 text-[11px] tabular-nums"
+					value={nodataCfg.value ?? ''}
+					oninput={(e) => setNodataValue((e.target as HTMLInputElement).value)}
+				/>
+			{/if}
 		</div>
 	{/if}
 </div>
