@@ -175,6 +175,10 @@ let presignCache = new LruCache<string, Promise<string>>({ max: SOURCE_CACHE_MAX
 // memory tracks the rendered set rather than waiting for LRU pressure.
 let resolvedHrefByOriginal = new LruCache<string, string>({ max: SOURCE_CACHE_MAX });
 let sourceHrefById = new Map<string, string>();
+// Surface only the first distinct getSource decode failure per viewer
+// lifetime (e.g. CORS, unsupported COG flavour, presign rejection). Reset on
+// tab reset alongside the rest of the per-source state.
+let sourceErrorLogged = false;
 // Per-source visible-tile histograms, summed across sources in `aggregate`.
 let sourceHistograms = new Map<string, Uint32Array>();
 // Dedup `onTileError` log floods. deck.gl's TileLayer retries a failed source
@@ -491,12 +495,22 @@ const mosaicLayer = $derived.by(() => {
 			let geotiff: GeoTIFF;
 			try {
 				geotiff = await promise;
-			} catch {
+			} catch (err) {
 				// Swallow per-source fetch/decode failures so deck.gl's TileLayer
 				// gets `data: undefined` (renderSource returns null for it) instead
 				// of a rejected promise, which surfaces as "v is null" during the
 				// TileLayer update when a mosaic covers hundreds of unreachable
-				// sources (e.g. a 302k-item global catalog).
+				// sources (e.g. a 302k-item global catalog). Surface only the first
+				// distinct error per session so the network panel hints why a
+				// mosaic is empty without flooding the console on bad catalogs.
+				if (!sourceErrorLogged) {
+					sourceErrorLogged = true;
+					console.warn('[StacMosaic] getSource failed', {
+						id: source.id,
+						href: source.href,
+						error: err instanceof Error ? err.message : err
+					});
+				}
 				return undefined as unknown as GeoTIFF;
 			}
 			if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -1753,6 +1767,7 @@ function cleanup(): void {
 	resolvedHrefByOriginal.clear();
 	sourceHrefById.clear();
 	sourceHistograms.clear();
+	sourceErrorLogged = false;
 	if (multiCogRebuildHandle !== null) {
 		cancelAnimationFrame(multiCogRebuildHandle);
 		multiCogRebuildHandle = null;
