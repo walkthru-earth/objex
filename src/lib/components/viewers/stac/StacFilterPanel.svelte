@@ -130,7 +130,7 @@ const active = $derived(hasActiveFilters(state));
 </script>
 
 <div
-	class="pointer-events-auto absolute end-2 top-12 z-20 flex max-h-[calc(100%-3.5rem)] w-[min(360px,calc(100%-1rem))] flex-col gap-3 overflow-hidden rounded-md border border-border bg-card/95 p-3 text-xs text-card-foreground shadow-lg backdrop-blur-sm"
+	class="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex max-h-[70vh] flex-col gap-3 overflow-hidden rounded-t-xl border border-border bg-card/95 p-3 text-xs text-card-foreground shadow-lg backdrop-blur-sm sm:inset-x-auto sm:bottom-auto sm:end-2 sm:top-12 sm:max-h-[calc(100%-3.5rem)] sm:w-[min(360px,calc(100%-1rem))] sm:rounded-md"
 >
 	<header class="flex items-center justify-between gap-2">
 		<div class="flex items-center gap-2">
@@ -149,9 +149,10 @@ const active = $derived(hasActiveFilters(state));
 				</button>
 			{/if}
 			<button
-				class="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-card-foreground"
+				class="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-0.5 text-base text-muted-foreground hover:bg-accent hover:text-card-foreground sm:min-h-0 sm:min-w-0 sm:text-xs"
 				onclick={onClose}
 				aria-label={t('stac.close')}
+				style="touch-action: manipulation;"
 			>
 				&times;
 			</button>

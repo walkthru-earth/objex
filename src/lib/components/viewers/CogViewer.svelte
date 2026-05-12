@@ -634,7 +634,7 @@ onDestroy(cleanup);
 	</div>
 
 	<!-- Top-left: Loading + metadata badges -->
-	<div class="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
+	<div class="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100vw-7rem)] flex-col gap-1 sm:max-w-none">
 		{#if loading}
 			<div
 				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm"
@@ -675,10 +675,10 @@ onDestroy(cleanup);
 
 	<!-- Top-right: Info + Style buttons -->
 	{#if cogInfo}
-		<div class="absolute right-2 top-2 z-10 flex gap-1">
+		<div class="absolute right-2 top-2 z-10 flex gap-1" style="touch-action: manipulation;">
 			{#if bandConfig}
 				<button
-					class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+					class="inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-card/80 px-3 py-1.5 text-xs text-card-foreground backdrop-blur-sm hover:bg-card sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
 					class:ring-1={showControls}
 					class:ring-primary={showControls}
 					onclick={() => {
@@ -690,7 +690,7 @@ onDestroy(cleanup);
 				</button>
 			{/if}
 			<button
-				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-card/80 px-3 py-1.5 text-xs text-card-foreground backdrop-blur-sm hover:bg-card sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
 				class:ring-1={showInfo}
 				class:ring-primary={showInfo}
 				onclick={() => {
@@ -734,7 +734,7 @@ onDestroy(cleanup);
 		<!-- Info panel -->
 		{#if showInfo}
 			<div
-				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute inset-x-2 top-16 z-10 max-h-[60vh] overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-10 sm:max-h-[70vh] sm:w-64"
 			>
 				<h3 class="mb-2 font-medium">{t('map.cogInfo')}</h3>
 				<dl class="space-y-1.5">

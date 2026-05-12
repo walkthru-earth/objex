@@ -103,11 +103,12 @@ function formatItemDate(iso: string | null): string {
 <div
 	class="pointer-events-auto rounded-md bg-card/90 shadow-lg backdrop-blur-sm"
 >
-	<div class="flex items-center justify-between border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
+	<div class="flex items-center justify-between border-b border-border px-2 py-1 text-xs text-muted-foreground sm:text-[10px]">
 		<span class="tabular-nums">{t('stac.stripCount', { count: views.length })}</span>
 		{#if selectedId}
 			<button
-				class="rounded px-1.5 py-0.5 text-[10px] hover:bg-accent hover:text-accent-foreground"
+				class="inline-flex min-h-8 items-center rounded px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
+				style="touch-action: manipulation;"
 				onclick={() => onSelect(null)}
 			>
 				{t('stac.clearSelection')}
@@ -117,14 +118,15 @@ function formatItemDate(iso: string | null): string {
 	<div
 		bind:this={scrollContainer}
 		role="list"
-		class="flex gap-1.5 overflow-x-auto px-2 py-1.5"
+		class="flex snap-x snap-mandatory gap-1.5 overflow-x-auto overscroll-x-contain px-2 py-1.5"
+		style="-webkit-overflow-scrolling: touch;"
 		onmouseleave={() => onHover(null)}
 	>
 		{#each views as view (view.id)}
 			<button
 				type="button"
 				data-item-id={view.id}
-				class="group relative flex w-32 shrink-0 flex-col gap-1 overflow-hidden rounded border bg-background text-left transition-colors"
+				class="group relative flex w-24 shrink-0 snap-start flex-col gap-1 overflow-hidden rounded border bg-background text-left transition-colors sm:w-32"
 				class:border-border={view.id !== hoveredId && view.id !== selectedId}
 				class:border-white={view.id === hoveredId && view.id !== selectedId}
 				class:border-amber-400={view.id === selectedId}

@@ -1804,11 +1804,14 @@ onDestroy(cleanup);
 	</div>
 
 	<!-- Stage / progress HUD: tells the user *what is happening* so an empty
-	     map is never indistinguishable from a still-loading map. -->
+	     map is never indistinguishable from a still-loading map. On mobile this
+	     spans the full width below any top-left/top-right buttons; on sm: it
+	     centers as a single pill. -->
 	<div
-		class="pointer-events-auto absolute left-1/2 top-2 z-10 flex max-w-[min(560px,calc(100%-1rem))] -translate-x-1/2 flex-col gap-1 rounded-md bg-card/90 px-2 py-1.5 text-xs text-card-foreground shadow backdrop-blur-sm"
+		class="pointer-events-auto absolute inset-x-2 top-14 z-10 flex max-w-[calc(100%-1rem)] flex-col gap-1 rounded-md bg-card/90 px-2 py-1.5 text-xs text-card-foreground shadow backdrop-blur-sm sm:inset-x-auto sm:left-1/2 sm:top-2 sm:max-w-[min(560px,calc(100%-1rem))] sm:-translate-x-1/2"
+		style="touch-action: manipulation;"
 	>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 			{#if stage === 'classify'}
 				<span class="size-1.5 animate-pulse rounded-full bg-amber-500"></span>
 				<span class="font-medium">{t('stac.stageClassify')}</span>
@@ -1840,10 +1843,10 @@ onDestroy(cleanup);
 				<span class="size-1.5 rounded-full bg-zinc-400"></span>
 				<span class="font-medium">{t('stac.stageIdle')}</span>
 			{/if}
-			<div class="ms-auto flex items-center gap-1">
+			<div class="ms-auto flex flex-wrap items-center gap-1">
 				{#if isViewportMode}
 					<button
-						class="rounded border border-input px-1.5 py-0.5 text-[10px] hover:bg-accent"
+						class="inline-flex min-h-9 items-center rounded border border-input px-2 py-1 text-xs hover:bg-accent sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
 						onclick={() => void reloadViewport()}
 						title={t('stac.viewportMode')}
 					>
@@ -1852,7 +1855,7 @@ onDestroy(cleanup);
 				{/if}
 				{#if sourceCount > 0}
 					<button
-						class="rounded border border-input px-1.5 py-0.5 text-[10px] hover:bg-accent"
+						class="inline-flex min-h-9 items-center rounded border border-input px-2 py-1 text-xs hover:bg-accent sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
 						class:ring-1={showFootprints}
 						class:ring-primary={showFootprints}
 						onclick={toggleFootprints}
@@ -1861,7 +1864,7 @@ onDestroy(cleanup);
 						{t('stac.footprints')}
 					</button>
 					<button
-						class="rounded border border-input px-1.5 py-0.5 text-[10px] hover:bg-accent"
+						class="inline-flex min-h-9 items-center rounded border border-input px-2 py-1 text-xs hover:bg-accent sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
 						class:ring-1={showStrip}
 						class:ring-primary={showStrip}
 						onclick={() => (showStrip = !showStrip)}
@@ -1870,7 +1873,7 @@ onDestroy(cleanup);
 					</button>
 				{/if}
 				<button
-					class="relative rounded border border-input px-1.5 py-0.5 text-[10px] hover:bg-accent"
+					class="relative inline-flex min-h-9 items-center rounded border border-input px-2 py-1 text-xs hover:bg-accent sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
 					class:ring-1={showFilters}
 					class:ring-primary={showFilters}
 					onclick={() => (showFilters = !showFilters)}
@@ -1953,7 +1956,7 @@ onDestroy(cleanup);
 		</div>
 	{/snippet}
 
-	<div class="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
+	<div class="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100vw-7rem)] flex-col gap-1 sm:max-w-none">
 		{#if error}
 			<div class="pointer-events-auto max-w-sm rounded bg-red-900/80 px-2 py-1 text-xs text-red-200">
 				{error}
@@ -1977,9 +1980,9 @@ onDestroy(cleanup);
 	</div>
 
 	{#if sourceCount > 0 && bandConfig}
-		<div class="absolute right-2 top-2 z-10 flex gap-1">
+		<div class="absolute right-2 top-2 z-10 flex gap-1" style="touch-action: manipulation;">
 			<button
-				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-card/80 px-3 py-1.5 text-xs text-card-foreground backdrop-blur-sm hover:bg-card sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
 				class:ring-1={showControls}
 				class:ring-primary={showControls}
 				onclick={() => {
@@ -1990,7 +1993,7 @@ onDestroy(cleanup);
 				{t('cog.style')}
 			</button>
 			<button
-				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-card/80 px-3 py-1.5 text-xs text-card-foreground backdrop-blur-sm hover:bg-card sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
 				class:ring-1={showInfo}
 				class:ring-primary={showInfo}
 				onclick={() => {
@@ -2032,7 +2035,7 @@ onDestroy(cleanup);
 
 		{#if showInfo}
 			<div
-				class="absolute right-2 top-10 z-10 max-h-[70vh] w-64 overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm"
+				class="absolute inset-x-2 top-16 z-10 max-h-[60vh] overflow-auto rounded bg-card/90 p-3 text-xs text-card-foreground backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-10 sm:max-h-[70vh] sm:w-64"
 			>
 				<h3 class="mb-2 font-medium">{t('stac.mosaicInfo')}</h3>
 				<dl class="space-y-1.5">

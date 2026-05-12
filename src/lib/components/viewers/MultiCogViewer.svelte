@@ -705,7 +705,7 @@ onDestroy(cleanup);
 		<MapContainer {onMapReady} {bounds} />
 	</div>
 
-	<div class="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
+	<div class="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100vw-7rem)] flex-col gap-1 sm:max-w-none">
 		{#if loading}
 			<div class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm">
 				{t('map.loadingCog')}
@@ -727,9 +727,9 @@ onDestroy(cleanup);
 	</div>
 
 	{#if !error && assets.length > 0 && composite}
-		<div class="absolute right-2 top-2 z-10 flex items-center gap-1">
+		<div class="absolute right-2 top-2 z-10 flex items-center gap-1" style="touch-action: manipulation;">
 			<button
-				class="rounded bg-card/80 px-2 py-1 text-xs text-card-foreground backdrop-blur-sm hover:bg-card"
+				class="inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-card/80 px-3 py-1.5 text-xs text-card-foreground backdrop-blur-sm hover:bg-card sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
 				class:ring-1={showControls}
 				class:ring-primary={showControls}
 				onclick={() => {

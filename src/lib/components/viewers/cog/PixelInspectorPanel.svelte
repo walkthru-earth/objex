@@ -41,11 +41,16 @@ function formatValue(v: number | null): string {
 
 {#if showPanel && rows && lng !== null && lat !== null}
 	<div
-		class="absolute bottom-2 left-2 z-10 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
+		class="absolute bottom-2 left-2 z-10 max-w-[calc(100vw-1rem)] rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm sm:max-w-none"
 	>
 		<div class="mb-1 flex items-center justify-between gap-3">
 			<span class="font-medium">{t('cog.pixelValue')}</span>
-			<button class="text-muted-foreground hover:text-card-foreground" onclick={onClose}>
+			<button
+				class="inline-flex min-h-8 min-w-8 items-center justify-center text-base text-muted-foreground hover:text-card-foreground sm:min-h-0 sm:min-w-0 sm:text-xs"
+				style="touch-action: manipulation;"
+				onclick={onClose}
+				aria-label={t('stac.close')}
+			>
 				&times;
 			</button>
 		</div>

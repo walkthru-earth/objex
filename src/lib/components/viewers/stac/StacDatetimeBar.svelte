@@ -125,14 +125,14 @@ const granularityLabel = $derived.by((): string | null => {
 <div
 	class="pointer-events-auto flex flex-col gap-1.5 rounded-md border border-border bg-card/90 px-3 py-2 text-xs text-card-foreground shadow backdrop-blur-sm"
 >
-	<div class="flex items-center justify-between gap-2">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		<span class="font-medium">{t('stac.filterDatetime')}</span>
-		<div class="flex items-center gap-1.5">
+		<div class="flex flex-wrap items-center gap-1.5">
 			<input
 				type="date"
 				value={minInputValue}
 				onchange={onMinInput}
-				class="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] tabular-nums"
+				class="min-h-8 rounded border border-input bg-background px-2 py-1 text-xs tabular-nums sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[11px]"
 				aria-label={t('stac.filterDatetime')}
 			/>
 			<span class="text-muted-foreground">&rarr;</span>
@@ -140,13 +140,14 @@ const granularityLabel = $derived.by((): string | null => {
 				type="date"
 				value={maxInputValue}
 				onchange={onMaxInput}
-				class="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] tabular-nums"
+				class="min-h-8 rounded border border-input bg-background px-2 py-1 text-xs tabular-nums sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[11px]"
 				aria-label={t('stac.filterDatetime')}
 			/>
 			{#if isActive}
 				<button
 					type="button"
-					class="rounded border border-input px-1.5 py-0.5 text-[10px] hover:bg-accent"
+					class="inline-flex min-h-8 items-center rounded border border-input px-2 py-1 text-xs hover:bg-accent sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
+					style="touch-action: manipulation;"
 					onclick={clearRange}
 				>
 					{t('stac.resetFilters')}

@@ -132,11 +132,11 @@ onDestroy(() => {
 });
 </script>
 
-<div class="relative h-full w-full">
-	<div bind:this={containerEl} class="h-full w-full"></div>
+<div class="relative h-full w-full" style="touch-action: pan-x pan-y;">
+	<div bind:this={containerEl} class="h-full w-full" style="touch-action: none;"></div>
 	<!-- Zoom level indicator — positioned above nav controls -->
 	<div
-		class="pointer-events-none absolute bottom-[10rem] right-[10px] z-10 flex size-[29px] items-center justify-center rounded-full border border-zinc-300 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-800"
+		class="pointer-events-none absolute bottom-[7rem] right-[10px] z-10 flex size-[29px] items-center justify-center rounded-full border border-zinc-300 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-800 sm:bottom-[10rem]"
 	>
 		<span class="text-[10px] font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">
 			{currentZoom.toFixed(1)}
