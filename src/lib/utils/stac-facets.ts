@@ -57,17 +57,44 @@ const THUMBNAIL_ROLES = ['thumbnail', 'overview', 'visual'];
 /** Asset keys inspected when no role-tagged asset is present. */
 const THUMBNAIL_KEYS = ['thumbnail', 'preview', 'overview', 'rendered_preview', 'visual'];
 
+/**
+ * MIME types `<img>` can actually decode. The `visual` role / `visual` key
+ * is almost always a multi-MB COG (`image/tiff; application=geotiff;
+ * profile=cloud-optimized`), and dragging that through an `<img>` element
+ * just streams megabytes before the browser fails to decode it and fires
+ * `onerror`. Gate every candidate asset on a browser-renderable MIME so
+ * the strip never spends bandwidth on something it cannot paint.
+ *
+ * Trailing parameters / profile strings (`; charset=...`, `; profile=...`)
+ * are matched by anchoring on the leading `image/<subtype>`.
+ */
+const BROWSER_IMAGE_MIME_RE = /^image\/(png|jpe?g|webp|gif|avif|svg\+xml|svg)\b/i;
+
+function isBrowserRenderableAsset(asset: { type?: string }): boolean {
+	// No `type` field at all → assume the catalog author intended a real
+	// preview (small JPG/PNG). This is the common case for thumbnail-role
+	// assets on hand-rolled static catalogs.
+	if (!asset.type) return true;
+	return BROWSER_IMAGE_MIME_RE.test(asset.type);
+}
+
 function extractThumbnailHref(item: StacItem): string | null {
 	const assets = item.assets ?? {};
 	for (const role of THUMBNAIL_ROLES) {
 		for (const asset of Object.values(assets)) {
-			if (Array.isArray(asset?.roles) && asset.roles.includes(role) && asset.href) {
+			if (
+				Array.isArray(asset?.roles) &&
+				asset.roles.includes(role) &&
+				asset.href &&
+				isBrowserRenderableAsset(asset)
+			) {
 				return asset.href;
 			}
 		}
 	}
 	for (const key of THUMBNAIL_KEYS) {
-		if (assets[key]?.href) return assets[key].href;
+		const asset = assets[key];
+		if (asset?.href && isBrowserRenderableAsset(asset)) return asset.href;
 	}
 	return null;
 }
