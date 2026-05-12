@@ -16,6 +16,15 @@ import type { Device } from '@luma.gl/core';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
 import {
+	type GdalBandStats,
+	type GdalImageStats,
+	HISTOGRAM_BINS,
+	type HistogramSnapshot,
+	readGdalStats,
+	type StreamHistogramOptions,
+	streamHistogram
+} from './cog-histogram.js';
+import {
 	buildDataTypeLabel,
 	type CogInfo,
 	clampBounds,
@@ -25,7 +34,21 @@ import {
 } from './cog-pure.js';
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
 
-export { buildDataTypeLabel, type CogInfo, clampBounds, type GeoBounds, SF_LABELS, safeClamp };
+export {
+	buildDataTypeLabel,
+	type CogInfo,
+	clampBounds,
+	type GdalBandStats,
+	type GdalImageStats,
+	type GeoBounds,
+	HISTOGRAM_BINS,
+	type HistogramSnapshot,
+	readGdalStats,
+	SF_LABELS,
+	type StreamHistogramOptions,
+	safeClamp,
+	streamHistogram
+};
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -901,8 +924,15 @@ export function needsCustomPipeline(geotiff: GeoTIFFType): boolean {
  */
 export type CustomGetTileDataOptions = Record<string, never>;
 
-/** Number of histogram buckets produced by the CPU bake. */
-export const HISTOGRAM_BIN_COUNT = 64;
+/**
+ * Number of histogram buckets produced by the CPU bake.
+ *
+ * Canonical value lives in `./cog-histogram.ts` as `HISTOGRAM_BINS`; this
+ * is kept as an alias so existing CogViewer / StacMosaicViewer imports
+ * continue to compile. Both names resolve to the same number — see
+ * `./cog-histogram.ts` for the streaming histogram + GDAL stats reader.
+ */
+export const HISTOGRAM_BIN_COUNT: number = HISTOGRAM_BINS;
 
 /**
  * Create custom getTileData for non-uint COGs.
