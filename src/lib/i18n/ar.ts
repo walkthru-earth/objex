@@ -547,6 +547,13 @@ export const ar: Record<string, string> = {
 	'cog.reading': 'قراءة البكسل...',
 	'cog.rescale': 'إعادة القياس',
 	'cog.rescaleReset': 'إعادة تعيين',
+	'cog.nodata.label': 'بيانات مفقودة',
+	'cog.nodata.auto': 'تلقائي',
+	'cog.nodata.value': 'قيمة',
+	'cog.nodata.off': 'إيقاف',
+	'cog.nodata.autoHint': 'من الملف: {value}',
+	'cog.nodata.autoNone': 'لا يوجد وسم GDAL_NODATA',
+	'cog.nodata.valuePlaceholder': 'مثال: -9999',
 
 	// PMTiles Viewer
 	'pmtiles.mapView': 'خريطة',
