@@ -42,26 +42,46 @@ import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colorma
  * chunked reads start. Replaces `GeoTIFF.fromUrl` which skips the head and
  * can leave size unset (chunkd#1666, stac-map#459).
  *
- * Uses a 1-byte `Range: bytes=0-0` GET instead of `source.head()` because
- * presigned URLs from `storage/presign.ts` are SigV4-query-string signed
- * for `GET` only (aws4fetch's `signQuery: true` binds the HTTP method into
- * the signature, see `presign.ts`). A bare `HEAD` against a `GET`-signed
- * URL 403s with `SignatureDoesNotMatch` on every S3-compatible backend
- * (AWS, GCS, R2, MinIO, Wasabi, etc.). The 1-byte GET sets
- * `metadata.size` via `Content-Range`, which `getMaxLength` in
- * `@cogeotiff/core/tiff.js` reads to clamp subsequent IFD reads. Public
- * buckets pay the same trivial round-trip; private buckets actually work.
+ * Primer strategy depends on whether the URL is SigV4-query-string signed.
+ * `presign.ts` signs URLs with `aws4fetch.signQuery({method: 'GET'})`, which
+ * binds the HTTP method into the signature, so a bare `HEAD` against a
+ * `GET`-signed URL 403s with `SignatureDoesNotMatch`. For signed URLs we
+ * use a 1-byte `Range: bytes=0-0` GET that returns `Content-Range:
+ * bytes 0-0/<TOTAL>`. For unsigned public URLs we use `source.head()`,
+ * which returns `Content-Length: <TOTAL>` directly.
+ *
+ * Why the split: the Range primer's total-size depends on the
+ * `Content-Range` response header being CORS-exposed via
+ * `Access-Control-Expose-Headers`. GCS public buckets only expose
+ * `Content-Length` and a handful of `X-Goog-*` headers (NOT
+ * `Content-Range`), so `response.headers.get('content-range')` returns
+ * null in the browser, `SourceHttp.metadata.size` falls back to
+ * `Content-Length` = 1, and `Tiff.readHeader` throws "offset is outside
+ * the bounds of the DataView" on the first IFD read past byte 0. HEAD
+ * avoids this entirely because `Content-Length` is a CORS-safelisted
+ * response header.
  */
+function isSignedQueryUrl(href: string): boolean {
+	try {
+		const url = new URL(href);
+		const params = url.searchParams;
+		return params.has('X-Amz-Signature') || params.has('X-Goog-Signature') || params.has('sig');
+	} catch {
+		return false;
+	}
+}
+
 export async function loadGeoTIFF(
 	href: string,
 	options: { chunkSize?: number; cacheSize?: number } = {}
 ): Promise<GeoTIFFType> {
 	const { chunkSize = 32 * 1024, cacheSize = 1024 * 1024 } = options;
 	const source = new SourceHttp(href, {});
-	// Prime `source.metadata.size` from the `Content-Range` response header.
-	// `SourceHttp.fetch` populates `this.metadata` via `getMetadataFromResponse`
-	// (chunkd/source-http/src/index.ts:91-94) on every successful range read.
-	await source.fetch(0, 1);
+	if (isSignedQueryUrl(href)) {
+		await source.fetch(0, 1);
+	} else {
+		await source.head();
+	}
 	const chunk = new SourceChunk({ size: chunkSize });
 	const cache = new SourceCache({ size: cacheSize });
 	const view = new SourceView(source, [chunk, cache]);
