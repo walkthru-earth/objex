@@ -18,16 +18,19 @@ import {
 	cleanupNativeBitmap,
 	createConfigurableGetTileData,
 	createEpsgResolver,
+	DEFAULT_NODATA_CONFIG,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
 	inspectCogTags,
 	mapResolutionMetersPerPixel,
+	type NodataConfig,
 	needsCustomPipelineForConfig,
 	normalizeCogGeotiff,
 	type PixelValue,
 	type RescaleConfig,
+	readGdalNodata,
 	readPixelAtLngLat,
 	renderNonTiledBitmap,
 	resolveProj4Def,
@@ -35,6 +38,7 @@ import {
 	selectOverviewForResolution
 } from '../../utils/cog.js';
 import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
+import { readGdalStats } from '../../utils/cog-histogram.js';
 import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
 import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
@@ -87,6 +91,10 @@ const cogControlsComposite = $derived.by<ChannelComposite>(() => {
 let histogram = $state.raw<Uint32Array | null>(null);
 let histogramTick = $state(0);
 let rescale = $state<RescaleConfig>({ ...DEFAULT_RESCALE });
+// User-facing nodata override (Auto/Value/Off). Auto resolves at read time
+// from the GeoTIFF's GDAL_NODATA tag, surfaced as a hint pill in CogControls.
+let nodataConfig = $state<NodataConfig>({ ...DEFAULT_NODATA_CONFIG });
+let autoNodata = $state<number | null>(null);
 // Palette-indexed COGs render through the library's Colormap module; a GPU
 // rescale at that stage is cosmetic and would confuse the legend. Keep the
 // slider hidden when a ColorMap tag is present.
@@ -173,6 +181,8 @@ $effect(() => {
 		histogram = null;
 		histogramTick = 0;
 		rescale = { ...DEFAULT_RESCALE };
+		nodataConfig = { ...DEFAULT_NODATA_CONFIG };
+		autoNodata = null;
 		isPaletteIndexed = false;
 		pixelValue = null;
 		smokeWarning = null;
@@ -305,6 +315,21 @@ async function loadCog(map: maplibregl.Map) {
 			// Set default band config
 			bandConfig = defaultBandConfig(preflightGeotiff.count, sampleFormatRef);
 			probedBandCount = preflightGeotiff.count;
+
+			// Surface GDAL_NODATA + STATISTICS_MINIMUM/MAXIMUM (when present) so the
+			// nodata hint pill and rescale slider have meaningful defaults before
+			// the first tile decodes — matches source-cooperative/cog-viewer UX.
+			autoNodata = readGdalNodata(preflightGeotiff);
+			const gdalStats = readGdalStats(preflightGeotiff);
+			const band1 = gdalStats.get(1);
+			if (
+				band1 &&
+				Number.isFinite(band1.min) &&
+				Number.isFinite(band1.max) &&
+				band1.min < band1.max
+			) {
+				rescale = { min: band1.min, max: band1.max };
+			}
 		}
 
 		if (!isTiled && preflightGeotiff) {
@@ -696,6 +721,11 @@ onDestroy(cleanup);
 					rescaleApplicable={rescaleApplicable}
 					onRescaleChange={handleRescaleChange}
 					{histogram}
+					nodata={nodataConfig}
+					{autoNodata}
+					onNodataChange={(next) => {
+						nodataConfig = next;
+					}}
 				/>
 			</div>
 		{/if}
