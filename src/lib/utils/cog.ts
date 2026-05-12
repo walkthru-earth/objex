@@ -382,25 +382,10 @@ export async function buildHistogramFromGeotiff(
 			histogram[bin]++;
 			counted++;
 		}
-		console.debug('[buildHistogramFromGeotiff] OK', {
-			usingOverview: overviews.length > 0,
-			sampleFormat,
-			bps,
-			norm,
-			nodata,
-			layout: arr.layout,
-			count: arr.count,
-			tilePixels: len,
-			counted,
-			nonZeroBins: histogram.reduce((acc, v) => acc + (v > 0 ? 1 : 0), 0)
-		});
 		if (counted === 0) return null;
 		return histogram;
-	} catch (err) {
-		console.warn('[buildHistogramFromGeotiff] fetchTile failed', {
-			usingOverview: overviews.length > 0,
-			err
-		});
+	} catch {
+		/* swallow */
 		return null;
 	}
 }
