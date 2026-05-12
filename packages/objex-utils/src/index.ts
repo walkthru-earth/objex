@@ -68,16 +68,6 @@ export type {
 	Theme,
 	WriteResult
 } from '../../../src/lib/types.js';
-// Channel composite presets + URL round-trip (unified RGB picker)
-export type { PresetDef } from '../../../src/lib/utils/channel-composite.js';
-export {
-	applyPreset,
-	availablePresets,
-	compositeFromUrl,
-	compositeToUrl,
-	PRESETS,
-	presetMatchesComposite
-} from '../../../src/lib/utils/channel-composite.js';
 // Cloud URL resolution
 export {
 	getNativeScheme,
@@ -97,32 +87,6 @@ export {
 	pickNaturalColorComposite,
 	syntheticSelfAsset
 } from '../../../src/lib/utils/cog-asset.js';
-// COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
-// MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
-// imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,
-// `@developmentseed/proj`, `maplibre-gl`, and `proj4`, which tsup preserves
-// as bare side-effect imports in the bundled output even when all named
-// bindings are tree-shaken away. That breaks consumer Vite pre-bundles on
-// `@developmentseed/epsg/all.csv.gz?url` (Vite loader query) and would force
-// every downstream project to install the full COG stack just to use the
-// pure TS utilities. See walkthru-earth/objex#11.
-export type { CogInfo, GeoBounds } from '../../../src/lib/utils/cog-pure.js';
-export {
-	buildDataTypeLabel,
-	clampBounds,
-	SF_LABELS,
-	safeClamp
-} from '../../../src/lib/utils/cog-pure.js';
-// Column type classification
-export type { TypeCategory } from '../../../src/lib/utils/column-types.js';
-export {
-	classifyType,
-	typeBadgeClass,
-	typeColor,
-	typeLabel
-} from '../../../src/lib/utils/column-types.js';
-// Error handling
-export { handleLoadError } from '../../../src/lib/utils/error.js';
 // Data export / serialization
 export {
 	escapeCsvField,
@@ -131,23 +95,9 @@ export {
 	serializeToCsv,
 	serializeToJson
 } from '../../../src/lib/utils/export.js';
-// File sorting
-export type { SortConfig, SortDirection, SortField } from '../../../src/lib/utils/file-sort.js';
-export { sortFileEntries, toggleSortField } from '../../../src/lib/utils/file-sort.js';
-// Formatting
-export {
-	formatDate,
-	formatFileSize,
-	formatValue,
-	getFileExtension,
-	jsonReplacerBigInt
-} from '../../../src/lib/utils/format.js';
 // GeoArrow
 export type { GeoArrowGeomType, GeoArrowResult } from '../../../src/lib/utils/geoarrow.js';
 export { buildGeoArrowTables, normalizeGeomType } from '../../../src/lib/utils/geoarrow.js';
-// Hex dump
-export type { HexRow } from '../../../src/lib/utils/hex.js';
-export { generateHexDump } from '../../../src/lib/utils/hex.js';
 // localStorage helpers
 export { loadFromStorage, persistToStorage } from '../../../src/lib/utils/local-storage.js';
 // Markdown / SQL parsing
@@ -232,11 +182,68 @@ export {
 	looksLikeUrl,
 	parseStorageUrl
 } from '../../../src/lib/utils/storage-url.js';
-// WKB parsing
-export type { GeoType, ParsedGeometry } from '../../../src/lib/utils/wkb.js';
+// Channel composite presets + URL round-trip (unified RGB picker)
+export type { PresetDef } from './channel-composite.js';
 export {
-	findGeoColumn,
-	findGeoColumnFromRows,
-	parseWKB,
-	toBinary
-} from '../../../src/lib/utils/wkb.js';
+	applyPreset,
+	availablePresets,
+	compositeFromUrl,
+	compositeToUrl,
+	PRESETS,
+	presetMatchesComposite
+} from './channel-composite.js';
+// COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
+// MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
+// imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,
+// `@developmentseed/proj`, `maplibre-gl`, and `proj4`, which tsup preserves
+// as bare side-effect imports in the bundled output even when all named
+// bindings are tree-shaken away. That breaks consumer Vite pre-bundles on
+// `@developmentseed/epsg/all.csv.gz?url` (Vite loader query) and would force
+// every downstream project to install the full COG stack just to use the
+// pure TS utilities. See walkthru-earth/objex#11.
+export type { CogInfo, GeoBounds } from './cog-pure.js';
+export { buildDataTypeLabel, clampBounds, SF_LABELS, safeClamp } from './cog-pure.js';
+// Column type classification
+export type { TypeCategory } from './column-types.js';
+export { classifyType, typeBadgeClass, typeColor, typeLabel } from './column-types.js';
+// Connection identity (canonical key for dedup across auto-detect/manual add/edit)
+export type { ConnectionIdentityInput } from './connection-identity.js';
+export {
+	connectionIdentityKey,
+	isSameConnectionIdentity,
+	normalizeEndpoint,
+	normalizeProvider
+} from './connection-identity.js';
+// Error handling
+export { handleLoadError, isAbortError } from './error.js';
+// File sorting
+export type { SortConfig, SortDirection, SortField } from './file-sort.js';
+export { sortFileEntries, toggleSortField } from './file-sort.js';
+// Formatting
+export {
+	formatDate,
+	formatFileSize,
+	formatValue,
+	getFileExtension,
+	jsonReplacerBigInt
+} from './format.js';
+// Hex dump
+export type { HexRow } from './hex.js';
+export { generateHexDump } from './hex.js';
+// LRU cache
+export type { LruCacheOptions } from './lru.js';
+export { LruCache } from './lru.js';
+// STAC Storage Extension (region / endpoint hints from STAC Items)
+export type { StorageExtensionVersion, StorageHints } from './stac-storage-extension.js';
+export {
+	applyStorageHintsToConnection,
+	detectStorageExtensionVersion,
+	emptyStorageHints,
+	extractStorageHints
+} from './stac-storage-extension.js';
+// Storage open-time smoke test (ranged GET probe)
+export type { SmokeTestResult } from './storage-smoketest.js';
+export { smokeTestHref } from './storage-smoketest.js';
+// WKB parsing
+export type { GeoType, ParsedGeometry } from './wkb.js';
+export { findGeoColumn, findGeoColumnFromRows, parseWKB, toBinary } from './wkb.js';

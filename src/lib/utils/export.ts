@@ -1,4 +1,4 @@
-import { jsonReplacerBigInt } from './format.js';
+import { jsonReplacerBigInt } from '../../../packages/objex-utils/src/format.js';
 
 function triggerDownload(content: string, filename: string, mimeType: string) {
 	const blob = new Blob([content], { type: mimeType });
