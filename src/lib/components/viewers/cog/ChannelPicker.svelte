@@ -47,35 +47,37 @@ function setBand(idx: number): void {
 }
 </script>
 
-<div class="flex items-center gap-2">
-	<span class="w-3 font-bold {colorClass}">{label}</span>
-	<select
-		class="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-		aria-label={`${label} ${t('cog.asset')}`}
-		value={value.assetKey}
-		onchange={(e) => setAsset((e.target as HTMLSelectElement).value)}
-	>
-		{#if allowNone}
-			<option value="">{t('map.multiCogChannelNone')}</option>
-		{/if}
-		{#each assets as a (a.key)}
-			<option value={a.key}>{assetLabel(a)}</option>
-		{/each}
-	</select>
-	{#if currentAsset && bandCount > 1}
+<div class="flex items-start gap-2">
+	<span class="mt-1 w-3 shrink-0 font-bold {colorClass}">{label}</span>
+	<div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center">
 		<select
-			class="min-w-24 rounded border border-border bg-background px-1.5 py-0.5 text-xs"
-			aria-label={`${label} ${t('cog.band')}`}
-			value={value.bandIndex}
-			onchange={(e) => setBand(Number((e.target as HTMLSelectElement).value))}
+			class="min-w-0 flex-1 truncate rounded border border-border bg-background px-1.5 py-0.5 text-xs"
+			aria-label={`${label} ${t('cog.asset')}`}
+			value={value.assetKey}
+			onchange={(e) => setAsset((e.target as HTMLSelectElement).value)}
 		>
-			{#each bandIndices as i (i)}
-				<option value={i}>{bandLabel(i, currentAsset)}</option>
+			{#if allowNone}
+				<option value="">{t('map.multiCogChannelNone')}</option>
+			{/if}
+			{#each assets as a (a.key)}
+				<option value={a.key}>{assetLabel(a)}</option>
 			{/each}
 		</select>
-	{:else if currentAsset}
-		<span class="min-w-24 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-			{t('cog.band')} 1
-		</span>
-	{/if}
+		{#if currentAsset && bandCount > 1}
+			<select
+				class="min-w-0 flex-1 truncate rounded border border-border bg-background px-1.5 py-0.5 text-xs sm:flex-[0_1_auto] sm:min-w-24"
+				aria-label={`${label} ${t('cog.band')}`}
+				value={value.bandIndex}
+				onchange={(e) => setBand(Number((e.target as HTMLSelectElement).value))}
+			>
+				{#each bandIndices as i (i)}
+					<option value={i}>{bandLabel(i, currentAsset)}</option>
+				{/each}
+			</select>
+		{:else if currentAsset}
+			<span class="min-w-0 truncate px-1.5 py-0.5 text-[10px] text-muted-foreground sm:min-w-24">
+				{t('cog.band')} 1
+			</span>
+		{/if}
+	</div>
 </div>
