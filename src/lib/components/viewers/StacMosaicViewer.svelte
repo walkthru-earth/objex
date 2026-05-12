@@ -31,16 +31,20 @@ import {
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
+	DEFAULT_NODATA_CONFIG,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
 	mapResolutionMetersPerPixel,
+	type NodataConfig,
 	normalizeCogGeotiff,
 	type PixelValue,
 	percentileFromHistogram,
 	type RescaleConfig,
+	readGdalNodata,
 	readPixelAtLngLat,
+	resolveNodata,
 	resolveProj4Def,
 	selectCogPipeline,
 	selectOverviewForResolution
@@ -111,6 +115,11 @@ let probedBandCount = false;
 // viewport rebakes; `userTouchedRescale` gates the auto-contrast reseed.
 let multiHistogramKey: string | null = null;
 let userTouchedRescale = false;
+// User-facing nodata override (Auto/Value/Off). `autoNodata` is the GDAL_NODATA
+// value read from the first probed source's geotiff; Auto mode resolves to it
+// via `resolveNodata()` at layer-build time.
+let nodataConfig = $state<NodataConfig>({ ...DEFAULT_NODATA_CONFIG });
+let autoNodata = $state<number | null>(null);
 // ─── Asset picker (mosaic uses ONE COG per item) ──────────────────
 // `availableAssets` is seeded from the first item that arrives so the user
 // can pick which STAC asset (`visual` / `red` / `nir` / ...) drives the
@@ -500,6 +509,9 @@ const mosaicLayer = $derived.by(() => {
 				const bps = geotiff.cachedTags.bitsPerSample?.[0] ?? 8;
 				detectedBandCount = count;
 				detectedDataType = buildDataTypeLabel(sf, bps);
+				// Surface GDAL_NODATA so the CogControls Auto pill / shader filter
+				// has a real number before the multi-asset histogram bake fires.
+				autoNodata = readGdalNodata(geotiff);
 				// Catalogs without `eo:bands` / `raster:bands` / `properties.bands`
 				// (e.g. tge-labs/aef: one `data` asset, 64-band Int8 cube) seed
 				// `cogAssets` with `bandCount: 1, bandCountKnown: false`, which
@@ -602,6 +614,7 @@ const multiCogLayers = $derived.by(() => {
 	const out: MultiCOGLayer[] = [];
 	const rs = { ...rescale };
 	const gen = pipelineGen;
+	const resolvedNodata = resolveNodata(nodataConfig, autoNodata);
 	// Hoisted: same value for every per-item layer in this derive run. Embedded
 	// in every layer id so band/asset swaps remount the layer (see
 	// `compositeSignature` doc comment above).
@@ -636,7 +649,7 @@ const multiCogLayers = $derived.by(() => {
 			sources,
 			composite: { r: c.r.assetKey, g: c.g.assetKey, b: c.b.assetKey },
 			renderPipeline: buildBandRenderPipeline({
-				noDataVal: 0,
+				noDataVal: resolvedNodata,
 				rescale: rs
 			}),
 			pool: pool ?? undefined,
@@ -836,6 +849,8 @@ function resetViewer(): void {
 	histogram = null;
 	multiHistogramKey = null;
 	userTouchedRescale = false;
+	nodataConfig = { ...DEFAULT_NODATA_CONFIG };
+	autoNodata = null;
 	rescale = { ...DEFAULT_RESCALE };
 	hasFittedOnce = false;
 	showControls = false;
@@ -1990,6 +2005,12 @@ onDestroy(cleanup);
 				rescaleApplicable={!!bandConfig}
 				onRescaleChange={handleRescaleChange}
 				{histogram}
+				nodata={nodataConfig}
+				{autoNodata}
+				onNodataChange={(next) => {
+					nodataConfig = next;
+					bumpPipeline();
+				}}
 			/>
 		{/if}
 

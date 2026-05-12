@@ -268,6 +268,13 @@ export function nodataModule(nodata: number | null, sampleScale = 1): RasterModu
 	};
 }
 
+/** Resolve a tri-state `NodataConfig` against the auto-detected GDAL_NODATA value. */
+export function resolveNodata(cfg: NodataConfig, autoNodata: number | null): number | null {
+	if (cfg.mode === 'off') return null;
+	if (cfg.mode === 'value') return cfg.value ?? null;
+	return autoNodata;
+}
+
 // ─── Linear rescale (GPU shader module, default pipeline only) ───
 
 /**

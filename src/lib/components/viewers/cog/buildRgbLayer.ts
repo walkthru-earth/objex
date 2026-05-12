@@ -65,6 +65,12 @@ export interface BuildRgbLayerOptions {
 	 *     natural-color preset wants the default band order.
 	 */
 	preflightGeotiff?: GeoTIFFType | null;
+	/**
+	 * Resolved nodata value threaded into `buildBandRenderPipeline` for the
+	 * multi-asset `MultiCOGLayer` path. `null` (default) disables the nodata
+	 * filter so legacy callers preserve their previous behaviour.
+	 */
+	noDataVal?: number | null;
 }
 
 export interface BuiltRgbLayer {
@@ -207,7 +213,10 @@ export async function buildRgbLayer(opts: BuildRgbLayerOptions): Promise<BuiltRg
 		id: opts.id,
 		sources,
 		composite: compositeSpec,
-		renderPipeline: buildBandRenderPipeline({ noDataVal: 0, rescale: { ...opts.rescale } }),
+		renderPipeline: buildBandRenderPipeline({
+			noDataVal: opts.noDataVal ?? null,
+			rescale: { ...opts.rescale }
+		}),
 		pool: opts.pool ?? undefined,
 		epsgResolver: opts.epsgResolver,
 		signal: opts.signal,
