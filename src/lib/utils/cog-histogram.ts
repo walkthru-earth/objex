@@ -19,6 +19,12 @@
  */
 
 import type { GeoTIFF as GeoTIFFType, Overview } from '@developmentseed/geotiff';
+import {
+	buildHistogramFromGeotiff,
+	defaultRescaleForGeotiff,
+	percentileFromHistogram,
+	type RescaleConfig
+} from './cog.js';
 
 /** Number of histogram buckets. PR #3 bumps from 64 to 128. */
 export const HISTOGRAM_BINS = 128;
@@ -406,4 +412,75 @@ async function streamTwoPass(ctx: StreamCtx): Promise<void> {
 			tilesTotal: total
 		});
 	}
+}
+
+/** Options for {@link seedRescaleFromGeotiff}. */
+export type SeedRescaleOptions = {
+	signal?: AbortSignal;
+	/** 1-based band index. Defaults to 1. */
+	bandIndex?: number;
+};
+
+/**
+ * Seed a {@link RescaleConfig} for a freshly opened COG in the same
+ * normalized shader-space [0, 1] coordinate system the rescale slider
+ * operates on. The GPU's hardware normalization (`r8unorm` / `r16unorm`)
+ * and the `Colormap` CPU baker both divide raw integer samples by the
+ * format's max (255 for uint8, 65535 for uint16) before sampling, and
+ * `CogControls`'s `setRescaleMin/Max` clamps the slider via `clamp01`.
+ * Storing raw GeoTIFF stats (e.g. `{min: 0, max: 10000}` for uint16
+ * reflectance) here would snap back to `{0, 1}` on the user's first
+ * slider touch.
+ *
+ * Fallback chain:
+ *   1. GDAL `STATISTICS_MINIMUM` / `STATISTICS_MAXIMUM` for the band,
+ *      normalized to shader space by dividing by the sample-format
+ *      factor (255 for uint8, 65535 for uint ≥ 8 bps). Float bands are
+ *      passed through unchanged because they already live near [0, 1].
+ *   2. `buildHistogramFromGeotiff` + p2 / p98 percentile lookup so a
+ *      uint16 reflectance band with no STATISTICS tag still gets a
+ *      contrasted preview from the first tile of the smallest overview.
+ *   3. {@link defaultRescaleForGeotiff} bit-depth-aware constants.
+ */
+export async function seedRescaleFromGeotiff(
+	geotiff: GeoTIFFType,
+	options?: SeedRescaleOptions
+): Promise<RescaleConfig> {
+	const signal = options?.signal;
+	const bandIndex = options?.bandIndex ?? 1;
+
+	// 1) GDAL_METADATA STATISTICS_MIN/MAX, normalize raw values into shader [0, 1].
+	const stats = readGdalStats(geotiff).get(bandIndex);
+	if (stats && Number.isFinite(stats.min) && Number.isFinite(stats.max) && stats.min < stats.max) {
+		const tags = geotiff.cachedTags;
+		const sampleFormat = tags.sampleFormat?.[0] ?? 1;
+		const bps = tags.bitsPerSample?.[0] ?? 8;
+		// Float bands already live in [0, 1]-ish space; integer bands need to
+		// be divided by their format max so the slider operates on shader-space.
+		const norm = sampleFormat === 1 ? (bps <= 8 ? 255 : 65535) : 1;
+		const min = stats.min / norm;
+		const max = stats.max / norm;
+		if (Number.isFinite(min) && Number.isFinite(max) && min < max) {
+			return { min, max };
+		}
+	}
+	if (signal?.aborted) return defaultRescaleForGeotiff(geotiff);
+
+	// 2) p2 / p98 from a single-tile shader-space histogram.
+	try {
+		const bins = await buildHistogramFromGeotiff(geotiff, signal);
+		if (signal?.aborted) return defaultRescaleForGeotiff(geotiff);
+		if (bins) {
+			const p2 = percentileFromHistogram(bins, 0.02);
+			const p98 = percentileFromHistogram(bins, 0.98);
+			if (p2 !== null && p98 !== null && p2 < p98) {
+				return { min: p2, max: p98 };
+			}
+		}
+	} catch {
+		// Fall through to defaults.
+	}
+
+	// 3) Bit-depth-aware defaults.
+	return defaultRescaleForGeotiff(geotiff);
 }
