@@ -483,8 +483,11 @@ export function selectCogPipeline(
 		: needsCustomPipeline(geotiff);
 
 	if (useCustom && bandConfig) {
+		// Note: callers that want identity-stable getTileData across config
+		// swaps should call `createConfigurableGetTileData` directly and reuse
+		// the loader, rather than re-running selectCogPipeline.
 		return {
-			getTileData: createConfigurableGetTileData(geotiff, bandConfig),
+			getTileData: createConfigurableGetTileData(geotiff, bandConfig).getTileData,
 			renderTile: buildCustomRenderTile(bandConfig, rescale)
 		};
 	}
@@ -1174,31 +1177,54 @@ function computeBandRanges(
 }
 
 /**
+ * Stable getTileData factory tied to a GeoTIFF identity. Returns a wrapper with
+ * a frozen `getTileData` reference and an `updateConfig` mutator. Identity must
+ * stay stable so deck.gl's TileLayer cache (keyed in part by function identity)
+ * is preserved across band/ramp swaps.
+ */
+export interface ConfigurableTileLoader {
+	getTileData: (
+		image: GeoTIFFType | Overview,
+		options: { x: number; y: number; pool: unknown; signal?: AbortSignal; device: Device }
+	) => Promise<CustomTileData>;
+	updateConfig: (next: BandConfig) => void;
+}
+
+/**
  * Create a configurable getTileData that respects BandConfig.
  * Supports RGB mode (multi-band → R,G,B with alpha=255, fully baked) and
  * single-band mode (band N normalized into the `r` channel; the ramp is
  * applied downstream by the GPU `Colormap` module via `buildCustomRenderTile`).
+ *
+ * The returned `getTileData` reference is stable across `updateConfig` calls.
+ * deck.gl's TileLayer treats a changed `getTileData` identity as a cache
+ * invalidation, so reusing this loader across band/ramp swaps preserves tiles.
  */
 export function createConfigurableGetTileData(
 	geotiff: GeoTIFFType,
 	config: BandConfig,
 	_opts: CustomGetTileDataOptions = {}
-) {
+): ConfigurableTileLoader {
 	const bandCount = geotiff.count;
 
-	// Shared per-band ranges across tiles (seeded on first tile, widened by subsequent)
-	const sharedMins = new Map<number, number>();
-	const sharedMaxs = new Map<number, number>();
+	// Mutable refs read on every tile bake. Mutating in place keeps the closure
+	// — and therefore the function reference — stable across config swaps.
+	const refs = {
+		config,
+		// Shared per-band ranges across tiles (seeded on first tile, widened by subsequent)
+		sharedMins: new Map<number, number>(),
+		sharedMaxs: new Map<number, number>(),
+		// Resolve the sprite texture from the first tile's device; reuse per-device.
+		texturePromise: null as Promise<Texture> | null
+	};
 
-	// Resolve the sprite texture from the first tile's device; reuse per-device.
-	let texturePromise: Promise<Texture> | null = null;
-
-	return async (
+	const getTileData = async (
 		image: GeoTIFFType | Overview,
 		options: { x: number; y: number; pool: unknown; signal?: AbortSignal; device: Device }
 	): Promise<CustomTileData> => {
-		if (config.mode === 'single' && !texturePromise) {
-			texturePromise = getColormapTexture(options.device);
+		const currentConfig = refs.config;
+		if (currentConfig.mode === 'single' && !refs.texturePromise) {
+			refs.texturePromise = getColormapTexture(options.device);
 		}
 
 		const [tile, colormapTexture] = await Promise.all([
@@ -1208,7 +1234,7 @@ export function createConfigurableGetTileData(
 				pool: options.pool as any,
 				signal: options.signal
 			}),
-			texturePromise ?? Promise.resolve<Texture | undefined>(undefined)
+			refs.texturePromise ?? Promise.resolve<Texture | undefined>(undefined)
 		]);
 
 		const arr = tile.array;
@@ -1222,29 +1248,29 @@ export function createConfigurableGetTileData(
 		// object. Cloud-native by construction: at each zoom level, COG only
 		// decodes the overview tiles that cover the viewport, so the summed
 		// histogram naturally reflects "what the user is looking at right now".
-		const histogram = config.mode === 'single' ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
+		const histogram = currentConfig.mode === 'single' ? new Uint32Array(HISTOGRAM_BIN_COUNT) : null;
 
-		if (config.mode === 'rgb') {
+		if (currentConfig.mode === 'rgb') {
 			// RGB mode: map 3 bands to R, G, B
-			const indices = [config.rBand, config.gBand, config.bBand];
+			const indices = [currentConfig.rBand, currentConfig.gBand, currentConfig.bBand];
 			// Compute ranges for the 3 selected bands
 			for (const bi of indices) {
-				if (!sharedMins.has(bi)) {
+				if (!refs.sharedMins.has(bi)) {
 					const { mins, maxs } = computeBandRanges(bands, [bi], pixelCount, nodata);
-					sharedMins.set(bi, mins[0]);
-					sharedMaxs.set(bi, maxs[0]);
+					refs.sharedMins.set(bi, mins[0]);
+					refs.sharedMaxs.set(bi, maxs[0]);
 				}
 			}
 
-			const rBand = bands[config.rBand];
-			const gBand = bands[config.gBand];
-			const bBand = bands[config.bBand];
-			const rMin = sharedMins.get(config.rBand)!;
-			const rMax = sharedMaxs.get(config.rBand)!;
-			const gMin = sharedMins.get(config.gBand)!;
-			const gMax = sharedMaxs.get(config.gBand)!;
-			const bMin = sharedMins.get(config.bBand)!;
-			const bMax = sharedMaxs.get(config.bBand)!;
+			const rBand = bands[currentConfig.rBand];
+			const gBand = bands[currentConfig.gBand];
+			const bBand = bands[currentConfig.bBand];
+			const rMin = refs.sharedMins.get(currentConfig.rBand)!;
+			const rMax = refs.sharedMaxs.get(currentConfig.rBand)!;
+			const gMin = refs.sharedMins.get(currentConfig.gBand)!;
+			const gMax = refs.sharedMaxs.get(currentConfig.gBand)!;
+			const bMin = refs.sharedMins.get(currentConfig.bBand)!;
+			const bMax = refs.sharedMaxs.get(currentConfig.bBand)!;
 			const rRange = rMax - rMin || 1;
 			const gRange = gMax - gMin || 1;
 			const bRange = bMax - bMin || 1;
@@ -1273,15 +1299,15 @@ export function createConfigurableGetTileData(
 			// Single-band mode: normalize the selected band into the `r`
 			// channel and reserve `r = 0` as a nodata sentinel that
 			// `FilterNoDataVal` discards before the `Colormap` GPU lookup.
-			const bi = config.band;
+			const bi = currentConfig.band;
 			const bandData = bands[bi];
-			if (!sharedMins.has(bi) && bandData) {
+			if (!refs.sharedMins.has(bi) && bandData) {
 				const { mins, maxs } = computeBandRanges(bands, [bi], pixelCount, nodata);
-				sharedMins.set(bi, mins[0]);
-				sharedMaxs.set(bi, maxs[0]);
+				refs.sharedMins.set(bi, mins[0]);
+				refs.sharedMaxs.set(bi, maxs[0]);
 			}
-			const rangeMin = sharedMins.get(bi) ?? 0;
-			const rangeMax = sharedMaxs.get(bi) ?? 1;
+			const rangeMin = refs.sharedMins.get(bi) ?? 0;
+			const rangeMax = refs.sharedMaxs.get(bi) ?? 1;
 			const range = rangeMax - rangeMin || 1;
 
 			for (let i = 0; i < pixelCount; i++) {
@@ -1311,10 +1337,30 @@ export function createConfigurableGetTileData(
 			imageData: new ImageData(rgba, width, height),
 			width,
 			height,
-			colormapTexture: config.mode === 'single' ? colormapTexture : undefined,
-			nodataSentinel: config.mode === 'single' ? 0 : undefined,
+			colormapTexture: currentConfig.mode === 'single' ? colormapTexture : undefined,
+			nodataSentinel: currentConfig.mode === 'single' ? 0 : undefined,
 			histogram: histogram ?? undefined
 		};
+	};
+
+	return {
+		getTileData,
+		updateConfig(next: BandConfig) {
+			// Mode/band swap implies different per-band ranges; clear so the next
+			// tile reseeds them. The function identity itself is preserved.
+			const prev = refs.config;
+			refs.config = next;
+			const bandsChanged =
+				prev.mode !== next.mode ||
+				(prev.mode === 'rgb' &&
+					next.mode === 'rgb' &&
+					(prev.rBand !== next.rBand || prev.gBand !== next.gBand || prev.bBand !== next.bBand)) ||
+				(prev.mode === 'single' && next.mode === 'single' && prev.band !== next.band);
+			if (bandsChanged) {
+				refs.sharedMins.clear();
+				refs.sharedMaxs.clear();
+			}
+		}
 	};
 }
 

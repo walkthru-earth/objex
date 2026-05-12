@@ -9,11 +9,14 @@ import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
 import {
 	type BandConfig,
+	buildCustomRenderTile,
 	buildDataTypeLabel,
 	type CogInfo,
+	type ConfigurableTileLoader,
 	type CustomTileData,
 	clampBounds,
 	cleanupNativeBitmap,
+	createConfigurableGetTileData,
 	createEpsgResolver,
 	DEFAULT_RESCALE,
 	defaultBandConfig,
@@ -100,6 +103,10 @@ let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let geotiffRef: GeoTIFF | null = null;
+// Identity-stable tile loader for the configurable CPU path. Lives for the
+// duration of the current GeoTIFF identity, so deck.gl's TileLayer cache
+// survives band/ramp swaps (a fresh getTileData reference would invalidate it).
+let tileLoaderRef: ConfigurableTileLoader | null = null;
 let proj4DefRef: string | null = null;
 let sampleFormatRef = 1;
 let isTiledRef = true;
@@ -154,6 +161,7 @@ $effect(() => {
 		}
 		overlayRef = null;
 		geotiffRef = null;
+		tileLoaderRef = null;
 		proj4DefRef = null;
 		resolvedHttpsUrl = null;
 		resolvedHrefForControls = null;
@@ -331,16 +339,39 @@ async function loadCog(map: maplibregl.Map) {
 
 // ─── Build & add COGLayer ────────────────────────────────────────
 
-function buildAndAddLayer(
+// Build the pipeline props (getTileData/renderTile/etc) for the current state.
+// When the configurable CPU path applies, the tile loader is created once per
+// GeoTIFF identity and its `getTileData` reference is reused across rebuilds so
+// deck.gl's TileLayer cache survives band/ramp swaps. Only `renderTile` and
+// downstream uniforms vary across style changes.
+function buildPipelineProps(geotiff: GeoTIFF | undefined): Record<string, unknown> {
+	if (!geotiff || !bandConfig) {
+		return geotiff ? selectCogPipeline(geotiff, { bandConfig, rescale }) : {};
+	}
+	if (needsCustomPipelineForConfig(geotiff, bandConfig)) {
+		if (!tileLoaderRef) {
+			tileLoaderRef = createConfigurableGetTileData(geotiff, bandConfig);
+		} else {
+			tileLoaderRef.updateConfig(bandConfig);
+		}
+		return {
+			getTileData: tileLoaderRef.getTileData,
+			renderTile: buildCustomRenderTile(bandConfig, rescale)
+		};
+	}
+	// Library-default or rescaled-only path. The loader (if previously seeded)
+	// is harmless to keep, but the upcoming rebuild won't reference it.
+	return selectCogPipeline(geotiff, { bandConfig, rescale });
+}
+
+function buildCogLayer(
 	map: maplibregl.Map,
 	preflightGeotiff: GeoTIFF | undefined,
 	signal: AbortSignal
-) {
+): COGLayer {
 	// Pick the library-default or one of three custom pipelines. Empty when the
 	// library-default uint path runs unchanged.
-	const customProps = preflightGeotiff
-		? selectCogPipeline(preflightGeotiff, { bandConfig, rescale })
-		: {};
+	const customProps = buildPipelineProps(preflightGeotiff);
 
 	// Apply upstream-bug workarounds in place (overview filter, 4326 bbox clamp).
 	if (preflightGeotiff) normalizeCogGeotiff(preflightGeotiff);
@@ -415,7 +446,18 @@ function buildAndAddLayer(
 			loading = false;
 		}
 	};
-	const layer = new COGLayer(cogProps);
+	return new COGLayer(cogProps);
+}
+
+// First-mount: create the MapboxOverlay once and attach via addControl.
+// Subsequent style changes go through pushLayer() which only calls setProps,
+// preserving deck.gl's WebGL context and tile cache.
+function buildAndAddLayer(
+	map: maplibregl.Map,
+	preflightGeotiff: GeoTIFF | undefined,
+	signal: AbortSignal
+) {
+	const layer = buildCogLayer(map, preflightGeotiff, signal);
 
 	const overlay = new MapboxOverlay({
 		interleaved: false,
@@ -430,6 +472,15 @@ function buildAndAddLayer(
 	});
 	overlayRef = overlay;
 	map.addControl(overlay as unknown as maplibregl.IControl);
+}
+
+// Style-change update path: swap layers in place via setProps. Identity of the
+// COGLayer's `id` and `getTileData` is preserved so deck.gl reconciles the
+// existing layer instance and keeps its tile cache.
+function pushLayer() {
+	if (!mapRef || !geotiffRef || !overlayRef) return;
+	const layer = buildCogLayer(mapRef, geotiffRef, abortController.signal);
+	overlayRef.setProps({ layers: [layer] });
 }
 
 // ─── Viewport-scoped histogram aggregation ───────────────────────
@@ -482,35 +533,16 @@ function handleConfigChange(newConfig: BandConfig) {
 	histogramTick = 0;
 	if (!mapRef || !geotiffRef || !isTiledRef) return;
 
-	// Remove old overlay
-	if (overlayRef) {
-		try {
-			mapRef.removeControl(overlayRef as unknown as maplibregl.IControl);
-		} catch {
-			/* already removed */
-		}
-		overlayRef = null;
-	}
-
-	// Rebuild with new config
-	buildAndAddLayer(mapRef, geotiffRef, abortController.signal);
+	// Swap layers in place: deck.gl diffs on layer id and reuses the stable
+	// `getTileData` reference held by `tileLoaderRef`, so the tile cache and
+	// in-flight fetches survive band/style changes.
+	pushLayer();
 }
 
 function handleRescaleChange(next: RescaleConfig) {
 	rescale = next;
 	if (!mapRef || !geotiffRef || !isTiledRef) return;
-
-	// Remove old overlay and rebuild. deck.gl diffs on layer id, so reusing the
-	// stable per-tab id keeps tile cache state where possible.
-	if (overlayRef) {
-		try {
-			mapRef.removeControl(overlayRef as unknown as maplibregl.IControl);
-		} catch {
-			/* already removed */
-		}
-		overlayRef = null;
-	}
-	buildAndAddLayer(mapRef, geotiffRef, abortController.signal);
+	pushLayer();
 }
 
 // ─── Unified picker change handlers ──────────────────────────────
@@ -554,6 +586,7 @@ function cleanup() {
 	mapRef = null;
 	overlayRef = null;
 	geotiffRef = null;
+	tileLoaderRef = null;
 	proj4DefRef = null;
 	pixelValue = null;
 	resolvedHttpsUrl = null;
@@ -643,25 +676,28 @@ onDestroy(cleanup);
 			</button>
 		</div>
 
-		<!-- Band/Color controls panel -->
-		{#if showControls && bandConfig}
-			<CogControls
-				assets={cogControlsAssets}
-				composite={cogControlsComposite}
-				onCompositeChange={handleCompositeChange}
-				presets={[]}
-				activePresetId=""
-				onPresetChange={() => {}}
-				mode={bandConfig?.mode ?? 'rgb'}
-				onModeChange={handleModeChange}
-				{bandConfig}
-				bandCount={probedBandCount ?? cogInfo.bandCount}
-				onBandConfigChange={handleBandConfigChange}
-				{rescale}
-				rescaleApplicable={rescaleApplicable}
-				onRescaleChange={handleRescaleChange}
-				{histogram}
-			/>
+		<!-- Band/Color controls panel. Kept mounted so slider drag state and focus
+		     survive every visibility toggle; only the `hidden` class is flipped. -->
+		{#if bandConfig}
+			<div class={showControls ? 'contents' : 'hidden'}>
+				<CogControls
+					assets={cogControlsAssets}
+					composite={cogControlsComposite}
+					onCompositeChange={handleCompositeChange}
+					presets={[]}
+					activePresetId=""
+					onPresetChange={() => {}}
+					mode={bandConfig?.mode ?? 'rgb'}
+					onModeChange={handleModeChange}
+					{bandConfig}
+					bandCount={probedBandCount ?? cogInfo.bandCount}
+					onBandConfigChange={handleBandConfigChange}
+					{rescale}
+					rescaleApplicable={rescaleApplicable}
+					onRescaleChange={handleRescaleChange}
+					{histogram}
+				/>
+			</div>
 		{/if}
 
 		<!-- Info panel -->
