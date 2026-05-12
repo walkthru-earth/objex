@@ -22,14 +22,18 @@ import {
 	clampBounds,
 	cleanupNativeBitmap,
 	createEpsgResolver,
+	DEFAULT_NODATA_CONFIG,
 	defaultRescaleForGeotiff,
 	fitCogBounds,
 	mapResolutionMetersPerPixel,
+	type NodataConfig,
 	normalizeCogGeotiff,
 	type PixelValue,
 	percentileFromHistogram,
 	type RescaleConfig,
+	readGdalNodata,
 	readPixelAtLngLat,
+	resolveNodata,
 	resolveProj4Def,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
@@ -74,6 +78,11 @@ let userTouchedRescale = false;
 // user an accurate distribution to scrub against.
 let histogram = $state.raw<Uint32Array | null>(null);
 let histogramAssetKey: string | null = null;
+// User-facing nodata override (Auto/Value/Off). `autoNodata` is the GDAL_NODATA
+// value read from the R-channel preflight; Auto mode resolves to it via
+// `resolveNodata()` at layer-build time.
+let nodataConfig = $state<NodataConfig>({ ...DEFAULT_NODATA_CONFIG });
+let autoNodata = $state<number | null>(null);
 
 let assets = $state.raw<CogAsset[]>([]);
 let composite = $state.raw<ChannelComposite | null>(null);
@@ -160,6 +169,8 @@ function resetViewer(): void {
 	userTouchedRescale = false;
 	histogram = null;
 	histogramAssetKey = null;
+	nodataConfig = { ...DEFAULT_NODATA_CONFIG };
+	autoNodata = null;
 	hasFittedOnce = false;
 	showControls = false;
 	pixelValue = null;
@@ -474,6 +485,13 @@ async function buildAndAddLayer(
 		}
 	}
 
+	// Surface GDAL_NODATA from the R-channel preflight so the CogControls nodata
+	// hint pill and the `Auto` resolved value have a real number to show before
+	// the first tile decodes.
+	if (preflightGeotiff) {
+		autoNodata = readGdalNodata(preflightGeotiff);
+	}
+
 	// Bake the histogram once per R-channel asset. Cheap (one overview tile),
 	// and gives CogControls a real distribution to overlay behind the slider.
 	// When the user hasn't touched the slider, also reseed rescale to the
@@ -519,6 +537,7 @@ async function buildAndAddLayer(
 	// doesn't try to translate per-channel bandIndex on a path that can't honor it.
 	const preflightForLayer = isSingleAssetComposite(c) ? preflightGeotiff : null;
 
+	const resolvedNodata = resolveNodata(nodataConfig, autoNodata);
 	const { layer, kind } = await buildRgbLayer({
 		id: `multicog-${tab.id}-v${version}`,
 		assets,
@@ -529,6 +548,7 @@ async function buildAndAddLayer(
 		epsgResolver,
 		signal,
 		preflightGeotiff: preflightForLayer,
+		noDataVal: resolvedNodata,
 		onLoad: ({ bounds: nextBounds }) => {
 			if (version !== layerVersion || signal.aborted) return;
 			if (nextBounds) {
@@ -734,6 +754,12 @@ onDestroy(cleanup);
 				onRescaleChange={handleRescaleChange}
 				showAlpha={assets.length >= 4}
 				{histogram}
+				nodata={nodataConfig}
+				{autoNodata}
+				onNodataChange={(next) => {
+					nodataConfig = next;
+					if (mapRef) scheduleLayerRebuild(mapRef, abortController.signal);
+				}}
 			/>
 		{/if}
 	{/if}
