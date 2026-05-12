@@ -545,8 +545,8 @@ export const ar: Record<string, string> = {
 	'cog.colorRampSearch': 'بحث في التدرجات…',
 	'cog.pixelValue': 'قيمة البكسل',
 	'cog.reading': 'قراءة البكسل...',
-	'cog.rescale': 'إعادة القياس',
-	'cog.rescaleReset': 'إعادة تعيين',
+	'cog.rescale.label': 'إعادة القياس',
+	'cog.rescale.reset': 'إعادة تعيين',
 
 	// PMTiles Viewer
 	'pmtiles.mapView': 'خريطة',

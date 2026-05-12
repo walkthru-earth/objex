@@ -138,8 +138,34 @@ function fmtRescale(n: number): string {
 	return n.toFixed(2);
 }
 
-const histogramBars = $derived.by(() => {
+// B4: Track viewport width to downsample the histogram on narrow phones.
+// We only flip when crossing the `sm` breakpoint (640px) so the $derived
+// below only re-runs on rotate/resize-across-threshold, not on every px.
+let narrowViewport = $state(false);
+
+$effect(() => {
+	if (typeof window === 'undefined') return;
+	const compute = () => {
+		narrowViewport = window.innerWidth < 640;
+	};
+	compute();
+	window.addEventListener('resize', compute);
+	return () => window.removeEventListener('resize', compute);
+});
+
+// Fold 128-bin histogram down to 64 on narrow viewports so each bar gets
+// at least ~2px of width inside the slimmed-down panel.
+const effectiveHistogram = $derived.by<Uint32Array | null | undefined>(() => {
 	const h = props.histogram;
+	if (!h) return h;
+	if (!narrowViewport || h.length !== 128) return h;
+	const out = new Uint32Array(64);
+	for (let i = 0; i < 64; i++) out[i] = h[2 * i] + h[2 * i + 1];
+	return out;
+});
+
+const histogramBars = $derived.by(() => {
+	const h = effectiveHistogram;
 	if (!h || h.length === 0) return null;
 	let max = 0;
 	for (const v of h) if (v > max) max = v;
@@ -149,7 +175,7 @@ const histogramBars = $derived.by(() => {
 </script>
 
 <div
-	class="absolute right-2 top-10 z-10 w-72 rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm"
+	class="absolute right-2 top-10 z-10 w-[min(18rem,calc(100vw-1rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded bg-card/90 p-2.5 text-xs text-card-foreground backdrop-blur-sm sm:w-72"
 >
 	{#if props.presets.length > 0 && props.mode === 'rgb'}
 		<div class="mb-2 flex items-center gap-2">
@@ -172,7 +198,7 @@ const histogramBars = $derived.by(() => {
 	{#if props.bandConfig && props.onBandConfigChange}
 		<div class="mb-2 flex gap-1">
 			<button
-				class="flex-1 rounded px-2 py-1 transition-colors"
+				class="flex-1 rounded px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
 				class:bg-primary={props.mode === 'rgb'}
 				class:text-primary-foreground={props.mode === 'rgb'}
 				class:bg-muted={props.mode !== 'rgb'}
@@ -181,7 +207,7 @@ const histogramBars = $derived.by(() => {
 				RGB
 			</button>
 			<button
-				class="flex-1 rounded px-2 py-1 transition-colors"
+				class="flex-1 rounded px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
 				class:bg-primary={props.mode === 'single'}
 				class:text-primary-foreground={props.mode === 'single'}
 				class:bg-muted={props.mode !== 'single'}
@@ -294,12 +320,12 @@ const histogramBars = $derived.by(() => {
 	{#if props.rescaleApplicable}
 		<div class="mt-2 space-y-1 border-t border-border pt-2">
 			<div class="flex items-center justify-between">
-				<span class="text-muted-foreground">{t('cog.rescale')}</span>
+				<span class="text-muted-foreground">{t('cog.rescale.label')}</span>
 				<button
-					class="text-[10px] text-muted-foreground hover:text-card-foreground"
+					class="rounded text-[10px] text-muted-foreground hover:text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
 					onclick={resetRescale}
 				>
-					{t('cog.rescaleReset')}
+					{t('cog.rescale.reset')}
 				</button>
 			</div>
 
@@ -318,10 +344,11 @@ const histogramBars = $derived.by(() => {
 					<span class="w-6">min</span>
 					<input
 						type="number"
+						inputmode="decimal"
 						min="0"
 						max="1"
 						step="0.01"
-						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+						class="min-h-11 w-full rounded border border-border bg-background px-2 py-1.5 text-sm tabular-nums sm:min-h-0 sm:px-1 sm:py-0.5 sm:text-[11px]"
 						value={props.rescale.min}
 						oninput={(e) => setRescaleMin(Number((e.target as HTMLInputElement).value))}
 					/>
@@ -330,10 +357,11 @@ const histogramBars = $derived.by(() => {
 					<span class="w-6">max</span>
 					<input
 						type="number"
+						inputmode="decimal"
 						min="0"
 						max="1"
 						step="0.01"
-						class="w-full rounded border border-border bg-background px-1 py-0.5 text-[11px] tabular-nums"
+						class="min-h-11 w-full rounded border border-border bg-background px-2 py-1.5 text-sm tabular-nums sm:min-h-0 sm:px-1 sm:py-0.5 sm:text-[11px]"
 						value={props.rescale.max}
 						oninput={(e) => setRescaleMax(Number((e.target as HTMLInputElement).value))}
 					/>

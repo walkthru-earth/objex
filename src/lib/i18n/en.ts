@@ -547,8 +547,8 @@ export const en: Record<string, string> = {
 	'cog.colorRampSearch': 'Search ramps…',
 	'cog.pixelValue': 'Pixel Value',
 	'cog.reading': 'Reading pixel...',
-	'cog.rescale': 'Rescale',
-	'cog.rescaleReset': 'Reset',
+	'cog.rescale.label': 'Rescale',
+	'cog.rescale.reset': 'Reset',
 
 	// PMTiles Viewer
 	'pmtiles.mapView': 'Map',
