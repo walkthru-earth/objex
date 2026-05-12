@@ -37,41 +37,69 @@ let {
 	onSelect: (id: string | null) => void;
 } = $props();
 
-// Resolved thumbnail URLs, keyed by item id. Loaded lazily on first paint
-// of each card via `loadThumbnail`. We do not pre-fetch every thumbnail
-// because the strip can hold thousands of items and the `<img>` itself
-// already has `loading="lazy"`, so only visible cards trigger network.
-let thumbs = $state<Record<string, string | null>>({});
+// Resolved thumbnail URLs, keyed by item id. Held as a Map in $state.raw
+// so per-resolve writes are O(1) instead of the O(n) object-spread the
+// previous `{...thumbs, [id]: url}` did (which accumulated to O(n²) over a
+// viewport of 1000+ items, per the project's $state.raw rule for large
+// collections). Reactivity is triggered by bumping `thumbsTick`; readers
+// in the template subscribe to that tick + read `thumbs.get(id)`.
+const thumbs = new Map<string, string | null>();
+let thumbsTick = $state(0);
 const inflight = new Set<string>();
+// Mirror of the current `views[].id` set. The .then() handler for each
+// presign checks against this so a presign that settles AFTER its item
+// scrolled out of the viewport does not re-insert a stale entry into
+// `thumbs` (which the cleanup $effect just removed). Mutated by the
+// cleanup effect, read by load handlers.
+let liveIds = new Set<string>();
 
 function loadThumbnail(view: StacItemView): void {
 	if (!view.thumbnailHref) return;
-	if (thumbs[view.id] !== undefined) return;
+	if (thumbs.has(view.id)) return;
 	if (inflight.has(view.id)) return;
 	inflight.add(view.id);
 	presign(view.thumbnailHref)
 		.then((url) => {
-			thumbs = { ...thumbs, [view.id]: url };
+			if (!liveIds.has(view.id)) return;
+			thumbs.set(view.id, url);
+			thumbsTick++;
 		})
 		.catch(() => {
-			thumbs = { ...thumbs, [view.id]: null };
+			if (!liveIds.has(view.id)) return;
+			thumbs.set(view.id, null);
+			thumbsTick++;
 		})
 		.finally(() => {
 			inflight.delete(view.id);
 		});
 }
 
+// Eagerly kick presigning for every view as soon as it appears. `presign`
+// is local crypto (SigV4 query-string sign or HTTPS pass-through), not a
+// network call, so resolving all thumbnails up-front is cheap. Each
+// resulting `<img>` carries `loading="lazy"`, so the actual GET is still
+// deferred to scroll-into-view by the browser. The previous mouseenter /
+// focus trigger never fired on touch devices and required the user to
+// hover every card individually on desktop.
+$effect(() => {
+	for (const view of views) loadThumbnail(view);
+});
+
 // Drop thumbs for items no longer in the views list. Without this, panning
 // across a STAC API would grow `thumbs` forever as the user discovers new
 // regions, and the cache would dominate memory before any other leak.
 $effect(() => {
 	const ids = new Set(views.map((v) => v.id));
+	liveIds = ids;
 	untrack(() => {
-		const stale = Object.keys(thumbs).filter((id) => !ids.has(id));
-		if (stale.length === 0) return;
-		const next = { ...thumbs };
-		for (const id of stale) delete next[id];
-		thumbs = next;
+		let mutated = false;
+		for (const id of thumbs.keys()) {
+			if (!ids.has(id)) {
+				thumbs.delete(id);
+				mutated = true;
+			}
+		}
+		if (mutated) thumbsTick++;
 	});
 });
 
@@ -90,13 +118,30 @@ $effect(() => {
 });
 
 onDestroy(() => {
-	thumbs = {};
+	thumbs.clear();
+	inflight.clear();
+	liveIds = new Set();
 });
 
 function formatItemDate(iso: string | null): string {
 	if (!iso) return '';
 	const t = Date.parse(iso);
 	return Number.isFinite(t) ? formatDate(t) : iso;
+}
+
+/**
+ * Template reader for the thumbs Map. Reading `thumbsTick` first registers
+ * a Svelte reactive dependency on the tick counter, so any tick bump
+ * (resolve / failure / cleanup) re-evaluates this call site without us
+ * having to wrap the entire Map in a reactive Proxy via `$state(Map)`.
+ * Returns the same tri-state the template branches on:
+ *   string → resolved URL, render `<img>`
+ *   null   → presign failed, render "no thumbnail" placeholder
+ *   undefined → still in flight (or has no thumbnailHref), render "loading"
+ */
+function thumbFor(id: string): string | null | undefined {
+	void thumbsTick;
+	return thumbs.get(id);
 }
 </script>
 
@@ -123,6 +168,7 @@ function formatItemDate(iso: string | null): string {
 		onmouseleave={() => onHover(null)}
 	>
 		{#each views as view (view.id)}
+			{@const thumb = thumbFor(view.id)}
 			<button
 				type="button"
 				data-item-id={view.id}
@@ -132,27 +178,28 @@ function formatItemDate(iso: string | null): string {
 				class:border-amber-400={view.id === selectedId}
 				class:ring-1={view.id === selectedId}
 				class:ring-amber-400={view.id === selectedId}
-				onmouseenter={() => {
-					onHover(view.id);
-					loadThumbnail(view);
-				}}
-				onfocus={() => {
-					onHover(view.id);
-					loadThumbnail(view);
-				}}
+				onmouseenter={() => onHover(view.id)}
+				onfocus={() => onHover(view.id)}
 				onclick={() => onSelect(view.id)}
 			>
 				<div class="relative aspect-square w-full bg-muted">
-					{#if thumbs[view.id]}
+					{#if thumb}
 						<img
-							src={thumbs[view.id]}
+							src={thumb}
 							alt=""
 							loading="lazy"
+							decoding="async"
+							fetchpriority="low"
 							class="h-full w-full object-cover"
 							onerror={() => {
-								thumbs = { ...thumbs, [view.id]: null };
+								thumbs.set(view.id, null);
+								thumbsTick++;
 							}}
 						/>
+					{:else if thumb === null}
+						<div class="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">
+							{t('stac.thumbNone')}
+						</div>
 					{:else if view.thumbnailHref}
 						<div class="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">
 							{t('stac.thumbLoading')}
