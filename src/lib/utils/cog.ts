@@ -38,9 +38,19 @@ import {
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
 
 /**
- * Open a `GeoTIFF` from a URL, priming `SourceHttp.metadata.size` via an
- * upfront HEAD before chunked reads start. Replaces `GeoTIFF.fromUrl` which
- * skips the head and can leave size unset (chunkd#1666, stac-map#459).
+ * Open a `GeoTIFF` from a URL, priming `SourceHttp.metadata.size` before
+ * chunked reads start. Replaces `GeoTIFF.fromUrl` which skips the head and
+ * can leave size unset (chunkd#1666, stac-map#459).
+ *
+ * Uses a 1-byte `Range: bytes=0-0` GET instead of `source.head()` because
+ * presigned URLs from `storage/presign.ts` are SigV4-query-string signed
+ * for `GET` only (aws4fetch's `signQuery: true` binds the HTTP method into
+ * the signature, see `presign.ts`). A bare `HEAD` against a `GET`-signed
+ * URL 403s with `SignatureDoesNotMatch` on every S3-compatible backend
+ * (AWS, GCS, R2, MinIO, Wasabi, etc.). The 1-byte GET sets
+ * `metadata.size` via `Content-Range`, which `getMaxLength` in
+ * `@cogeotiff/core/tiff.js` reads to clamp subsequent IFD reads. Public
+ * buckets pay the same trivial round-trip; private buckets actually work.
  */
 export async function loadGeoTIFF(
 	href: string,
@@ -48,7 +58,10 @@ export async function loadGeoTIFF(
 ): Promise<GeoTIFFType> {
 	const { chunkSize = 32 * 1024, cacheSize = 1024 * 1024 } = options;
 	const source = new SourceHttp(href, {});
-	await source.head();
+	// Prime `source.metadata.size` from the `Content-Range` response header.
+	// `SourceHttp.fetch` populates `this.metadata` via `getMetadataFromResponse`
+	// (chunkd/source-http/src/index.ts:91-94) on every successful range read.
+	await source.fetch(0, 1);
 	const chunk = new SourceChunk({ size: chunkSize });
 	const cache = new SourceCache({ size: cacheSize });
 	const view = new SourceView(source, [chunk, cache]);
