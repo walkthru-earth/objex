@@ -36,6 +36,7 @@ import {
 	defaultBandConfig,
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
+	loadGeoTIFF,
 	mapResolutionMetersPerPixel,
 	type NodataConfig,
 	normalizeCogGeotiff,
@@ -486,7 +487,7 @@ const mosaicLayer = $derived.by(() => {
 			if (cached) return cached.catch(() => undefined as unknown as GeoTIFF);
 			const promise = (async () => {
 				const url = await presignHref(source.href);
-				const geotiff = await GeoTIFF.fromUrl(url);
+				const geotiff = await loadGeoTIFF(url);
 				normalizeCogGeotiff(geotiff);
 				return geotiff;
 			})();
@@ -966,7 +967,7 @@ function setupClickHandler(map: maplibregl.Map): void {
 			if (!geotiffPromise) {
 				geotiffPromise = (async () => {
 					const url = await presignHref(hit.href);
-					const g = await GeoTIFF.fromUrl(url);
+					const g = await loadGeoTIFF(url);
 					normalizeCogGeotiff(g);
 					return g;
 				})();
@@ -1700,7 +1701,7 @@ $effect(() => {
 			let promise = geotiffCache.get(rAsset.href);
 			if (!promise) {
 				promise = (async () => {
-					const g = await GeoTIFF.fromUrl(url);
+					const g = await loadGeoTIFF(url);
 					normalizeCogGeotiff(g);
 					return g;
 				})();

@@ -31,6 +31,15 @@ importers:
       '@carbonplan/zarr-layer':
         specifier: ^0.4.3
         version: 0.4.3(patch_hash=c95ffac09b3a4c614ae237f5bcf6facd9941840442660dc5677f81c2e65632ef)(maplibre-gl@5.24.0)
+      '@chunkd/middleware':
+        specifier: ^11.3.0
+        version: 11.3.0
+      '@chunkd/source':
+        specifier: ^11.4.0
+        version: 11.4.0
+      '@chunkd/source-http':
+        specifier: ^11.4.0
+        version: 11.4.0
       '@codemirror/autocomplete':
         specifier: ^6.20.2
         version: 6.20.2

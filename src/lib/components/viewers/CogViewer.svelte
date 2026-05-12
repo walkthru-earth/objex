@@ -24,6 +24,7 @@ import {
 	fitCogBounds,
 	HISTOGRAM_BIN_COUNT,
 	inspectCogTags,
+	loadGeoTIFF,
 	mapResolutionMetersPerPixel,
 	type NodataConfig,
 	needsCustomPipelineForConfig,
@@ -265,7 +266,7 @@ async function loadCog(map: maplibregl.Map) {
 		let isTiled = true;
 		let preflightGeotiff: GeoTIFF | undefined;
 		try {
-			preflightGeotiff = await GeoTIFF.fromUrl(url);
+			preflightGeotiff = await loadGeoTIFF(url);
 			if (signal.aborted) return;
 			isTiled = preflightGeotiff.isTiled;
 

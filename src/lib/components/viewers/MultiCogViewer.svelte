@@ -25,6 +25,7 @@ import {
 	DEFAULT_NODATA_CONFIG,
 	defaultRescaleForGeotiff,
 	fitCogBounds,
+	loadGeoTIFF,
 	mapResolutionMetersPerPixel,
 	type NodataConfig,
 	normalizeCogGeotiff,
@@ -194,7 +195,7 @@ async function ensureGeotiff(assetKey: string): Promise<GeoTIFF | null> {
 	if (!promise) {
 		promise = (async () => {
 			const url = await presignHref(asset.href);
-			const g = await GeoTIFF.fromUrl(url);
+			const g = await loadGeoTIFF(url);
 			normalizeCogGeotiff(g);
 			return g;
 		})();
@@ -454,7 +455,7 @@ async function buildAndAddLayer(
 		if (!promise) {
 			promise = (async () => {
 				const url = await presignHref(rAsset.href);
-				const g = await GeoTIFF.fromUrl(url);
+				const g = await loadGeoTIFF(url);
 				normalizeCogGeotiff(g);
 				return g;
 			})();

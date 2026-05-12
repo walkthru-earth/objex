@@ -1,3 +1,6 @@
+import { SourceCache, SourceChunk } from '@chunkd/middleware';
+import { SourceView } from '@chunkd/source';
+import { SourceHttp } from '@chunkd/source-http';
 import type { GetTileDataOptions, MinimalTileData } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
 import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
@@ -33,6 +36,24 @@ import {
 	safeClamp
 } from './cog-pure.js';
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
+
+/**
+ * Open a `GeoTIFF` from a URL, priming `SourceHttp.metadata.size` via an
+ * upfront HEAD before chunked reads start. Replaces `GeoTIFF.fromUrl` which
+ * skips the head and can leave size unset (chunkd#1666, stac-map#459).
+ */
+export async function loadGeoTIFF(
+	href: string,
+	options: { chunkSize?: number; cacheSize?: number } = {}
+): Promise<GeoTIFFType> {
+	const { chunkSize = 32 * 1024, cacheSize = 1024 * 1024 } = options;
+	const source = new SourceHttp(href, {});
+	await source.head();
+	const chunk = new SourceChunk({ size: chunkSize });
+	const cache = new SourceCache({ size: cacheSize });
+	const view = new SourceView(source, [chunk, cache]);
+	return await GeoTIFF.open({ dataSource: source, headerSource: view });
+}
 
 export {
 	buildDataTypeLabel,
@@ -800,7 +821,7 @@ export async function renderNonTiledBitmap(options: {
 	const { url, map, signal } = options;
 
 	// Open GeoTIFF (reuse if already opened for pre-flight)
-	const geotiff = options.geotiff ?? (await GeoTIFF.fromUrl(url));
+	const geotiff = options.geotiff ?? (await loadGeoTIFF(url));
 	if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
 	const imgW = geotiff.width;
