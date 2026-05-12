@@ -157,87 +157,109 @@ async function getDB() {
 			const dbName = `objex-duckdb-v${dbVersionSlug}.db`;
 			const accessMode = (duckdb as any).DuckDBAccessMode?.READ_WRITE ?? 1;
 			const protocol = (duckdb as any).DuckDBDataProtocol?.BROWSER_FSACCESS;
-			const root = await navigator.storage.getDirectory();
-
-			// Reap orphan DBs from prior wasm versions. They are unreachable
-			// once the version slug bumps, so leaving them around silently
-			// burns OPFS quota. removeEntry throws NoModificationAllowedError
-			// while a sync access handle is still open against the file —
-			// that only matters for the file we're actively using, and we
-			// skip that one.
+			// Firefox exposes `navigator.storage.getDirectory` in Private Browsing
+			// but throws `SecurityError: Security error when calling GetDirectory`
+			// when invoked. The `hasOpfs` check above only verifies the function
+			// exists, so we must guard the actual call. Other "exists-but-throws"
+			// environments (older Safari WKWebView, restricted enterprise policies,
+			// non-secure contexts that still expose the API) hit the same path.
+			let root: FileSystemDirectoryHandle | null = null;
 			try {
-				const orphans: string[] = [];
-				for await (const [name, handle] of (root as any).entries()) {
-					if (handle.kind === 'file' && /^objex-duckdb(-.*)?\.db$/.test(name) && name !== dbName) {
-						orphans.push(name);
-					}
-				}
-				for (const name of orphans) {
-					try {
-						await root.removeEntry(name);
-						log(`getDB → reaped orphan OPFS db "${name}"`);
-					} catch (rmErr) {
-						logWarn(
-							`getDB → could not reap orphan OPFS db "${name}":`,
-							(rmErr as Error)?.message ?? rmErr
-						);
-					}
-				}
-			} catch (enumErr) {
-				logWarn(
-					'getDB → could not enumerate OPFS root for orphan cleanup:',
-					(enumErr as Error)?.message ?? enumErr
+				root = await navigator.storage.getDirectory();
+			} catch (err) {
+				const msg = (err as Error)?.message ?? String(err);
+				logWarn('getDB → navigator.storage.getDirectory() threw:', msg);
+				opfsState.reasons.push(
+					`navigator.storage.getDirectory() threw: ${msg} — likely Firefox Private Browsing, non-secure context, or storage permission denied`
 				);
 			}
-
-			// Path A — registered FileSystemFileHandle. This is the fully wired
-			// OPFS path on duckdb-wasm 1.29+. It needs the real handle (passing
-			// null silently registers a non-OPFS file and the open() reverts to
-			// MEMFS, which is why earlier attempts kept reporting "in-memory
-			// mode" in OOM errors).
-			if (protocol !== undefined) {
-				const tOpenA = performance.now();
+			if (root) {
+				// Reap orphan DBs from prior wasm versions. They are unreachable
+				// once the version slug bumps, so leaving them around silently
+				// burns OPFS quota. removeEntry throws NoModificationAllowedError
+				// while a sync access handle is still open against the file —
+				// that only matters for the file we're actively using, and we
+				// skip that one.
 				try {
-					const fileHandle = await root.getFileHandle(dbName, { create: true });
-					await db.registerFileHandle(dbName, fileHandle, protocol, true);
-					await withTimeout(
-						db.open({ path: dbName, accessMode }),
-						INIT_TIMEOUT_MS,
-						'DuckDB OPFS open (registered handle)'
+					const orphans: string[] = [];
+					for await (const [name, handle] of (root as any).entries()) {
+						if (
+							handle.kind === 'file' &&
+							/^objex-duckdb(-.*)?\.db$/.test(name) &&
+							name !== dbName
+						) {
+							orphans.push(name);
+						}
+					}
+					for (const name of orphans) {
+						try {
+							await root.removeEntry(name);
+							log(`getDB → reaped orphan OPFS db "${name}"`);
+						} catch (rmErr) {
+							logWarn(
+								`getDB → could not reap orphan OPFS db "${name}":`,
+								(rmErr as Error)?.message ?? rmErr
+							);
+						}
+					}
+				} catch (enumErr) {
+					logWarn(
+						'getDB → could not enumerate OPFS root for orphan cleanup:',
+						(enumErr as Error)?.message ?? enumErr
 					);
-					opfsActive = true;
-					log(`getDB → OPFS via registered handle in ${elapsed(tOpenA)}`);
-				} catch (err) {
-					const msg = (err as Error)?.message ?? String(err);
-					logWarn('getDB → OPFS via registered handle failed:', msg);
-					opfsState.reasons.push(`registered-handle path: ${msg}`);
+				}
+
+				// Path A — registered FileSystemFileHandle. This is the fully wired
+				// OPFS path on duckdb-wasm 1.29+. It needs the real handle (passing
+				// null silently registers a non-OPFS file and the open() reverts to
+				// MEMFS, which is why earlier attempts kept reporting "in-memory
+				// mode" in OOM errors).
+				if (protocol !== undefined) {
+					const tOpenA = performance.now();
+					try {
+						const fileHandle = await root.getFileHandle(dbName, { create: true });
+						await db.registerFileHandle(dbName, fileHandle, protocol, true);
+						await withTimeout(
+							db.open({ path: dbName, accessMode }),
+							INIT_TIMEOUT_MS,
+							'DuckDB OPFS open (registered handle)'
+						);
+						opfsActive = true;
+						log(`getDB → OPFS via registered handle in ${elapsed(tOpenA)}`);
+					} catch (err) {
+						const msg = (err as Error)?.message ?? String(err);
+						logWarn('getDB → OPFS via registered handle failed:', msg);
+						opfsState.reasons.push(`registered-handle path: ${msg}`);
+					}
+				} else {
+					logWarn('getDB → DuckDBDataProtocol.BROWSER_FSACCESS missing in this build');
+					opfsState.reasons.push('DuckDBDataProtocol.BROWSER_FSACCESS missing in this WASM build');
+				}
+
+				// Path B — URL-scheme fallback. Some duckdb-wasm builds wire OPFS
+				// internally on `opfs://` paths without needing manual registration.
+				if (!opfsActive) {
+					const tOpenB = performance.now();
+					try {
+						await withTimeout(
+							db.open({ path: `opfs://${dbName}`, accessMode }),
+							INIT_TIMEOUT_MS,
+							'DuckDB OPFS open (url scheme)'
+						);
+						opfsActive = true;
+						log(`getDB → OPFS via opfs:// scheme in ${elapsed(tOpenB)}`);
+					} catch (err) {
+						const msg = (err as Error)?.message ?? String(err);
+						logWarn('getDB → OPFS via opfs:// scheme failed:', msg);
+						opfsState.reasons.push(`opfs:// scheme path: ${msg}`);
+					}
+				}
+
+				if (!opfsActive) {
+					logWarn('getDB → all OPFS paths failed, falling back to in-memory');
 				}
 			} else {
-				logWarn('getDB → DuckDBDataProtocol.BROWSER_FSACCESS missing in this build');
-				opfsState.reasons.push('DuckDBDataProtocol.BROWSER_FSACCESS missing in this WASM build');
-			}
-
-			// Path B — URL-scheme fallback. Some duckdb-wasm builds wire OPFS
-			// internally on `opfs://` paths without needing manual registration.
-			if (!opfsActive) {
-				const tOpenB = performance.now();
-				try {
-					await withTimeout(
-						db.open({ path: `opfs://${dbName}`, accessMode }),
-						INIT_TIMEOUT_MS,
-						'DuckDB OPFS open (url scheme)'
-					);
-					opfsActive = true;
-					log(`getDB → OPFS via opfs:// scheme in ${elapsed(tOpenB)}`);
-				} catch (err) {
-					const msg = (err as Error)?.message ?? String(err);
-					logWarn('getDB → OPFS via opfs:// scheme failed:', msg);
-					opfsState.reasons.push(`opfs:// scheme path: ${msg}`);
-				}
-			}
-
-			if (!opfsActive) {
-				logWarn('getDB → all OPFS paths failed, falling back to in-memory');
+				logWarn('getDB → OPFS root unavailable, falling back to in-memory');
 			}
 		} else {
 			log('getDB → OPFS unavailable (no navigator.storage), using in-memory DB');
