@@ -13,5 +13,15 @@
 		"rootDir": "../..",
 		"outDir": "dist"
 	},
-	"include": ["src", "../../src/lib"]
+	"include": ["src", "../../src/lib"],
+	"exclude": [
+		"../../src/lib/utils/cog-asset.ts",
+		"../../src/lib/utils/host-detection.ts",
+		"../../src/lib/utils/markdown-sql.ts",
+		"../../src/lib/utils/stac-facets.ts",
+		"../../src/lib/utils/stac-geoparquet.ts",
+		"../../src/lib/utils/stac-pushdown.ts",
+		"../../src/lib/utils/stac-source.ts",
+		"../../src/lib/utils/stac.ts"
+	]
 }

@@ -26,7 +26,7 @@
  * Asset-level fields take precedence over item-level fields in v1.
  */
 
-import type { StacItem } from '../../../src/lib/utils/stac.js';
+import type { StacItem } from './stac.js';
 
 /** Recognized Storage Extension schema versions. */
 export type StorageExtensionVersion = '1.0.0' | '2.0.0';

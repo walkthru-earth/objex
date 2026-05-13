@@ -9,12 +9,8 @@
  * derived presets are intentionally NOT in this list for this slice.
  */
 
-import type { ChannelComposite, CogAsset } from '../../../src/lib/utils/cog-asset.js';
-import {
-	type BandSlot,
-	type RasterBandAsset,
-	resolvePresetComposite
-} from '../../../src/lib/utils/stac.js';
+import type { ChannelComposite, CogAsset } from './cog-asset.js';
+import { type BandSlot, type RasterBandAsset, resolvePresetComposite } from './stac.js';
 
 export interface PresetDef {
 	id: string;
