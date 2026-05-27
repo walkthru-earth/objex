@@ -410,7 +410,6 @@ function buildCogLayer(
 
 	// Cast: `onViewportLoad` is forwarded by our pnpm patch to the inner
 	// TileLayer, but COGLayer's generated .d.ts does not expose it.
-	// biome-ignore lint/suspicious/noExplicitAny: upstream prop not yet in types
 	const cogProps: any = {
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
 		// to treat this as a brand-new layer and drop cached tile state.
