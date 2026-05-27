@@ -27,7 +27,7 @@ per frame, or hit upstream bugs that have not yet been fixed.
 
 ### `buildGeoArrowTables`
 
-`src/lib/utils/geoarrow.ts:737-788`. Exported through both
+`packages/objex-utils/src/geoarrow.ts:737-788`. Exported through both
 `src/lib/index.ts:147` and `packages/objex-utils/src/index.ts:147`.
 
 ```ts
@@ -40,7 +40,7 @@ export function buildGeoArrowTables(
 
 `GeoArrowGeomType` is the lowercase set
 `'point' | 'linestring' | 'polygon' | 'multipoint' | 'multilinestring' | 'multipolygon'`
-(`src/lib/utils/geoarrow.ts:25-31`). `GeoArrowResult` is
+(`packages/objex-utils/src/geoarrow.ts:25-31`). `GeoArrowResult` is
 `{ table: arrow.Table, geometryType, bounds: [minX, minY, maxX, maxY], sourceIndices: number[] }`
 (`:33-39`).
 
@@ -61,7 +61,7 @@ The exact npm version exporting this is `@walkthru-earth/objex-utils@1.3.1`
 
 ### `normalizeGeomType(raw)`
 
-`src/lib/utils/geoarrow.ts:42-51`. Maps DuckDB `ST_GeometryType()`
+`packages/objex-utils/src/geoarrow.ts:42-51`. Maps DuckDB `ST_GeometryType()`
 output (`POLYGON`, `ST_MULTIPOLYGON`, etc., case-insensitive) to the
 `GeoArrowGeomType` enum. Unknown input falls back to `'polygon'`. The
 fallback is load-bearing because deck.gl-layers will throw if the
@@ -160,7 +160,7 @@ that `TableViewer` builds from the row stream.
 
 ## 4. WKB parser internals
 
-`src/lib/utils/geoarrow.ts:63-587`. All reads go through `DataView`.
+`packages/objex-utils/src/geoarrow.ts:63-587`. All reads go through `DataView`.
 There is exactly one allocation per call: the pre-sized
 `Float64Array` / `Int32Array` typed arrays that back the Arrow buffers.
 The only auxiliary allocations are `Uint8Array` views over the same
@@ -520,7 +520,7 @@ through `MosaicLayer` / `COGLayer` / `MultiCOGLayer` from
 at all.
 
 `parseWKB` (the allocation-heavier GeoJSON-producing parser in
-`utils/wkb.ts`) is used only off the hot path:
+`packages/objex-utils/src/wkb.ts`) is used only off the hot path:
 
 - `TableViewer.svelte:177` sniffs the geometry type of the first WKB
   row once.

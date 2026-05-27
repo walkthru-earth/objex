@@ -2,7 +2,7 @@
 
 WKB parsing, geometry-column detection, and GeoArrow table construction. Zero-copy where possible.
 
-Source: `src/lib/utils/wkb.ts`, `src/lib/utils/geoarrow.ts`.
+Source: `packages/objex-utils/src/wkb.ts`, `packages/objex-utils/src/geoarrow.ts`.
 
 ## Types
 

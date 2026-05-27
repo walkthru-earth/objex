@@ -4,8 +4,8 @@ URL parsing, provider registry, and the `StorageAdapter` contract.
 
 Sources:
 
-- `src/lib/utils/storage-url.ts` — generic URL / bucket parser
-- `src/lib/utils/cloud-url.ts` — cloud-scheme → HTTPS resolver
+- `packages/objex-utils/src/storage-url.ts` — generic URL / bucket parser
+- `packages/objex-utils/src/cloud-url.ts` — cloud-scheme → HTTPS resolver
 - `src/lib/storage/providers.ts` — provider registry + access-mode logic
 - `src/lib/storage/adapter.ts` — the `StorageAdapter` interface
 - `src/lib/storage/url-adapter.ts` — adapter for arbitrary HTTPS URLs

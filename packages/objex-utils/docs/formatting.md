@@ -4,10 +4,10 @@ Display formatters, column-type classification, hex dump, and data serialization
 
 Sources:
 
-- `src/lib/utils/format.ts`
-- `src/lib/utils/column-types.ts`
-- `src/lib/utils/hex.ts`
-- `src/lib/utils/export.ts`
+- `packages/objex-utils/src/format.ts`
+- `packages/objex-utils/src/column-types.ts`
+- `packages/objex-utils/src/hex.ts`
+- `packages/objex-utils/src/export.ts`
 
 ## Formatters
 

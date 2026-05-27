@@ -2,7 +2,7 @@
 
 Parse markdown documents with YAML frontmatter and Evidence-style SQL code blocks, run interpolation, and stub blocks for server-side rendering.
 
-Source: `src/lib/utils/markdown-sql.ts`.
+Source: `packages/objex-utils/src/markdown-sql.ts`.
 
 ## Peer dependency
 
