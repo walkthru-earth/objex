@@ -106,7 +106,7 @@ export {
 
 // ─── Constants ───────────────────────────────────────────────────
 
-// `SF_LABELS` moved to `./cog-pure.ts` (re-exported above) so that
+// `SF_LABELS` moved to `cog-info.ts` in @walkthru-earth/objex-utils (re-exported above) so that
 // `objex-utils` can consume it without pulling in heavy COG deps.
 
 // ─── Color ramps ─────────────────────────────────────────────────
@@ -673,7 +673,7 @@ const BITMAP_LAYER = 'geotiff-bitmap-layer';
 
 // ─── Types & pure helpers ────────────────────────────────────────
 // `GeoBounds`, `CogInfo`, `safeClamp`, `clampBounds`, `buildDataTypeLabel`
-// live in `./cog-pure.ts` and are re-exported at the top of this file.
+// live in `cog-info.ts` in @walkthru-earth/objex-utils and are re-exported at the top of this file.
 
 // ─── Map helpers (depend on maplibre-gl) ─────────────────────────
 

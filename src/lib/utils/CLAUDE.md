@@ -60,7 +60,7 @@ graph TD
 
 The following utilities used to live here but were moved into the isolated package because they are pure TypeScript and consumable from any framework (Svelte, React, Vue, Node):
 
-`channel-composite`, `clipboard`, `cloud-url`, `cog-asset`, `cog-pure`, `column-types`, `connection-identity`, `error`, `export`, `file-sort`, `format`, `geoarrow`, `geometry-type`, `hex`, `host-detection`, `local-storage`, `lru`, `map-pixel-inspect`, `markdown-sql`, `notebook`, `parquet-metadata`, `stac`, `stac-facets`, `stac-geoparquet`, `stac-hydrate`, `stac-pushdown`, `stac-source`, `stac-source-api`, `stac-source-static`, `stac-storage-extension`, `storage-smoketest`, `storage-url`, `wkb`.
+`channel-composite`, `clipboard`, `cloud-url`, `cog-asset`, `cog-info`, `column-types`, `connection-identity`, `error`, `export`, `file-sort`, `format`, `geoarrow`, `geometry-type`, `hex`, `host-detection`, `local-storage`, `lru`, `map-pixel-inspect`, `markdown-sql`, `notebook`, `parquet-metadata`, `stac`, `stac-facets`, `stac-geoparquet`, `stac-hydrate`, `stac-pushdown`, `stac-source`, `stac-source-api`, `stac-source-static`, `stac-storage-extension`, `storage-smoketest`, `storage-url`, `wkb`.
 
 Import them as:
 

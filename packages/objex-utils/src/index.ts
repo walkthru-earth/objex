@@ -83,7 +83,7 @@ export * from './cloud-url.js';
 // COG asset enumeration (unified RGB picker)
 export * from './cog-asset.js';
 // COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
-// MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
+// MUST import from `cog-info.ts` and NOT `cog.ts`. `cog.ts` has top-level
 // imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,
 // `@developmentseed/proj`, `maplibre-gl`, and `proj4`, which tsup preserves
 // as bare side-effect imports in the bundled output even when all named
@@ -91,7 +91,7 @@ export * from './cog-asset.js';
 // `@developmentseed/epsg/all.csv.gz?url` (Vite loader query) and would force
 // every downstream project to install the full COG stack just to use the
 // pure TS utilities. See walkthru-earth/objex#11.
-export * from './cog-pure.js';
+export * from './cog-info.js';
 // Column type classification
 export * from './column-types.js';
 // Connection identity (canonical key for dedup across auto-detect/manual add/edit)
