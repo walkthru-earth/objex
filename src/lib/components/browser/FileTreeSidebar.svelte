@@ -240,7 +240,7 @@ function buildNativeUri(path: string): string {
 	return `${scheme}://${conn.bucket}/${path}`;
 }
 
-// getNativeScheme imported from $lib/utils/signed-url.js
+// getNativeScheme imported from @walkthru-earth/objex-utils (cloud-url.ts)
 
 function encodeKeyPath(key: string): string {
 	return key
