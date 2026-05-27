@@ -28,19 +28,18 @@
  * stream via `conn.send()` so large catalogs can render progressively.
  */
 
-import type { StorageAdapter } from '../storage/adapter.js';
-import type { Tab } from '../types.js';
-import type { StacItem } from '../utils/stac.js';
-import type { FacetState } from '../utils/stac-facets.js';
-import { stacRowToItem } from '../utils/stac-geoparquet.js';
+import type { FacetState, StacItem } from '@walkthru-earth/objex-utils';
 import {
 	emptyPushdown,
+	parseWKB,
 	type StacSource,
 	type StacSourceBatch,
 	type StacSourceCapabilities,
-	type StacSourceRequest
-} from '../utils/stac-source.js';
-import { parseWKB } from '../utils/wkb.js';
+	type StacSourceRequest,
+	stacRowToItem
+} from '@walkthru-earth/objex-utils';
+import type { StorageAdapter } from '../storage/adapter.js';
+import type { Tab } from '../types.js';
 import { QueryCancelledError } from './engine.js';
 import { getQueryEngine } from './index.js';
 import { type ResolvedTableSource, resolveTableSourceAsync } from './source.js';

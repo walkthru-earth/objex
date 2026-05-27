@@ -2,6 +2,7 @@
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 import MaximizeIcon from '@lucide/svelte/icons/maximize';
 import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
@@ -11,7 +12,6 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { handleLoadError } from '$lib/utils/error.js';
 import {
 	createModelScene,
 	disposeModelScene,

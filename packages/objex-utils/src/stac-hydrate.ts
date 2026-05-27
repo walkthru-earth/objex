@@ -4,7 +4,7 @@
  * (paginated FeatureCollection / STAC API) into a flat list of StacItems.
  */
 
-import type { StorageAdapter } from '../storage/adapter.js';
+import type { StorageAdapter } from '../../../src/lib/storage/adapter.js';
 import {
 	isStacCatalog,
 	isStacCollection,

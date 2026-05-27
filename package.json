@@ -27,41 +27,6 @@
 			"svelte": "./dist/query/engine.js",
 			"import": "./dist/query/engine.js"
 		},
-		"./utils/wkb": {
-			"types": "./dist/utils/wkb.d.ts",
-			"svelte": "./dist/utils/wkb.js",
-			"import": "./dist/utils/wkb.js"
-		},
-		"./utils/geoarrow": {
-			"types": "./dist/utils/geoarrow.d.ts",
-			"svelte": "./dist/utils/geoarrow.js",
-			"import": "./dist/utils/geoarrow.js"
-		},
-		"./utils/storage-url": {
-			"types": "./dist/utils/storage-url.d.ts",
-			"svelte": "./dist/utils/storage-url.js",
-			"import": "./dist/utils/storage-url.js"
-		},
-		"./utils/parquet-metadata": {
-			"types": "./dist/utils/parquet-metadata.d.ts",
-			"svelte": "./dist/utils/parquet-metadata.js",
-			"import": "./dist/utils/parquet-metadata.js"
-		},
-		"./utils/format": {
-			"types": "./dist/utils/format.d.ts",
-			"svelte": "./dist/utils/format.js",
-			"import": "./dist/utils/format.js"
-		},
-		"./utils/hex": {
-			"types": "./dist/utils/hex.d.ts",
-			"svelte": "./dist/utils/hex.js",
-			"import": "./dist/utils/hex.js"
-		},
-		"./utils/column-types": {
-			"types": "./dist/utils/column-types.d.ts",
-			"svelte": "./dist/utils/column-types.js",
-			"import": "./dist/utils/column-types.js"
-		},
 		"./file-icons": {
 			"types": "./dist/file-icons/index.d.ts",
 			"svelte": "./dist/file-icons/index.js",

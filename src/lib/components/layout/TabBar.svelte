@@ -2,13 +2,13 @@
 import DatabaseIcon from '@lucide/svelte/icons/database';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import XIcon from '@lucide/svelte/icons/x';
+import { copyToClipboard } from '@walkthru-earth/objex-utils';
 import type { Snippet } from 'svelte';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
-import { copyToClipboard } from '$lib/utils/clipboard.js';
 import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
 
 let { leading }: { leading?: Snippet } = $props();

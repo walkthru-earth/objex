@@ -22,7 +22,7 @@ Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diag
 | `src/lib/storage/` | `storage/CLAUDE.md` | S3/Azure/URL adapters |
 | `src/lib/query/` | `query/CLAUDE.md` | DuckDB-WASM engine |
 | `src/lib/constants.ts` | — | Shared constants (STORAGE_KEYS, WGS84_CODES, DEFAULT_TARGET_CRS, etc.) |
-| `src/lib/utils/` | `utils/CLAUDE.md` | WKB, GeoArrow, format, hex, deck, clipboard, error |
+| `src/lib/utils/` | `utils/CLAUDE.md` | App-side heavy or framework-bound utils only (cog, deck, zarr, pmtiles, shiki, markdown, pdf, model3d, archive, url, url-state). Pure utilities live in `@walkthru-earth/objex-utils`. |
 | `src/lib/file-icons/` | `file-icons/CLAUDE.md` | Extension → viewer registry |
 | `src/lib/i18n/` | `i18n/CLAUDE.md` | en/ar translations |
 | `packages/objex-utils/` | `CLAUDE.md` | Pure TS sub-package |
@@ -58,7 +58,8 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Use `conn.send()` via `queryCancellable()` for data queries (non-blocking)
 - Use `$derived.by()` to flatten derived chains (max 2-3 levels)
 - Use `$state` only for small UI primitives (booleans, loading flags)
-- Use relative imports (not `$lib`) in ALL files under `src/lib/` — see npm Publishing Rules below
+- Use relative imports (not `$lib`) in ALL files under `src/lib/` , see npm Publishing Rules below
+- Import pure utilities from `@walkthru-earth/objex-utils`, NOT from `../utils/<X>.js` or `$lib/utils/<X>.js`. Those shim paths were removed when the move into the isolated package completed. The 17 files that remain in `src/lib/utils/` are heavy-dep or SvelteKit-bound and stay there on purpose, see `src/lib/utils/CLAUDE.md`.
 - Use i18n `t()` for all user-facing strings
 - Run `pnpm -w run format && pnpm -w run lint:fix && pnpm -w run check` before committing
 
@@ -73,7 +74,8 @@ All three must pass. Biome: tabs, single quotes, semicolons, 100 char width.
 - Don't skip cleanup of query handles, blob URLs, WebGL contexts, event listeners
 - Don't hold module-level references to heavy objects without nulling in cleanup
 - Don't add `console.log` in library code -- Vite strips them in production via config
-- Don't use `$lib` alias in any file under `src/lib/` — it breaks dynamic imports in dist/ and the objex-utils tsup build (see npm Publishing Rules)
+- Don't use `$lib` alias in any file under `src/lib/`, it breaks dynamic imports in dist/ and the objex-utils tsup build (see npm Publishing Rules)
+- Don't add a new framework-agnostic utility to `src/lib/utils/`. If it is pure TypeScript with no heavy or SvelteKit dep, add it directly to `packages/objex-utils/src/<name>.ts` and `export * from './<name>.js'` in `packages/objex-utils/src/index.ts`. Files inside that package use sibling `./<X>.js` imports for other utilities and `../../../src/lib/<path>.js` for host-side types (constants, StorageAdapter, etc.); they MUST NOT self-reference `@walkthru-earth/objex-utils` (circular in tsup) and MUST NOT statically OR dynamically import heavy deps like deck.gl, zarrita, pdfjs-dist, shiki, marked, pmtiles, etc. Heavy lazy `await import()` is fine in `src/lib/utils/` (svelte-package emits per-file output and Vite handles it) but blows up in objex-utils' single-bundle tsup output.
 - Don't materialize all Arrow rows via `.toArray().map(r => r.toJSON())` -- use columnar access
 - Don't use the shadcn CLI -- manually create/edit UI components in `src/lib/components/ui/` using bits-ui primitives (reference: https://bits-ui.com/llms.txt)
 

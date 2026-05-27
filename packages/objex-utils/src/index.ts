@@ -76,6 +76,8 @@ export type {
 
 // Channel composite presets + URL round-trip (unified RGB picker)
 export * from './channel-composite.js';
+// Clipboard helper (navigator.clipboard + feedback timeout)
+export * from './clipboard.js';
 // Cloud URL resolution
 export * from './cloud-url.js';
 // COG asset enumeration (unified RGB picker)
@@ -110,10 +112,16 @@ export * from './geometry-type.js';
 export * from './hex.js';
 // Host detection (auto-detect provider/region from URL)
 export * from './host-detection.js';
+// localStorage helpers (SSR-safe)
+export * from './local-storage.js';
 // LRU cache
 export * from './lru.js';
+// Map pixel inspector (click→probe coordination types)
+export * from './map-pixel-inspect.js';
 // Markdown / SQL parsing (yaml is loaded lazily inside parseMarkdownDocument)
 export * from './markdown-sql.js';
+// Notebook (Jupyter .ipynb) renderer
+export * from './notebook.js';
 // Parquet metadata
 export * from './parquet-metadata.js';
 // STAC types and helpers
@@ -122,10 +130,16 @@ export * from './stac.js';
 export * from './stac-facets.js';
 // stac-geoparquet (detection + row → Item transform)
 export * from './stac-geoparquet.js';
+// STAC link-following hydrator (Catalog / Collection / FeatureCollection)
+export * from './stac-hydrate.js';
 // STAC API filter push-down (CQL2 + native query params)
 export * from './stac-pushdown.js';
 // STAC source contract
 export * from './stac-source.js';
+// STAC source - API implementation
+export * from './stac-source-api.js';
+// STAC source - static catalog implementation
+export * from './stac-source-static.js';
 // STAC Storage Extension (region / endpoint hints from STAC Items)
 export * from './stac-storage-extension.js';
 // Storage open-time smoke test (ranged GET probe)
@@ -134,10 +148,3 @@ export * from './storage-smoketest.js';
 export * from './storage-url.js';
 // WKB parsing
 export * from './wkb.js';
-
-// ====================================================================
-// Utilities still physically located in src/lib/utils/
-// ====================================================================
-
-// localStorage helpers
-export { loadFromStorage, persistToStorage } from '../../../src/lib/utils/local-storage.js';

@@ -1,4 +1,4 @@
-import { COPY_FEEDBACK_MS } from '../constants.js';
+import { COPY_FEEDBACK_MS } from '../../../src/lib/constants.js';
 
 /**
  * Copy text to clipboard and run a feedback callback for COPY_FEEDBACK_MS.

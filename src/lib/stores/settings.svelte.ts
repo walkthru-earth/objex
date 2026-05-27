@@ -1,7 +1,7 @@
+import { loadFromStorage, persistToStorage } from '@walkthru-earth/objex-utils';
 import { STORAGE_KEYS } from '../constants.js';
 import { type Locale, setLocale } from '../i18n/index.svelte.js';
 import type { Theme } from '../types.js';
-import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
 
 interface PersistedSettings {
 	theme: Theme;

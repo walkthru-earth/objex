@@ -25,18 +25,18 @@ import { COGLayer, MultiCOGLayer } from '@developmentseed/deck.gl-geotiff';
 import type { DecoderPool, GeoTIFF as GeoTIFFType } from '@developmentseed/geotiff';
 import type { EpsgResolver } from '@developmentseed/proj';
 import {
+	allChannelsBand0,
+	type ChannelComposite,
+	type CogAsset,
+	isSingleAssetComposite
+} from '@walkthru-earth/objex-utils';
+import {
 	type BandConfig,
 	buildBandRenderPipeline,
 	type GeoBounds,
 	type RescaleConfig,
 	selectCogPipeline
 } from '../../../utils/cog.js';
-import {
-	allChannelsBand0,
-	type ChannelComposite,
-	type CogAsset,
-	isSingleAssetComposite
-} from '../../../utils/cog-asset.js';
 
 export type RgbLayerKind = 'cog' | 'multicog';
 

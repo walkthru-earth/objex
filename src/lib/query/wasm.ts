@@ -1,8 +1,8 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+import { buildTransformExpr, wrapWkbWithCrs } from '@walkthru-earth/objex-utils';
 import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
 import { getAccessMode, resolveProviderEndpoint } from '../storage/providers.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
-import { buildTransformExpr, wrapWkbWithCrs } from '../utils/geometry-type.js';
 import {
 	type MapQueryHandle,
 	type MapQueryResult,

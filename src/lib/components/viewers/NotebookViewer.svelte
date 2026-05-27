@@ -1,5 +1,11 @@
 <script lang="ts">
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import {
+	copyToClipboard,
+	handleLoadError,
+	renderNotebook,
+	wireCodeCopyButtons
+} from '@walkthru-earth/objex-utils';
 import type { BundledLanguage } from 'shiki';
 import { onDestroy, tick } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -9,9 +15,6 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { copyToClipboard, wireCodeCopyButtons } from '$lib/utils/clipboard.js';
-import { handleLoadError } from '$lib/utils/error.js';
-import { renderNotebook } from '$lib/utils/notebook';
 import { highlightCodeReversed } from '$lib/utils/shiki';
 
 let { tab }: { tab: Tab } = $props();

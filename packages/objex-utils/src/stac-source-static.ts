@@ -10,7 +10,7 @@
  * Pure TypeScript. No DuckDB / Svelte / maplibre / deck.gl import.
  */
 
-import type { StorageAdapter } from '../storage/adapter.js';
+import type { StorageAdapter } from '../../../src/lib/storage/adapter.js';
 import type { StacItem, StacRoutableKind } from './stac.js';
 import type { FacetState } from './stac-facets.js';
 import { hydrateStacItems } from './stac-hydrate.js';

@@ -1,10 +1,10 @@
-import type { FileEntry } from '../types.js';
 import {
 	type SortConfig,
 	type SortField,
 	sortFileEntries,
 	toggleSortField
-} from '../utils/file-sort.js';
+} from '@walkthru-earth/objex-utils';
+import type { FileEntry } from '../types.js';
 
 function createFilesStore() {
 	let files = $state<FileEntry[]>([]);

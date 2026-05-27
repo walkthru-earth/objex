@@ -1,6 +1,6 @@
+import { safeDecodeURIComponent } from '@walkthru-earth/objex-utils';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import type { Connection } from '../types.js';
-import { safeDecodeURIComponent } from '../utils/cloud-url.js';
 import { buildProviderBaseUrl, getAccessMode, type ProviderId } from './providers.js';
 
 // 7 days is the SigV4 protocol maximum and is the hard cap on every

@@ -4,13 +4,13 @@ import FileTextIcon from '@lucide/svelte/icons/file-text';
 import FolderIcon from '@lucide/svelte/icons/folder';
 import GlobeIcon from '@lucide/svelte/icons/globe';
 import InfoIcon from '@lucide/svelte/icons/info';
+import { formatFileSize } from '@walkthru-earth/objex-utils';
 import { Separator } from '$lib/components/ui/separator/index.js';
 import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { files } from '$lib/stores/files.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
-import { formatFileSize } from '$lib/utils/format.js';
 import SafeLockToggle from './SafeLockToggle.svelte';
 
 let isBrowsingRemote = $derived(browser.activeConnection !== null);

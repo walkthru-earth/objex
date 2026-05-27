@@ -16,6 +16,14 @@ import { GeoTIFF } from '@developmentseed/geotiff';
 import type { EpsgResolver, ProjectionDefinition } from '@developmentseed/proj';
 import { parseWkt } from '@developmentseed/proj';
 import type { Device } from '@luma.gl/core';
+import {
+	buildDataTypeLabel,
+	type CogInfo,
+	clampBounds,
+	type GeoBounds,
+	SF_LABELS,
+	safeClamp
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
 import {
@@ -27,14 +35,6 @@ import {
 	type StreamHistogramOptions,
 	streamHistogram
 } from './cog-histogram.js';
-import {
-	buildDataTypeLabel,
-	type CogInfo,
-	clampBounds,
-	type GeoBounds,
-	SF_LABELS,
-	safeClamp
-} from './cog-pure.js';
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
 
 /**

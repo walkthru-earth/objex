@@ -1,6 +1,6 @@
 <script lang="ts">
 import XIcon from '@lucide/svelte/icons/x';
-import { formatValue } from '$lib/utils/format.js';
+import { formatValue } from '@walkthru-earth/objex-utils';
 
 let {
 	feature = null,

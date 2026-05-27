@@ -4,6 +4,7 @@ import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 import MinusIcon from '@lucide/svelte/icons/minus';
 import PlusIcon from '@lucide/svelte/icons/plus';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -14,7 +15,6 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { handleLoadError } from '$lib/utils/error.js';
 import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
 

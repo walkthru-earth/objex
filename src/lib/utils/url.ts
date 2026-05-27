@@ -1,3 +1,4 @@
+import { getNativeScheme, safeDecodeURIComponent } from '@walkthru-earth/objex-utils';
 import { presignHttpsUrl } from '../storage/presign.js';
 import {
 	buildProviderBaseUrl,
@@ -7,7 +8,6 @@ import {
 import { connections } from '../stores/connections.svelte.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import type { Tab } from '../types.js';
-import { getNativeScheme, safeDecodeURIComponent } from './cloud-url.js';
 
 /**
  * Build an HTTPS URL for a tab's file.

@@ -66,6 +66,8 @@ const FORBIDDEN_PATTERNS = [
 ];
 
 const IMPORT_RE = /(from\s+|require\(|import\()['"]([^'"]+)['"]/g;
+// Catches bare side-effect imports (`import "pkg";`) that IMPORT_RE misses.
+const SIDE_EFFECT_IMPORT_RE = /^[ \t]*import\s+['"]([^'"]+)['"]/gm;
 
 async function listBundleFiles(dir) {
 	const entries = await readdir(dir, { withFileTypes: true });
@@ -108,6 +110,28 @@ async function scanFile(path) {
 				line: ln,
 				spec,
 				kind: kind.trim(),
+				note: 'unknown bare specifier, add to ALLOWED_PEERS if intended'
+			});
+		}
+	}
+	SIDE_EFFECT_IMPORT_RE.lastIndex = 0;
+	let se;
+	while ((se = SIDE_EFFECT_IMPORT_RE.exec(text))) {
+		const spec = se[1];
+		if (spec.startsWith('./') || spec.startsWith('../') || spec.startsWith('node:')) continue;
+		if (ALLOWED_PEERS.has(spec) || [...ALLOWED_PEERS].some((p) => spec.startsWith(`${p}/`))) {
+			continue;
+		}
+		if (isForbidden(spec)) {
+			const ln = lineNumber(text, se.index);
+			errors.push({ path, line: ln, spec, kind: 'import' });
+		} else {
+			const ln = lineNumber(text, se.index);
+			errors.push({
+				path,
+				line: ln,
+				spec,
+				kind: 'import',
 				note: 'unknown bare specifier, add to ALLOWED_PEERS if intended'
 			});
 		}

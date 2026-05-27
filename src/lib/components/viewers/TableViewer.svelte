@@ -1,4 +1,17 @@
 <script lang="ts">
+import type { GeoArrowGeomType } from '@walkthru-earth/objex-utils';
+import {
+	buildTransformExpr,
+	extractBounds,
+	extractEpsgFromGeoMeta,
+	extractGeometryTypes,
+	findGeoColumn,
+	findGeoColumnFromRows,
+	parseWKB,
+	readParquetMetadata,
+	toBinary,
+	wrapWkbWithCrs
+} from '@walkthru-earth/objex-utils';
 import { format as formatSql } from 'sql-formatter';
 import { untrack } from 'svelte';
 import CodeMirrorEditor from '$lib/components/editor/CodeMirrorEditor.svelte';
@@ -18,14 +31,6 @@ import { queryHistory } from '$lib/stores/query-history.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import type { GeoArrowGeomType } from '$lib/utils/geoarrow.js';
-import { buildTransformExpr, wrapWkbWithCrs } from '$lib/utils/geometry-type.js';
-import {
-	extractBounds,
-	extractEpsgFromGeoMeta,
-	extractGeometryTypes,
-	readParquetMetadata
-} from '$lib/utils/parquet-metadata.js';
 import {
 	buildDuckDbUrl,
 	buildHttpsUrl,
@@ -33,7 +38,6 @@ import {
 	canStreamDirectly
 } from '$lib/utils/url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
-import { findGeoColumn, findGeoColumnFromRows, parseWKB, toBinary } from '$lib/utils/wkb.js';
 import FileInfo from './FileInfo.svelte';
 import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
 import QueryHistoryPanel from './QueryHistoryPanel.svelte';

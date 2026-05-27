@@ -1,11 +1,12 @@
-import { STORAGE_KEYS } from '../constants.js';
-import type { Connection, ConnectionConfig } from '../types.js';
+import type { DetectedHost } from '@walkthru-earth/objex-utils';
 import {
 	type ConnectionIdentityInput,
-	connectionIdentityKey
-} from '../utils/connection-identity.js';
-import type { DetectedHost } from '../utils/host-detection.js';
-import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
+	connectionIdentityKey,
+	loadFromStorage,
+	persistToStorage
+} from '@walkthru-earth/objex-utils';
+import { STORAGE_KEYS } from '../constants.js';
+import type { Connection, ConnectionConfig } from '../types.js';
 import { credentialStore, storeToNative } from './credentials.svelte.js';
 
 /**

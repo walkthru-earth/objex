@@ -5,6 +5,7 @@ import GlobeIcon from '@lucide/svelte/icons/globe';
 import PencilIcon from '@lucide/svelte/icons/pencil';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import TrashIcon from '@lucide/svelte/icons/trash-2';
+import { type DetectedHost, detectHostBucket, parseStorageUrl } from '@walkthru-earth/objex-utils';
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -25,8 +26,6 @@ import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection } from '$lib/types.js';
-import { type DetectedHost, detectHostBucket } from '$lib/utils/host-detection.js';
-import { parseStorageUrl } from '$lib/utils/storage-url.js';
 import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
 import AboutSheet from './AboutSheet.svelte';
 import ConnectionDialog from './ConnectionDialog.svelte';

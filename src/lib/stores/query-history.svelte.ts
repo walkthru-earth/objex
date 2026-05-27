@@ -1,5 +1,5 @@
+import { loadFromStorage, persistToStorage } from '@walkthru-earth/objex-utils';
 import { MAX_QUERY_HISTORY_ENTRIES, STORAGE_KEYS } from '../constants.js';
-import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
 
 export interface QueryHistoryEntry {
 	id: string;

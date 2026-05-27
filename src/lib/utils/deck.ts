@@ -5,7 +5,7 @@
  * - GeoArrow overlay: used by GeoParquetMapViewer (zero-copy DuckDB → GPU pipeline)
  */
 
-import type { GeoArrowResult } from './geoarrow.js';
+import type { GeoArrowResult } from '@walkthru-earth/objex-utils';
 
 // ─── Shared hover cursor helper ─────────────────────────────────────
 

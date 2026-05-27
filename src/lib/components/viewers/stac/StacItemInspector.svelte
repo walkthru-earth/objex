@@ -1,9 +1,8 @@
 <script lang="ts">
+import type { StacItemView } from '@walkthru-earth/objex-utils';
+import { copyToClipboard, formatDate, jsonReplacerBigInt } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { t } from '../../../i18n/index.svelte.js';
-import { copyToClipboard } from '../../../utils/clipboard.js';
-import { formatDate, jsonReplacerBigInt } from '../../../utils/format.js';
-import type { StacItemView } from '../../../utils/stac-facets.js';
 
 /**
  * Right-side slide-over showing a single STAC item's metadata, asset

@@ -7,6 +7,7 @@ import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import SearchIcon from '@lucide/svelte/icons/search';
 import XIcon from '@lucide/svelte/icons/x';
+import { classifyUrl, resolveCloudUrl } from '@walkthru-earth/objex-utils';
 import { cubicOut } from 'svelte/easing';
 import { fly } from 'svelte/transition';
 import { base } from '$app/paths';
@@ -22,8 +23,6 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
-import { resolveCloudUrl } from '$lib/utils/cloud-url.js';
-import { classifyUrl } from '$lib/utils/storage-url.js';
 import {
 	clearUrlState,
 	getUrlPrefix,

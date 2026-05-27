@@ -10,6 +10,7 @@ import LockIcon from '@lucide/svelte/icons/lock';
 import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
 import ShieldIcon from '@lucide/svelte/icons/shield';
 import XIcon from '@lucide/svelte/icons/x';
+import { describeParseResult, looksLikeUrl, parseStorageUrl } from '@walkthru-earth/objex-utils';
 import { Button } from '$lib/components/ui/button/index.js';
 import { Input } from '$lib/components/ui/input/index.js';
 import {
@@ -33,7 +34,6 @@ import {
 } from '$lib/storage/providers.js';
 import { connections, DuplicateConnectionError } from '$lib/stores/connections.svelte.js';
 import type { Connection, ConnectionConfig } from '$lib/types.js';
-import { describeParseResult, looksLikeUrl, parseStorageUrl } from '$lib/utils/storage-url.js';
 
 interface Props {
 	open: boolean;

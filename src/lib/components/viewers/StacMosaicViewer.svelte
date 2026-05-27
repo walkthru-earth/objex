@@ -3,6 +3,41 @@ import { GeoJsonLayer } from '@deck.gl/layers';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { COGLayer, MosaicLayer, MultiCOGLayer } from '@developmentseed/deck.gl-geotiff';
 import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
+import type { StacSource } from '@walkthru-earth/objex-utils';
+import {
+	applyFacets,
+	applyPreset,
+	attachPixelInspector,
+	availablePresets,
+	buildFacets,
+	buildMosaicSourceMeta,
+	type ChannelComposite,
+	type CogAsset,
+	classifyStac,
+	compositeFromUrl,
+	compositeToUrl,
+	emptyFacetState,
+	extractCogAssets,
+	extractItemView,
+	extractMosaicAssets,
+	type FacetState,
+	formatFileSize,
+	hasActiveFilters,
+	isAbortError,
+	isSingleAssetComposite,
+	LruCache,
+	type MosaicSourceMeta,
+	PRESETS,
+	pickCogAssetHref,
+	pickNaturalColorComposite,
+	presetMatchesComposite,
+	type RasterBandAsset,
+	resolveCloudUrl,
+	type StacItemView,
+	type StacRoutableKind,
+	smokeTestHref,
+	spatialCellKey
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '../../i18n/index.svelte.js';
@@ -13,15 +48,6 @@ import { connectionStore } from '../../stores/connections.svelte.js';
 import { settings } from '../../stores/settings.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
-import {
-	applyPreset,
-	availablePresets,
-	compositeFromUrl,
-	compositeToUrl,
-	PRESETS,
-	presetMatchesComposite
-} from '../../utils/channel-composite.js';
-import { resolveCloudUrl } from '../../utils/cloud-url.js';
 import {
 	type BandConfig,
 	buildBandRenderPipeline,
@@ -50,38 +76,6 @@ import {
 	selectCogPipeline,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
-import {
-	type ChannelComposite,
-	type CogAsset,
-	extractCogAssets,
-	isSingleAssetComposite,
-	pickNaturalColorComposite
-} from '../../utils/cog-asset.js';
-import { isAbortError } from '../../utils/error.js';
-import { formatFileSize } from '../../utils/format.js';
-import { LruCache } from '../../utils/lru.js';
-import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
-import {
-	buildMosaicSourceMeta,
-	classifyStac,
-	extractMosaicAssets,
-	type MosaicSourceMeta,
-	pickCogAssetHref,
-	type RasterBandAsset,
-	type StacRoutableKind,
-	spatialCellKey
-} from '../../utils/stac.js';
-import {
-	applyFacets,
-	buildFacets,
-	emptyFacetState,
-	extractItemView,
-	type FacetState,
-	hasActiveFilters,
-	type StacItemView
-} from '../../utils/stac-facets.js';
-import type { StacSource } from '../../utils/stac-source.js';
-import { smokeTestHref } from '../../utils/storage-smoketest.js';
 import { buildHttpsUrlAsync } from '../../utils/url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
@@ -1178,9 +1172,9 @@ function extendBounds(
 }
 
 function applyFacetsToItems(
-	items: import('../../utils/stac.js').StacItem[],
+	items: import('@walkthru-earth/objex-utils').StacItem[],
 	residual: FacetState
-): import('../../utils/stac.js').StacItem[] {
+): import('@walkthru-earth/objex-utils').StacItem[] {
 	if (!hasActiveFilters(residual)) return items;
 	const views = items.map(extractItemView);
 	const allowed = new Set(applyFacets(views, residual).map((v) => v.id));

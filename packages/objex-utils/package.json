@@ -55,7 +55,11 @@
 		}
 	},
 	"devDependencies": {
+		"apache-arrow": "^21.1.0",
+		"hyparquet": "^1.25.7",
+		"hyparquet-compressors": "^1.1.1",
 		"tsup": "^8.5.0",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"yaml": "^2.8.4"
 	}
 }

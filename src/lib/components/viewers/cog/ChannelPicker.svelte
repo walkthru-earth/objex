@@ -1,6 +1,6 @@
 <script lang="ts">
+import type { ChannelRef, CogAsset } from '@walkthru-earth/objex-utils';
 import { t } from '../../../i18n/index.svelte.js';
-import type { ChannelRef, CogAsset } from '../../../utils/cog-asset.js';
 
 type Props = {
 	channel: 'r' | 'g' | 'b' | 'a';
