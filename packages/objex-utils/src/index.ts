@@ -120,6 +120,8 @@ export * from './lru.js';
 export * from './map-pixel-inspect.js';
 // Markdown / SQL parsing (yaml is loaded lazily inside parseMarkdownDocument)
 export * from './markdown-sql.js';
+// Markdown SQL execution context (engine injected by host)
+export * from './markdown-sql-context.js';
 // Notebook (Jupyter .ipynb) renderer
 export * from './notebook.js';
 // Parquet metadata

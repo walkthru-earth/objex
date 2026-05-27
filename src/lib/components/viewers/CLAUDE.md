@@ -75,7 +75,7 @@ graph TD
 | ModelViewer | Babylon.js | utils/model3d |
 | ArchiveViewer | zip.js | utils/archive, utils/signed-url, utils/format |
 | DatabaseViewer | DuckDB-WASM | query/index. Handles .duckdb (native attach), .sqlite (sqlite scanner), .ducklake (ATTACH TYPE ducklake, autoloaded extension, read-only, catalog browsing with schema/table discovery, snapshot picker for time travel via `SNAPSHOT_VERSION N` re-attach, `ducklake_snapshots()` query for full snapshot list with timestamps). See `docs/ducklake-wasm-support.md` |
-| MarkdownViewer | Marked, Milkdown | utils/markdown, utils/markdown-sql, editor/MilkdownEditor |
+| MarkdownViewer | Marked, Milkdown | utils/markdown, markdown-sql + markdown-sql-context (objex-utils), query/index (getQueryEngine), editor/MilkdownEditor |
 | RawViewer | custom hex dump | utils/hex, utils/format |
 | ImageViewer | native `<img>` | utils/signed-url |
 | MediaViewer | native `<video>`/`<audio>` | utils/signed-url |

@@ -1,26 +1,27 @@
-import type { QueryResult } from '$lib/query/engine';
-import { getQueryEngine } from '$lib/query/index.js';
+import type { QueryEngine, QueryResult } from '../../../src/lib/query/engine.js';
 
-export class EvidenceContext {
+/**
+ * Executes the SQL blocks parsed out of a markdown document (Evidence.dev style)
+ * against an injected query engine, and caches the results by block name. Pairs
+ * with `markdown-sql.ts` (the parser). Pure TypeScript, the engine is supplied by
+ * the host so this module never imports DuckDB or any other heavy dependency.
+ */
+export class MarkdownSqlContext {
+	private engine: QueryEngine;
 	private connId: string;
 	private prefix: string;
 	private results = new Map<string, { result: QueryResult; rows: Record<string, any>[] }>();
 
-	constructor(connId: string, prefix: string = '') {
+	constructor(engine: QueryEngine, connId: string, prefix = '') {
+		this.engine = engine;
 		this.connId = connId;
 		this.prefix = prefix;
 	}
 
-	/**
-	 * Execute a SQL query and store the result under the given name.
-	 */
+	/** Execute a SQL query and store the result under the given name. */
 	async executeSql(sql: string, queryName: string): Promise<Record<string, any>[]> {
-		const engine = await getQueryEngine();
-
-		// Transform relative file paths to full paths
 		const transformedSql = this.transformPaths(sql);
-
-		const result = await engine.query(this.connId, transformedSql);
+		const result = await this.engine.query(this.connId, transformedSql);
 		const rows = result.rows ?? [];
 		this.results.set(queryName, { result, rows });
 		return rows;
@@ -28,18 +29,14 @@ export class EvidenceContext {
 
 	/**
 	 * Transform relative file paths in SQL to full S3 URLs.
-	 * e.g., read_parquet('data.parquet') → read_parquet('s3://bucket/prefix/data.parquet')
+	 * e.g. read_parquet('data.parquet') becomes read_parquet('s3://bucket/prefix/data.parquet').
 	 */
 	private transformPaths(sql: string): string {
 		if (!this.connId || !this.prefix) return sql;
-
-		// Match read_parquet('path'), read_csv('path'), read_json('path')
 		return sql.replace(/(read_(?:parquet|csv|json|csv_auto))\('([^']+)'\)/g, (match, fn, path) => {
-			// Skip absolute paths and URLs
 			if (path.startsWith('s3://') || path.startsWith('http') || path.startsWith('/')) {
 				return match;
 			}
-			// Resolve relative path
 			const fullPath = `s3://${this.prefix}/${path}`;
 			return `${fn}('${fullPath}')`;
 		});

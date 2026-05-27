@@ -2,6 +2,7 @@
 import {
 	handleLoadError,
 	interpolateTemplates,
+	MarkdownSqlContext,
 	markSqlBlocks,
 	parseMarkdownDocument,
 	wireCodeCopyButtons
@@ -14,8 +15,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { EvidenceContext } from '$lib/utils/evidence-context';
 import { detectRTL, processDirection, renderMarkdown } from '$lib/utils/markdown';
+import { getQueryEngine } from '../../query/index.js';
 
 let mermaidInitialized = false;
 const CAIRO_FONT = '"Cairo", sans-serif';
@@ -78,7 +79,9 @@ async function loadMarkdown() {
 
 		if (parsed.sqlBlocks.length > 0) {
 			// Execute SQL blocks in parallel
-			const ctx = new EvidenceContext(
+			const engine = await getQueryEngine();
+			const ctx = new MarkdownSqlContext(
+				engine,
 				tab.connectionId ?? '',
 				tab.path.split('/').slice(0, -1).join('/')
 			);

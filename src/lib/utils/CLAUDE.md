@@ -27,7 +27,6 @@ graph TD
         ARC[archive.ts<br/>@zip.js + tar reader]
         URL[signed-url.ts<br/>Svelte stores + presign.ts]
         US[url-state.ts<br/>$app/navigation]
-        EVC[evidence-context.ts<br/>query/index = DuckDB]
     end
     DECK -.-> OBJEX[(@walkthru-earth/objex-utils)]
     COG -.-> OBJEX
@@ -54,13 +53,12 @@ graph TD
 | `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | `@zip.js/zip.js` | ArchiveViewer |
 | `signed-url.ts` | `buildHttpsUrl()`, `buildHttpsUrlAsync()`, `buildDuckDbUrl()`, `buildDuckDbUrlAsync()`, `buildStorageUrl()`, `canStreamDirectly()`. The `Async` variants presign for `signed-s3` via `storage/presign.ts` (SigV4 query-string auth) and share a private `tryPresignTab()` helper, viewers that hand the URL to an external fetcher (iframe, range reader, `<img>`) must `await` them | Svelte stores (connections, credentials), `storage/presign.ts` | All raster / map / iframe viewers (CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, PmtilesMapView, TableToolbar, TabBar) |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()`, `getUrlView()`, `pickViewMode<T>()`, `getUrlViewParams()` / `updateUrlViewParams()`, `getUrlPrefix()`, `hasUrlParam()`, `setRawUrlParam()`, `clearUrlState()`, `buildUrlParam()` | `$app/navigation` (SvelteKit) | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, StacTabViewer, MultiCogViewer, +page.svelte |
-| `evidence-context.ts` | `EvidenceContext` | `query/index` (DuckDB-WASM) | MarkdownViewer |
 
 ## Promoted to `@walkthru-earth/objex-utils`
 
 The following utilities used to live here but were moved into the isolated package because they are pure TypeScript and consumable from any framework (Svelte, React, Vue, Node):
 
-`channel-composite`, `clipboard`, `cloud-url`, `cog-asset`, `cog-info`, `column-types`, `connection-identity`, `error`, `export`, `file-sort`, `format`, `geoarrow`, `geometry-type`, `hex`, `host-detection`, `local-storage`, `lru`, `map-pixel-inspect`, `markdown-sql`, `notebook`, `parquet-metadata`, `stac`, `stac-facets`, `stac-geoparquet`, `stac-hydrate`, `stac-pushdown`, `stac-source`, `stac-source-api`, `stac-source-static`, `stac-storage-extension`, `storage-smoketest`, `storage-url`, `wkb`.
+`channel-composite`, `clipboard`, `cloud-url`, `cog-asset`, `cog-info`, `column-types`, `connection-identity`, `error`, `export`, `file-sort`, `format`, `geoarrow`, `geometry-type`, `hex`, `host-detection`, `local-storage`, `lru`, `map-pixel-inspect`, `markdown-sql`, `markdown-sql-context`, `notebook`, `parquet-metadata`, `stac`, `stac-facets`, `stac-geoparquet`, `stac-hydrate`, `stac-pushdown`, `stac-source`, `stac-source-api`, `stac-source-static`, `stac-storage-extension`, `storage-smoketest`, `storage-url`, `wkb`.
 
 Import them as:
 
