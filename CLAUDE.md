@@ -28,6 +28,18 @@ Each has its own `CLAUDE.md` with file listing, exports, usage, and mermaid diag
 | `packages/objex-utils/` | `CLAUDE.md` | Pure TS sub-package |
 | `docs/` | — | Architecture & research docs |
 
+## Two-Layer Utility Map
+
+Utilities live in one of two places. Decide with one rule.
+
+- **Pure TypeScript, no heavy graphics or browser library, no SvelteKit or Svelte-store dependency (even via `await import()`)** goes in `@walkthru-earth/objex-utils` (`packages/objex-utils/src/`). Import it as `@walkthru-earth/objex-utils`.
+- **Anything else** (heavy dep such as deck.gl, maplibre, zarrita, pdfjs, shiki, marked, babylon, pmtiles, zip, OR a `$app/navigation` / Svelte-store dependency) stays in `src/lib/utils/`. Import it via a relative `../utils/<x>.js`.
+
+The import line tells you the layer. A package specifier (`@walkthru-earth/objex-utils`) is the pure layer, a relative `../utils/...` is the app layer. The canonical inventories are the two CLAUDE.md files, do not duplicate the lists elsewhere.
+
+- Pure package inventory, see `packages/objex-utils/CLAUDE.md`.
+- App-side inventory plus the list of every module promoted to the package, see `src/lib/utils/CLAUDE.md`.
+
 ## Build Defines (`vite.config.ts`)
 
 - `__APP_VERSION__` — package version string
