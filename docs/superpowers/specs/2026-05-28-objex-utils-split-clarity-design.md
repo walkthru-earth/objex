@@ -72,8 +72,11 @@ Also update any reference touched by the Part A renames (`url.ts` to `signed-url
 
 ### Part E, delete stale planning docs
 
-- Delete `docs/superpowers/plans/2026-04-27-unified-rgb-channel-picker-plan.md`. It describes creating `cog-asset.ts` and `channel-composite.ts` in `src/lib/utils/`, but they shipped in the package. The feature is complete.
-- For the two design specs in `docs/superpowers/specs/` (`2026-04-26-stac-source-contract-design.md`, `2026-04-27-unified-rgb-channel-picker-design.md`), update their stale path references rather than delete, since they are decision records. Confirm at review whether to keep-and-fix or delete.
+Delete all three stale docs. The features have shipped, and current code plus the CLAUDE.md files are the source of truth. This new spec is kept.
+
+- `docs/superpowers/plans/2026-04-27-unified-rgb-channel-picker-plan.md`
+- `docs/superpowers/specs/2026-04-26-stac-source-contract-design.md`
+- `docs/superpowers/specs/2026-04-27-unified-rgb-channel-picker-design.md`
 
 ### Part F, verify production grade
 
