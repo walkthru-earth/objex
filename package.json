@@ -118,6 +118,7 @@
 		"@tailwindcss/forms": "^0.5.11",
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.3.0",
+		"@types/node": "^24.12.0",
 		"bits-ui": "^2.18.1",
 		"clsx": "^2.1.1",
 		"knip": "^6.12.2",
@@ -135,7 +136,6 @@
 		"vite": "^7.3.3"
 	},
 	"dependencies": {
-		"@walkthru-earth/objex-utils": "workspace:*",
 		"@babylonjs/core": "^8.56.2",
 		"@babylonjs/loaders": "^8.56.2",
 		"@carbonplan/zarr-layer": "^0.4.3",
@@ -167,6 +167,7 @@
 		"@milkdown/kit": "^7.20.0",
 		"@milkdown/theme-nord": "^7.20.0",
 		"@repeaterjs/repeater": "^3.0.6",
+		"@walkthru-earth/objex-utils": "workspace:*",
 		"@zip.js/zip.js": "^2.8.26",
 		"ansi_up": "^6.0.6",
 		"apache-arrow": "^21.1.0",
