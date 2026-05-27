@@ -1,6 +1,6 @@
 # Sentinel-2 MultiCOG Viewer, Design Doc
 
-Status, Implemented (v0.6.0-alpha.1). See `src/lib/components/viewers/MultiCogViewer.svelte` and `src/lib/utils/stac.ts`.
+Status, Implemented (v0.6.0-alpha.1). See `src/lib/components/viewers/MultiCogViewer.svelte` and `packages/objex-utils/src/stac.ts`.
 
 ## 1. Goal
 

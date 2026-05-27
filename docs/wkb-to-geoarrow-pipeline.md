@@ -11,7 +11,7 @@ Objex reads geospatial tables (GeoParquet, native Parquet `GEOMETRY`,
 GeoJSON, etc.) through DuckDB-WASM, then renders them on a deck.gl map
 via `@geoarrow/deck.gl-layers`. The bridge between DuckDB's Arrow output
 and the GeoArrow-typed Arrow tables that deck.gl-layers expects is
-`buildGeoArrowTables` in `src/lib/utils/geoarrow.ts`. It walks raw WKB
+`buildGeoArrowTables` in `packages/objex-utils/src/geoarrow.ts` (re-exported through `src/lib/index.ts` and the `@walkthru-earth/objex-utils` entry point). It walks raw WKB
 bytes directly into pre-allocated `Float64Array` and `Int32Array`
 buffers and wraps them with the correct nested Arrow type and
 `ARROW:extension:name` metadata. No GeoJSON, no `parseWKB()`, no

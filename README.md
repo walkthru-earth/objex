@@ -58,9 +58,6 @@ npm install @walkthru-earth/objex
 ```ts
 import { parseStorageUrl, formatFileSize } from '@walkthru-earth/objex';
 import { UrlAdapter } from '@walkthru-earth/objex/storage';
-import { parseWKB } from '@walkthru-earth/objex/utils/wkb';
-import { buildGeoArrowTables } from '@walkthru-earth/objex/utils/geoarrow';
-import { readParquetMetadata } from '@walkthru-earth/objex/utils/parquet-metadata';
 import { getFileTypeInfo } from '@walkthru-earth/objex/file-icons';
 ```
 

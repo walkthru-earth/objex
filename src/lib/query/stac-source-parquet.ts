@@ -4,8 +4,8 @@
  * Reuses:
  *   - `getQueryEngine()` + `queryCancellable`/`query` for the single worker
  *   - `resolveTableSourceAsync(tab)` for presigned `signed-s3` URL handling
- *   - `stacRowToItem` from `utils/stac-geoparquet.js` for the pure transform
- *   - `parseWKB` from `utils/wkb.js` for geometry decoding
+ *   - `stacRowToItem` from `@walkthru-earth/objex-utils` for the pure transform
+ *   - `parseWKB` from `@walkthru-earth/objex-utils` for geometry decoding
  *
  * Push-down: `bbox` (`ST_Intersects` + `ST_MakeEnvelope`) and `datetime`
  * (`datetime BETWEEN TIMESTAMPTZ ...`). Without the datetime push-down,
