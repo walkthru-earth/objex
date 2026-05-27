@@ -16,7 +16,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
-import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
 
 const LOAD_TIMEOUT_MS = 20_000;
 

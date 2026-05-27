@@ -7,7 +7,7 @@ import type { StacRoutableKind } from '@walkthru-earth/objex-utils';
 import { t } from '../../i18n/index.svelte.js';
 import { connectionStore } from '../../stores/connections.svelte.js';
 import type { Tab } from '../../types.js';
-import { canStreamDirectly } from '../../utils/url.js';
+import { canStreamDirectly } from '../../utils/signed-url.js';
 import { getUrlView, pickViewMode, updateUrlView } from '../../utils/url-state.js';
 import { Badge } from '../ui/badge/index.js';
 import { Button } from '../ui/button/index.js';

@@ -48,7 +48,7 @@ import {
 	resolveProj4Def,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import { buildRgbLayer } from './cog/buildRgbLayer.js';

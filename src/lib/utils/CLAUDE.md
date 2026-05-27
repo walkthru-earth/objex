@@ -25,7 +25,7 @@ graph TD
         SHIKI[shiki.ts<br/>shiki]
         MAPS[map-selection.ts<br/>maplibre-gl]
         ARC[archive.ts<br/>@zip.js + tar reader]
-        URL[url.ts<br/>Svelte stores + presign.ts]
+        URL[signed-url.ts<br/>Svelte stores + presign.ts]
         US[url-state.ts<br/>$app/navigation]
         EVC[evidence-context.ts<br/>query/index = DuckDB]
     end
@@ -52,7 +52,7 @@ graph TD
 | `shiki.ts` | `highlightCode()`, `highlightCodeReversed()`, `extensionToShikiLang()`, `getTheme()`, `getReversedTheme()` | `shiki` | PmtilesArchiveView, NotebookViewer, CodeViewer, MarkdownViewer |
 | `map-selection.ts` | `setupSelectionLayer()`, `updateSelection()` | `maplibre-gl` | PmtilesMapView, MapViewer |
 | `archive.ts` | `streamZipEntriesFromUrl()`, `streamTarEntriesFromUrl()`, `listContents()` | `@zip.js/zip.js` | ArchiveViewer |
-| `url.ts` | `buildHttpsUrl()`, `buildHttpsUrlAsync()`, `buildDuckDbUrl()`, `buildDuckDbUrlAsync()`, `buildStorageUrl()`, `canStreamDirectly()`. The `Async` variants presign for `signed-s3` via `storage/presign.ts` (SigV4 query-string auth) and share a private `tryPresignTab()` helper, viewers that hand the URL to an external fetcher (iframe, range reader, `<img>`) must `await` them | Svelte stores (connections, credentials), `storage/presign.ts` | All raster / map / iframe viewers (CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, PmtilesMapView, TableToolbar, TabBar) |
+| `signed-url.ts` | `buildHttpsUrl()`, `buildHttpsUrlAsync()`, `buildDuckDbUrl()`, `buildDuckDbUrlAsync()`, `buildStorageUrl()`, `canStreamDirectly()`. The `Async` variants presign for `signed-s3` via `storage/presign.ts` (SigV4 query-string auth) and share a private `tryPresignTab()` helper, viewers that hand the URL to an external fetcher (iframe, range reader, `<img>`) must `await` them | Svelte stores (connections, credentials), `storage/presign.ts` | All raster / map / iframe viewers (CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, MediaViewer, CopcViewer, PdfViewer, ZarrMapViewer, StacMapViewer, ZarrViewer, CodeViewer, ImageViewer, PmtilesViewer, PmtilesMapView, TableToolbar, TabBar) |
 | `url-state.ts` | `syncUrlParam()`, `updateUrlView()`, `getUrlView()`, `pickViewMode<T>()`, `getUrlViewParams()` / `updateUrlViewParams()`, `getUrlPrefix()`, `hasUrlParam()`, `setRawUrlParam()`, `clearUrlState()`, `buildUrlParam()` | `$app/navigation` (SvelteKit) | Sidebar, FileTreeSidebar, TableViewer, ZarrViewer, CodeViewer, PmtilesViewer, StacTabViewer, MultiCogViewer, +page.svelte |
 | `evidence-context.ts` | `EvidenceContext` | `query/index` (DuckDB-WASM) | MarkdownViewer |
 

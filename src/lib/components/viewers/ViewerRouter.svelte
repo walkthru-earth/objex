@@ -11,7 +11,7 @@ import {
 import { getViewerKind } from '../../file-icons/index.js';
 import { getAdapter } from '../../storage/index.js';
 import type { Tab } from '../../types.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import CodeViewer from './CodeViewer.svelte';
 import ImageViewer from './ImageViewer.svelte';
 import MediaViewer from './MediaViewer.svelte';

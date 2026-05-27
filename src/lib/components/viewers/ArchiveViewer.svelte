@@ -29,7 +29,7 @@ import {
 	streamTarGzEntriesFromUrl,
 	streamZipEntriesFromUrl
 } from '$lib/utils/archive';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 

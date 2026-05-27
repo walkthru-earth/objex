@@ -16,7 +16,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
-import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/signed-url.js';
 import { getUrlView, pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
 

@@ -36,7 +36,7 @@ import {
 	buildHttpsUrl,
 	buildStorageUrl,
 	canStreamDirectly
-} from '$lib/utils/url.js';
+} from '$lib/utils/signed-url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import FileInfo from './FileInfo.svelte';
 import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';

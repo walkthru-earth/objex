@@ -46,7 +46,7 @@ import {
 	selectOverviewForResolution
 } from '../../utils/cog.js';
 import { seedRescaleFromGeotiff } from '../../utils/cog-histogram.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import CogControls from './CogControls.svelte';
 import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
 import MapContainer from './map/MapContainer.svelte';

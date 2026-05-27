@@ -9,7 +9,7 @@ import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
-import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
+import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/signed-url.js';
 
 let { leading }: { leading?: Snippet } = $props();
 

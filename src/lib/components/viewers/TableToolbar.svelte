@@ -16,7 +16,7 @@ import { Separator } from '$lib/components/ui/separator/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/url.js';
+import { buildHttpsUrl, buildStorageUrl } from '$lib/utils/signed-url.js';
 
 const PROVIDER_LABELS: Record<string, string> = {
 	s3: 'S3',

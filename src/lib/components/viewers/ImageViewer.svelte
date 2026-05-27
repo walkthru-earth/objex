@@ -15,7 +15,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 
