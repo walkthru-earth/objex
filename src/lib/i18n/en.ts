@@ -86,6 +86,12 @@ export const en: Record<string, string> = {
 	'fileTree.filterPlaceholder': 'Filter files...',
 	'fileTree.noMatch': 'No matching files',
 	'fileTree.emptyBucket': 'Empty bucket',
+	'fileTree.corsError': "Can't list this bucket",
+	'fileTree.corsHint':
+		'The server replied but sent no CORS headers, so the browser blocked the response. This is set by the bucket owner and cannot be changed here. The bucket needs a CORS policy that allows this origin, or access through a proxy.',
+	'fileTree.loadError': "Couldn't load this bucket",
+	'fileTree.loadErrorHint':
+		'Check the connection settings and your network, and confirm the bucket name and region are correct.',
 	'fileTree.expandDir': 'Expand directory',
 	'fileTree.copyHttpUrl': 'Copy HTTPS URL',
 	'fileTree.copyNativeUri': 'Copy {scheme} URI',

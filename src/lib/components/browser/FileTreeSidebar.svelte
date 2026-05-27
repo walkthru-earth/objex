@@ -18,6 +18,7 @@ import { getAdapter } from '$lib/storage/index.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection, FileEntry } from '$lib/types.js';
+import { buildHttpsUrlForConnection } from '$lib/utils/signed-url.js';
 import { syncUrlParam } from '$lib/utils/url-state.js';
 import { detectZarrMarkers } from '$lib/utils/zarr.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
@@ -48,6 +49,8 @@ let rootLoading = $state(true);
 let rootLoadingMore = $state(false);
 let rootContinuationToken = $state<string | undefined>();
 let rootHasMore = $state(false);
+/** Set when the root listing fails: 'cors' for a blocked fetch, 'generic' otherwise. */
+let rootError = $state<'cors' | 'generic' | null>(null);
 let filterQuery = $state('');
 let scrollEl = $state<HTMLElement>();
 /** Paths of directories detected as Zarr stores (by marker files in children). */
@@ -222,15 +225,9 @@ function handleChevronClick(e: MouseEvent, node: TreeNode) {
 
 // ---------- URL builders ----------
 
-/** Build HTTPS URL for a file path. */
+/** Build a provider-aware HTTPS URL for a file path (percent-encoded for copy). */
 function buildHttpUrl(path: string): string {
-	const conn = connection;
-	if (conn.endpoint) {
-		const base = conn.endpoint.replace(/\/$/, '');
-		return `${base}/${conn.bucket}/${encodeKeyPath(path)}`;
-	}
-	// Default AWS S3
-	return `https://s3.${conn.region}.amazonaws.com/${conn.bucket}/${encodeKeyPath(path)}`;
+	return buildHttpsUrlForConnection(connection, path, { encode: true });
 }
 
 /** Build provider-native URI (s3://, gs://, r2://, az://). */
@@ -241,13 +238,7 @@ function buildNativeUri(path: string): string {
 }
 
 // getNativeScheme imported from @walkthru-earth/objex-utils (cloud-url.ts)
-
-function encodeKeyPath(key: string): string {
-	return key
-		.split('/')
-		.map((s) => encodeURIComponent(s))
-		.join('/');
-}
+// buildHttpsUrlForConnection imported from utils/signed-url (provider-aware base)
 
 // ---------- Clipboard ----------
 
@@ -368,6 +359,19 @@ async function expandToPath(path: string) {
 
 // ---------- Root loading ----------
 
+/**
+ * Browsers collapse a CORS block and a true network failure into the same
+ * opaque `TypeError` ('Failed to fetch' in Chrome, 'NetworkError when
+ * attempting to fetch resource' in Firefox, 'Load failed' in Safari), so this
+ * can't tell them apart. For a cloud bucket the dominant cause is a missing
+ * browser CORS policy, so we lead the message with that.
+ */
+function isLikelyCorsError(err: unknown): boolean {
+	const e = err as { name?: string; message?: string } | null;
+	if (!e || e.name !== 'TypeError' || typeof e.message !== 'string') return false;
+	return /failed to fetch|networkerror|load failed/i.test(e.message);
+}
+
 // Load root entries when connection changes
 $effect(() => {
 	const _connId = connection.id;
@@ -376,6 +380,7 @@ $effect(() => {
 
 async function loadRoot() {
 	rootLoading = true;
+	rootError = null;
 	rootContinuationToken = undefined;
 	rootHasMore = false;
 	detectedZarrPaths = new Set();
@@ -399,6 +404,7 @@ async function loadRoot() {
 		}
 	} catch (err) {
 		console.error('[FileTree] Error loading root:', err);
+		rootError = isLikelyCorsError(err) ? 'cors' : 'generic';
 	} finally {
 		rootLoading = false;
 	}
@@ -455,6 +461,15 @@ async function loadMoreRoot() {
 		{#if rootLoading}
 			<div class="flex items-center justify-center py-8">
 				<Loader2Icon class="size-4 animate-spin text-muted-foreground" />
+			</div>
+		{:else if rootError}
+			<div class="space-y-1.5 px-3 py-6 text-center text-xs">
+				<p class="font-medium text-foreground">
+					{rootError === 'cors' ? t('fileTree.corsError') : t('fileTree.loadError')}
+				</p>
+				<p class="text-muted-foreground">
+					{rootError === 'cors' ? t('fileTree.corsHint') : t('fileTree.loadErrorHint')}
+				</p>
 			</div>
 		{:else if filteredNodes.length === 0}
 			<div class="px-3 py-6 text-center text-xs text-muted-foreground">

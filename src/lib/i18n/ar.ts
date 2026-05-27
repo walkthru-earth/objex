@@ -86,6 +86,11 @@ export const ar: Record<string, string> = {
 	'fileTree.filterPlaceholder': 'تصفية الملفات...',
 	'fileTree.noMatch': 'لا توجد ملفات مطابقة',
 	'fileTree.emptyBucket': 'حاوية فارغة',
+	'fileTree.corsError': 'تعذّر عرض محتوى هذه الحاوية',
+	'fileTree.corsHint':
+		'استجاب الخادم لكنه لم يُرسل ترويسات CORS، فحجب المتصفح الاستجابة. هذا إعداد يتحكم به مالك الحاوية ولا يمكن تغييره من هنا. تحتاج الحاوية إلى سياسة CORS تسمح بهذا المصدر، أو الوصول عبر وسيط.',
+	'fileTree.loadError': 'تعذّر تحميل هذه الحاوية',
+	'fileTree.loadErrorHint': 'تحقق من إعدادات الاتصال والشبكة، وتأكد من صحة اسم الحاوية والمنطقة.',
 	'fileTree.expandDir': 'توسيع المجلد',
 	'fileTree.copyHttpUrl': 'نسخ رابط HTTPS',
 	'fileTree.copyNativeUri': 'نسخ رابط {scheme}',
