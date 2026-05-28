@@ -1,0 +1,21 @@
+{
+  "defaults": {
+    "theme": "system",
+    "locale": "en",
+    "featureLimit": 1000,
+    "mosaicItemLimit": 2000
+  },
+  "ui": {
+    "showConnectionRail": true,
+    "showFileTree": true,
+    "showSettings": true
+  },
+  "basemaps": [
+    { "id": "positron", "label": "Positron", "type": "vector", "url": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", "variant": "light" },
+    { "id": "dark-matter", "label": "Dark Matter", "type": "vector", "url": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json", "variant": "dark" }
+  ],
+  "defaultBasemap": { "light": "positron", "dark": "dark-matter" },
+  "connections": [
+    { "name": "Source Cooperative", "provider": "s3", "bucket": "us-west-2.opendata.source.coop", "region": "us-west-2", "anonymous": true }
+  ]
+}
