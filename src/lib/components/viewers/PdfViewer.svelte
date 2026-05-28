@@ -191,7 +191,7 @@ onDestroy(cleanup);
           <ChevronLeftIcon class="size-3.5" />
           <span class="hidden sm:inline">{t('pdf.prev')}</span>
         </Button>
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">
+        <span class="text-xs text-muted-foreground">
           {currentPage} / {totalPages}
         </span>
         <Button

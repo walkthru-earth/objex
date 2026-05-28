@@ -283,7 +283,7 @@ function selectStoreAttrs() {
 				{#each Object.entries(hierarchy.storeAttrs) as [key, value]}
 					<div class="flex gap-2 py-0.5">
 						<span class="shrink-0 font-medium text-muted-foreground">{key}:</span>
-						<span class="break-all text-zinc-700 dark:text-zinc-300">
+						<span class="break-all text-foreground">
 							{typeof value === 'string' ? value : JSON.stringify(value)}
 						</span>
 					</div>
