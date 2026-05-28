@@ -63,6 +63,25 @@ export const en: Record<string, string> = {
 	'theme.system': 'System',
 	'theme.tooltip': '{mode} mode',
 
+	// Settings
+	'settings.title': 'Settings',
+	'settings.tooltip': 'Settings',
+	'settings.appearance': 'Appearance',
+	'settings.language': 'Language',
+	'settings.data': 'Data',
+	'settings.interface': 'Interface',
+	'settings.rowLimit': 'Default row limit',
+	'settings.rowLimitHelp': 'Rows loaded per page in the table viewer.',
+	'settings.mosaicLimit': 'STAC item limit',
+	'settings.mosaicLimitHelp': 'Maximum STAC items loaded into a mosaic.',
+	'settings.showConnectionRail': 'Connection sidebar',
+	'settings.showFileTree': 'File tree',
+	'settings.lockedByLink': 'Controlled by a link parameter',
+	'settings.copyConfig': 'Copy config JSON',
+	'settings.copied': 'Copied',
+	'settings.reset': 'Reset to defaults',
+	'settings.customConfig': 'Custom config loaded',
+
 	// Safe Lock
 	'safeLock.enabledAria': 'Safe lock enabled (read-only)',
 	'safeLock.disabledAria': 'Safe lock disabled (writes allowed)',

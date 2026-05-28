@@ -63,6 +63,25 @@ export const ar: Record<string, string> = {
 	'theme.system': 'النظام',
 	'theme.tooltip': 'وضع {mode}',
 
+	// Settings
+	'settings.title': 'الإعدادات',
+	'settings.tooltip': 'الإعدادات',
+	'settings.appearance': 'المظهر',
+	'settings.language': 'اللغة',
+	'settings.data': 'البيانات',
+	'settings.interface': 'الواجهة',
+	'settings.rowLimit': 'حد الصفوف الافتراضي',
+	'settings.rowLimitHelp': 'عدد الصفوف المحملة لكل صفحة في عارض الجدول.',
+	'settings.mosaicLimit': 'حد عناصر STAC',
+	'settings.mosaicLimitHelp': 'أقصى عدد لعناصر STAC المحملة في الفسيفساء.',
+	'settings.showConnectionRail': 'شريط الاتصالات الجانبي',
+	'settings.showFileTree': 'شجرة الملفات',
+	'settings.lockedByLink': 'يتم التحكم به عبر معامل الرابط',
+	'settings.copyConfig': 'نسخ إعدادات JSON',
+	'settings.copied': 'تم النسخ',
+	'settings.reset': 'إعادة الضبط الافتراضي',
+	'settings.customConfig': 'تم تحميل إعدادات مخصصة',
+
 	// Safe Lock
 	'safeLock.enabledAria': 'قفل الأمان مفعّل (قراءة فقط)',
 	'safeLock.disabledAria': 'قفل الأمان معطّل (الكتابة مسموحة)',
