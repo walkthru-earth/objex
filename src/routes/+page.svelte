@@ -6,12 +6,14 @@ import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import SearchIcon from '@lucide/svelte/icons/search';
+import SettingsIcon from '@lucide/svelte/icons/settings';
 import XIcon from '@lucide/svelte/icons/x';
 import { classifyUrl, resolveCloudUrl } from '@walkthru-earth/objex-utils';
 import { cubicOut } from 'svelte/easing';
 import { fly } from 'svelte/transition';
 import { base } from '$app/paths';
 import FileTreeSidebar from '$lib/components/browser/FileTreeSidebar.svelte';
+import SettingsSheet from '$lib/components/layout/SettingsSheet.svelte';
 import Sidebar from '$lib/components/layout/Sidebar.svelte';
 import StatusBar from '$lib/components/layout/StatusBar.svelte';
 import TabBar from '$lib/components/layout/TabBar.svelte';
@@ -21,11 +23,13 @@ import ViewerRouter from '$lib/components/viewers/ViewerRouter.svelte';
 import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
+import { appConfig } from '$lib/stores/config.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import {
 	clearUrlState,
+	getPanelParam,
 	getUrlPrefix,
 	getUrlView,
 	setRawUrlParam,
@@ -137,6 +141,17 @@ let hasActiveTab = $derived(tabs.active !== null && tabs.active !== undefined);
 let hasBrowserConnection = $derived(browser.activeConnection !== null);
 let mobileSheetOpen = $state(false);
 let desktopSidebarOpen = $state(false);
+
+// Settings panel lives here (not in Sidebar) so it stays reachable even when
+// the connection rail is hidden via settings or a ?sidebar=hide link param.
+let settingsOpen = $state(false);
+
+// Auto-open the panel on load when ?panel=settings is present.
+$effect(() => {
+	if (appConfig.value.ui.showSettings && getPanelParam() === 'settings') {
+		settingsOpen = true;
+	}
+});
 
 // Extension cycling for the URL hint animation
 // Each entry shows the extension + its default #view hash
@@ -392,7 +407,7 @@ const pageDescription = $derived.by(() => {
 	{#if isDesktop}
 		<!-- Desktop layout: Icon Rail + Stable Flex Layout -->
 		{#if settings.showConnectionRail}
-			<Sidebar />
+			<Sidebar onOpenSettings={() => (settingsOpen = true)} />
 		{/if}
 		<div class="flex flex-1 overflow-hidden">
 			{#if desktopSidebarOpen && hasBrowserConnection && browser.activeConnection && settings.showFileTree}
@@ -465,7 +480,7 @@ const pageDescription = $derived.by(() => {
 				</Sheet.Header>
 				<div class="flex min-h-0 flex-1">
 					{#if settings.showConnectionRail}
-						<Sidebar />
+						<Sidebar onOpenSettings={() => (settingsOpen = true)} />
 					{/if}
 					{#if hasBrowserConnection && browser.activeConnection && settings.showFileTree}
 						<div class="flex-1 overflow-hidden">
@@ -477,3 +492,18 @@ const pageDescription = $derived.by(() => {
 		</Sheet.Root>
 	{/if}
 </div>
+
+<!-- Fallback settings entry point: when the connection rail (which hosts the
+gear) is hidden, keep settings reachable so the user is never locked out. -->
+{#if appConfig.value.ui.showSettings && !settings.showConnectionRail}
+	<button
+		class="fixed bottom-4 start-4 z-40 flex size-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-md transition-colors hover:bg-accent/50 hover:text-foreground"
+		onclick={() => (settingsOpen = true)}
+		aria-label={t('settings.tooltip')}
+		title={t('settings.tooltip')}
+	>
+		<SettingsIcon class="size-4" />
+	</button>
+{/if}
+
+<SettingsSheet bind:open={settingsOpen} />

@@ -28,23 +28,18 @@ import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection } from '$lib/types.js';
-import { clearUrlState, getPanelParam, syncUrlParam } from '$lib/utils/url-state.js';
+import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
 import AboutSheet from './AboutSheet.svelte';
 import ConnectionDialog from './ConnectionDialog.svelte';
 import LocaleToggle from './LocaleToggle.svelte';
-import SettingsSheet from './SettingsSheet.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
 
-let aboutOpen = $state(false);
-let settingsOpen = $state(false);
-let dialogOpen = $state(false);
+// Settings panel is owned by +page.svelte so it stays reachable even when the
+// connection rail is hidden; the gear button just requests it be opened.
+let { onOpenSettings }: { onOpenSettings?: () => void } = $props();
 
-// Open the settings panel on load when ?panel=settings is present.
-$effect(() => {
-	if (appConfig.value.ui.showSettings && getPanelParam() === 'settings') {
-		settingsOpen = true;
-	}
-});
+let aboutOpen = $state(false);
+let dialogOpen = $state(false);
 let editingConnection = $state<Connection | null>(null);
 let detectedHost = $state<DetectedHost | null>(null);
 let autoConnecting = $state(false);
@@ -375,9 +370,7 @@ async function handleBrowseConnection(connection: Connection) {
 					<TooltipTrigger>
 						<button
 							class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-							onclick={() => {
-								settingsOpen = true;
-							}}
+							onclick={() => onOpenSettings?.()}
 							aria-label={t('settings.tooltip')}
 						>
 							<SettingsIcon class="size-4" />
@@ -393,8 +386,6 @@ async function handleBrowseConnection(connection: Connection) {
 </TooltipProvider>
 
 <AboutSheet bind:open={aboutOpen} />
-
-<SettingsSheet bind:open={settingsOpen} />
 
 <ConnectionDialog
 	bind:open={dialogOpen}
