@@ -49,7 +49,7 @@ export function safeDecodeURIComponent(s: string): string {
  */
 export function resolveCloudUrl(url: string): string {
 	// S3 / S3-compatible: s3://, s3a://, s3n://
-	const s3Match = url.match(/^s3[an]?:\/\/([^/]+)\/?(.*)$/);
+	const s3Match = url.match(/^s3[an]?:\/\/([^/]+)(?:\/(.*))?$/);
 	if (s3Match) {
 		const [, bucket, key] = s3Match;
 		// Detect region from bucket name (e.g. "us-west-2.opendata.source.coop")
@@ -60,7 +60,7 @@ export function resolveCloudUrl(url: string): string {
 	}
 
 	// Google Cloud Storage: gs://, gcs://
-	const gcsMatch = url.match(/^gcs?:\/\/([^/]+)\/?(.*)$/);
+	const gcsMatch = url.match(/^gcs?:\/\/([^/]+)(?:\/(.*))?$/);
 	if (gcsMatch) {
 		const [, bucket, key] = gcsMatch;
 		const base = buildProviderBaseUrl('gcs', '', bucket, '');

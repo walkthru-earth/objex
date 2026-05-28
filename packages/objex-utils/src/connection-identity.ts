@@ -40,6 +40,24 @@ const DEFAULT_PORTS: Record<string, string> = {
 	'http:': '80'
 };
 
+const SLASH = 47; // '/'.charCodeAt(0)
+
+/** Strip trailing '/' linearly (avoids the polynomial backtracking of `/\/+$/`). */
+function stripTrailingSlashes(s: string): string {
+	let end = s.length;
+	while (end > 0 && s.charCodeAt(end - 1) === SLASH) end--;
+	return s.slice(0, end);
+}
+
+/** Strip leading and trailing '/' linearly (avoids `/^\/+|\/+$/g` backtracking). */
+function stripEdgeSlashes(s: string): string {
+	let start = 0;
+	let end = s.length;
+	while (start < end && s.charCodeAt(start) === SLASH) start++;
+	while (end > start && s.charCodeAt(end - 1) === SLASH) end--;
+	return s.slice(start, end);
+}
+
 /**
  * Normalize an endpoint URL to a canonical form suitable for equality checks.
  * Empty / whitespace-only input returns `''` (the "no endpoint" sentinel).
@@ -56,10 +74,10 @@ export function normalizeEndpoint(raw: string | undefined | null): string {
 		const host = url.hostname.toLowerCase();
 		const defaultPort = DEFAULT_PORTS[scheme] ?? '';
 		const port = url.port && url.port !== defaultPort ? `:${url.port}` : '';
-		const path = url.pathname.replace(/\/+$/, '');
+		const path = stripTrailingSlashes(url.pathname);
 		return `${scheme}//${host}${port}${path}`;
 	} catch {
-		return trimmed.toLowerCase().replace(/\/+$/, '');
+		return stripTrailingSlashes(trimmed.toLowerCase());
 	}
 }
 
@@ -73,7 +91,7 @@ export function normalizeProvider(provider: string | undefined | null): Provider
 
 /** Bucket names are case-sensitive on some backends, so preserve case. */
 function normalizeBucket(bucket: string | undefined | null): string {
-	return (bucket ?? '').trim().replace(/^\/+|\/+$/g, '');
+	return stripEdgeSlashes((bucket ?? '').trim());
 }
 
 function normalizeRegion(region: string | undefined | null): string {

@@ -11,6 +11,12 @@ onlyBuiltDependencies:
 
 overrides:
   zarrita: ^0.7.1
+  # Security: @sveltejs/kit pins cookie@0.6.x (GHSA-pxg6-pf52-xh8x, dev-only).
+  cookie: ^0.7.0
+  # Security: tsup -> sucrase -> tinyglobby pulls picomatch 4.0.3
+  # (GHSA-3v7f-55p6-f55p). Scope to the 4.x range so micromatch's
+  # picomatch@2.x (not in the vulnerable range) is left untouched.
+  'picomatch@4': ^4.0.4
 
 patchedDependencies:
   '@carbonplan/zarr-layer@0.4.3': patches/@carbonplan__zarr-layer@0.4.3.patch

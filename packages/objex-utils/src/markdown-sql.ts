@@ -91,7 +91,7 @@ export function interpolateTemplates(
  */
 export function markSqlBlocks(content: string): string {
 	return content.replace(
-		/```sql\s+(\w[\w-]*)\s*\n([\s\S]*?)```/g,
+		/```sql[ \t]+(\w[\w-]*)[ \t]*\n([\s\S]*?)```/g,
 		(_, name) => `<div data-sql-block="${name}"></div>`
 	);
 }
