@@ -418,7 +418,7 @@ const pageDescription = $derived.by(() => {
 			<div class="flex h-full min-w-0 flex-1 flex-col">
 				<TabBar>
 					{#snippet leading()}
-						{#if hasBrowserConnection}
+						{#if hasBrowserConnection && settings.showFileTree}
 							<Button
 								variant="ghost"
 								size="sm"
@@ -440,15 +440,17 @@ const pageDescription = $derived.by(() => {
 		<div class="flex flex-1 flex-col">
 			<TabBar>
 				{#snippet leading()}
-					<Button
-						variant="ghost"
-						size="sm"
-						class="h-7 px-1.5"
-						onclick={() => (mobileSheetOpen = true)}
-						title={t('mobile.openSidebar')}
-					>
-						<PanelLeftIcon class="size-4" />
-					</Button>
+					{#if settings.showConnectionRail || settings.showFileTree}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-7 px-1.5"
+							onclick={() => (mobileSheetOpen = true)}
+							title={t('mobile.openSidebar')}
+						>
+							<PanelLeftIcon class="size-4" />
+						</Button>
+					{/if}
 				{/snippet}
 			</TabBar>
 			{@render viewerContent()}
