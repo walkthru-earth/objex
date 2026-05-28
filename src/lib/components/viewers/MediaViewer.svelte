@@ -76,7 +76,7 @@ onDestroy(cleanup);
 <div class="flex h-full flex-col">
 	<ViewerHeader {tab}>
 		{#snippet badge()}
-			<span class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+			<span class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
 				{mediaType}
 			</span>
 		{/snippet}
