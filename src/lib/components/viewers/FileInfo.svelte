@@ -32,7 +32,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 		<!-- File Metadata -->
 		{#if fileEntries.length > 0}
 			<section class="mx-auto max-w-2xl">
-				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
 					{t('fileInfo.fileMetadata')}
 				</h3>
 				<div
@@ -42,17 +42,17 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 						{#each fileEntries as entry}
 							<div class="flex items-start gap-3 px-3.5 py-2">
 								<span
-									class="w-[5.5rem] shrink-0 text-xs text-zinc-400 dark:text-zinc-500"
+									class="w-[5.5rem] shrink-0 text-xs text-muted-foreground"
 								>
 									{entry.label}
 								</span>
 								<div class="min-w-0 flex-1">
-									<span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+									<span class="text-xs font-medium text-foreground">
 										{entry.value}
 									</span>
 									{#if entry.detail}
 										<p
-											class="mt-0.5 truncate font-mono text-[10px] leading-tight text-zinc-400 dark:text-zinc-500"
+											class="mt-0.5 truncate font-mono text-[10px] leading-tight text-muted-foreground"
 										>
 											{entry.detail}
 										</p>
@@ -68,7 +68,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 		<!-- Geometry -->
 		{#if geoEntries.length > 0}
 			<section class="mx-auto max-w-2xl">
-				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
 					{t('fileInfo.geometry')}
 				</h3>
 				<div
@@ -78,12 +78,12 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 						{#each geoEntries as entry}
 							<div class="flex items-start gap-3 px-3.5 py-2">
 								<span
-									class="w-[5.5rem] shrink-0 text-xs text-zinc-400 dark:text-zinc-500"
+									class="w-[5.5rem] shrink-0 text-xs text-muted-foreground"
 								>
 									{entry.label}
 								</span>
 								<div class="min-w-0 flex-1">
-									<span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+									<span class="text-xs font-medium text-foreground">
 										{entry.value}
 									</span>
 								</div>
@@ -97,7 +97,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 		<!-- Schema -->
 		{#if schema.length > 0}
 			<section class="mx-auto max-w-2xl">
-				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
 					{t('fileInfo.schema')} ({schema.length})
 				</h3>
 				<div
@@ -107,17 +107,17 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 						<thead>
 							<tr class="bg-zinc-100/80 dark:bg-zinc-800/50">
 								<th
-									class="w-10 px-3 py-1.5 text-left font-medium text-zinc-400 dark:text-zinc-500"
+									class="w-10 px-3 py-1.5 text-left font-medium text-muted-foreground"
 								>
 									#
 								</th>
 								<th
-									class="px-3 py-1.5 text-left font-medium text-zinc-500 dark:text-zinc-400"
+									class="px-3 py-1.5 text-left font-medium text-muted-foreground"
 								>
 									{t('fileInfo.column')}
 								</th>
 								<th
-									class="px-3 py-1.5 text-left font-medium text-zinc-500 dark:text-zinc-400"
+									class="px-3 py-1.5 text-left font-medium text-muted-foreground"
 								>
 									{t('fileInfo.type')}
 								</th>
@@ -128,13 +128,13 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 								<tr
 									class="border-t border-zinc-100/80 dark:border-zinc-800/50 {i % 2 === 0 ? 'bg-zinc-50/50 dark:bg-zinc-900/20' : ''}"
 								>
-									<td class="px-3 py-1.5 tabular-nums text-zinc-400 dark:text-zinc-600">
+									<td class="px-3 py-1.5 tabular-nums text-muted-foreground">
 										{i + 1}
 									</td>
-									<td class="px-3 py-1.5 font-mono text-zinc-700 dark:text-zinc-300">
+									<td class="px-3 py-1.5 font-mono text-foreground">
 										{field.name}
 									</td>
-									<td class="px-3 py-1.5 font-mono text-zinc-500 dark:text-zinc-400">
+									<td class="px-3 py-1.5 font-mono text-muted-foreground">
 										{field.type}
 									</td>
 								</tr>
@@ -148,7 +148,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 		<!-- Parquet Table Explorer -->
 		{#if parquetTableSrc}
 			<section>
-				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+				<h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
 					{t('fileInfo.parquetExplorer')}
 				</h3>
 				<div
@@ -167,7 +167,7 @@ const geoEntries = $derived(entries.filter((e) => geoLabels.has(e.label)));
 
 		{#if entries.length === 0 && schema.length === 0}
 			<div class="flex flex-1 items-center justify-center py-16">
-				<p class="text-sm text-zinc-400">{t('fileInfo.noMetadata')}</p>
+				<p class="text-sm text-muted-foreground">{t('fileInfo.noMetadata')}</p>
 			</div>
 		{/if}
 	</div>
