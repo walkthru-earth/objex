@@ -659,72 +659,10 @@ function isBinaryType(typeStr: string): boolean {
 
 export class WasmQueryEngine implements QueryEngine {
 	async query(connId: string, sql: string): Promise<QueryResult> {
-		const t0 = performance.now();
-		const sqlPreview = sql.length > 120 ? `${sql.slice(0, 120)}…` : sql;
-		log(`query → ${sqlPreview}`);
-
-		const db = await getDB();
-		const conn = await db.connect();
-
-		const tConn = performance.now();
-		log(`query → connected in ${elapsed(t0)}`);
-
-		try {
-			if (connId) {
-				await this.configureStorage(conn, connId, sql);
-				log(`query → storage configured in ${elapsed(tConn)}`);
-			}
-
-			const tQuery = performance.now();
-			const result = await conn.query(sql);
-			log(`query → executed in ${elapsed(tQuery)}, rows: ${result.numRows}`);
-
-			// DuckDB WASM returns an Arrow Table (bundled apache-arrow@17).
-			// Our project uses apache-arrow@21 — cross-version tableToIPC/tableFromIPC
-			// loses data rows. Extract rows directly from DuckDB's own Arrow Table.
-			const numRows = result.numRows;
-			const cols = result.schema.fields.map((f: any) => f.name);
-			const types = result.schema.fields.map((f: any) => String(f.type));
-
-			if (numRows === 0) {
-				log(`query → done (empty) in ${elapsed(t0)}`);
-				return {
-					columns: cols,
-					types,
-					rowCount: 0,
-					rows: []
-				};
-			}
-
-			// Arrow emits DECIMAL columns as multi-word BigInt / Uint32Array buffers.
-			// `String(rawDecimal)` yields the unscaled integer (or "0,0,0,0"),
-			// so rewrite each decimal cell through formatDecimal with the column scale.
-			const decimalCols: Array<{ name: string; scale: number }> = [];
-			for (let i = 0; i < cols.length; i++) {
-				const s = decimalScale(types[i]);
-				if (s >= 0) decimalCols.push({ name: cols[i], scale: s });
-			}
-
-			// Extract rows directly — avoids Arrow version mismatch
-			const rows = result.toArray().map((row: any) => {
-				const obj: Record<string, any> = typeof row.toJSON === 'function' ? row.toJSON() : {};
-				if (typeof row.toJSON !== 'function') {
-					for (const col of cols) obj[col] = row[col];
-				}
-				for (const { name, scale } of decimalCols) {
-					obj[name] = formatDecimal(obj[name], scale);
-				}
-				return obj;
-			});
-
-			log(`query → done in ${elapsed(t0)}, ${numRows} rows, ${cols.length} cols`);
-			return { columns: cols, types, rowCount: numRows, rows };
-		} catch (err) {
-			logWarn(`query → failed after ${elapsed(t0)}:`, (err as Error)?.message ?? err);
-			throw err;
-		} finally {
-			await conn.close();
-		}
+		// Delegate to the send()-based path so a data query never blocks the
+		// single DuckDB worker (conn.query() is blocking). Same return shape.
+		const { result } = this.queryCancellable(connId, sql);
+		return result;
 	}
 
 	async queryForMap(
