@@ -1,4 +1,5 @@
 import {
+	DEFAULT_APP_CONFIG,
 	loadFromStorage,
 	parseVisibilityParam,
 	persistToStorage,
@@ -87,12 +88,19 @@ function createSettingsStore() {
 			return resolveSetting(user.locale, cfg().defaults.locale as Locale, 'en') as Locale;
 		},
 		get featureLimit(): number {
-			return resolveSetting(user.featureLimit, cfg().defaults.featureLimit, 1000) as number;
+			return resolveSetting(
+				user.featureLimit,
+				cfg().defaults.featureLimit,
+				DEFAULT_APP_CONFIG.defaults.featureLimit
+			) as number;
 		},
 		get mosaicItemLimit(): number {
 			// Explicit user/query choice always wins, at any value.
 			if (user.mosaicItemLimit !== undefined) return user.mosaicItemLimit;
-			const configured = resolveSetting(cfg().defaults.mosaicItemLimit, 2000) as number;
+			const configured = resolveSetting(
+				cfg().defaults.mosaicItemLimit,
+				DEFAULT_APP_CONFIG.defaults.mosaicItemLimit
+			) as number;
 			// Mobile heap safety: clamp the default so API/static mosaic loads don't OOM.
 			return mobileLikeAtLoad ? Math.min(configured, MOBILE_MOSAIC_LIMIT) : configured;
 		},

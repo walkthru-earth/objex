@@ -30,6 +30,7 @@
 
 import type { FacetState, StacItem } from '@walkthru-earth/objex-utils';
 import {
+	DEFAULT_APP_CONFIG,
 	emptyPushdown,
 	parseWKB,
 	type StacSource,
@@ -208,7 +209,7 @@ function joinWhere(parts: (string | null)[]): string {
 	return live.length === 0 ? '' : ` WHERE ${live.join(' AND ')}`;
 }
 
-const DEFAULT_LIMIT = 2000;
+const DEFAULT_LIMIT = DEFAULT_APP_CONFIG.defaults.mosaicItemLimit;
 
 /**
  * Build the SELECT list. All columns are optional in the stac-geoparquet
