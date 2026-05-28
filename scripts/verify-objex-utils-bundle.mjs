@@ -100,19 +100,14 @@ async function scanFile(path) {
 		if (ALLOWED_PEERS.has(spec) || [...ALLOWED_PEERS].some((p) => spec.startsWith(`${p}/`))) {
 			continue;
 		}
-		if (isForbidden(spec)) {
-			const ln = lineNumber(text, m.index);
-			errors.push({ path, line: ln, spec, kind: kind.trim() });
-		} else {
-			const ln = lineNumber(text, m.index);
-			errors.push({
-				path,
-				line: ln,
-				spec,
-				kind: kind.trim(),
-				note: 'unknown bare specifier, add to ALLOWED_PEERS if intended'
-			});
-		}
+		const ln = lineNumber(text, m.index);
+		errors.push({
+			path,
+			line: ln,
+			spec,
+			kind: kind.trim(),
+			reason: isForbidden(spec) ? 'forbidden heavy dependency' : 'undeclared bare import'
+		});
 	}
 	SIDE_EFFECT_IMPORT_RE.lastIndex = 0;
 	let se;
@@ -122,19 +117,14 @@ async function scanFile(path) {
 		if (ALLOWED_PEERS.has(spec) || [...ALLOWED_PEERS].some((p) => spec.startsWith(`${p}/`))) {
 			continue;
 		}
-		if (isForbidden(spec)) {
-			const ln = lineNumber(text, se.index);
-			errors.push({ path, line: ln, spec, kind: 'import' });
-		} else {
-			const ln = lineNumber(text, se.index);
-			errors.push({
-				path,
-				line: ln,
-				spec,
-				kind: 'import',
-				note: 'unknown bare specifier, add to ALLOWED_PEERS if intended'
-			});
-		}
+		const ln = lineNumber(text, se.index);
+		errors.push({
+			path,
+			line: ln,
+			spec,
+			kind: 'import',
+			reason: isForbidden(spec) ? 'forbidden heavy dependency' : 'undeclared bare import'
+		});
 	}
 	return errors;
 }
@@ -150,27 +140,24 @@ async function main() {
 	}
 	const allErrors = [];
 	for (const f of files) allErrors.push(...(await scanFile(f)));
-	const hardFails = allErrors.filter((e) => !e.note);
-	const warnings = allErrors.filter((e) => e.note);
 
-	if (warnings.length) {
-		console.warn('verify-objex-utils-bundle: unknown bare specifiers (review):');
-		for (const w of warnings) {
-			console.warn(`  ${w.path}:${w.line}  ${w.kind} '${w.spec}'  ${w.note}`);
-		}
-	}
-	if (hardFails.length) {
+	if (allErrors.length) {
 		console.error('');
-		console.error('verify-objex-utils-bundle: FORBIDDEN top-level imports in dist/');
+		console.error('verify-objex-utils-bundle: DISALLOWED top-level imports in dist/');
 		console.error('(see walkthru-earth/objex#11; packages/objex-utils/CLAUDE.md)');
 		console.error('');
-		for (const e of hardFails) {
-			console.error(`  ${e.path}:${e.line}  ${e.kind} '${e.spec}'`);
+		console.error('Only relative paths, node: builtins, and the declared peer deps');
+		console.error(`(${[...ALLOWED_PEERS].join(', ')}) may be imported at the top level.`);
+		console.error('');
+		for (const e of allErrors) {
+			console.error(`  ${e.path}:${e.line}  ${e.kind} '${e.spec}'  [${e.reason}]`);
 		}
 		console.error('');
-		console.error('Fix: move the affected module to a `*-pure.ts` sibling, or');
-		console.error('     load the dep lazily via `await import(...)` inside the');
-		console.error('     function that needs it (see parseMarkdownDocument + yaml).');
+		console.error('Fix: move the affected module to a `*-pure.ts` sibling, or load the');
+		console.error('     dep lazily via `await import(...)` inside the function that needs');
+		console.error('     it (see parseMarkdownDocument + yaml). If the dep is genuinely a');
+		console.error('     pure, lightweight peer the consumer should provide, declare it in');
+		console.error("     the package peerDependencies AND this script's ALLOWED_PEERS.");
 		process.exit(1);
 	}
 	console.log(`verify-objex-utils-bundle: ${files.length} dist file(s) clean.`);
