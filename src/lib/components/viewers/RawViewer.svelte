@@ -79,7 +79,7 @@ async function loadHexDump() {
 		{/snippet}
 		{#snippet actions()}
 			{#if !loading && fileSize > 0}
-				<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+				<span class="hidden text-xs text-muted-foreground sm:inline">
 					{formatFileSize(fileSize)}
 				</span>
 				{#if truncated}
