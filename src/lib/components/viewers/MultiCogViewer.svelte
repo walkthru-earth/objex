@@ -10,6 +10,8 @@ import {
 	compositeFromUrl,
 	compositeToUrl,
 	extractCogAssets,
+	handleLoadError,
+	isAbortError,
 	isSingleAssetComposite,
 	isStacItem,
 	LruCache,
@@ -396,9 +398,9 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 						if (gen !== loadGen || signal.aborted) return;
 						if (!result.ok) smokeWarning = result.reason;
 					} catch (err) {
-						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (isAbortError(err)) return;
 						if (gen !== loadGen) return;
-						smokeWarning = err instanceof Error ? err.message : String(err);
+						smokeWarning = handleLoadError(err);
 					}
 				})();
 			}
@@ -422,8 +424,8 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 	} catch (err) {
 		if (gen !== loadGen) return;
 		if (signal.aborted) return;
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
