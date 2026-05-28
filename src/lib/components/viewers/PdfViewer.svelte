@@ -17,6 +17,8 @@ import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPdfDocument, loadPdfFromUrl } from '$lib/utils/pdf';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 const LOAD_TIMEOUT_MS = 20_000;
 
@@ -174,17 +176,10 @@ onDestroy(cleanup);
 </script>
 
 <div class="flex h-full flex-col">
-  <div
-    class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-  >
-    <span
-      class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300"
-      >{tab.name}</span
-    >
-    <Badge variant="secondary">{t("pdf.badge")}</Badge>
-
-    {#if totalPages > 0}
-      <div class="ms-auto flex items-center gap-1 sm:gap-2">
+  <ViewerHeader {tab}>
+    {#snippet badge()}<Badge variant="secondary">{t('pdf.badge')}</Badge>{/snippet}
+    {#snippet actions()}
+      {#if totalPages > 0}
         <!-- Pagination (always visible) -->
         <Button
           variant="ghost"
@@ -194,7 +189,7 @@ onDestroy(cleanup);
           disabled={currentPage <= 1}
         >
           <ChevronLeftIcon class="size-3.5" />
-          <span class="hidden sm:inline">{t("pdf.prev")}</span>
+          <span class="hidden sm:inline">{t('pdf.prev')}</span>
         </Button>
         <span class="text-xs text-zinc-500 dark:text-zinc-400">
           {currentPage} / {totalPages}
@@ -206,7 +201,7 @@ onDestroy(cleanup);
           onclick={nextPage}
           disabled={currentPage >= totalPages}
         >
-          <span class="hidden sm:inline">{t("pdf.next")}</span>
+          <span class="hidden sm:inline">{t('pdf.next')}</span>
           <ChevronRightIcon class="size-3.5" />
         </Button>
 
@@ -218,7 +213,7 @@ onDestroy(cleanup);
             size="sm"
             class="h-7 px-1.5"
             onclick={zoomOut}
-            title={t("pdf.zoomOut")}
+            title={t('pdf.zoomOut')}
           >
             <MinusIcon class="size-3.5" />
           </Button>
@@ -230,7 +225,7 @@ onDestroy(cleanup);
             size="sm"
             class="h-7 px-1.5"
             onclick={zoomIn}
-            title={t("pdf.zoomIn")}
+            title={t('pdf.zoomIn')}
           >
             <PlusIcon class="size-3.5" />
           </Button>
@@ -246,33 +241,29 @@ onDestroy(cleanup);
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" class="w-44">
               <DropdownMenu.Item onclick={zoomIn}>
-                {t("pdf.zoomIn")}
+                {t('pdf.zoomIn')}
               </DropdownMenu.Item>
               <DropdownMenu.Item onclick={zoomOut}>
-                {t("pdf.zoomOut")}
+                {t('pdf.zoomOut')}
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item disabled>
-                {t("pdf.zoom")}: {Math.round(scale * 100)}%
+                {t('pdf.zoom')}: {Math.round(scale * 100)}%
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </div>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    {/snippet}
+  </ViewerHeader>
 
   <div
     class="flex flex-1 items-start justify-center overflow-auto bg-zinc-200 p-4 dark:bg-zinc-800"
   >
     {#if loading}
-      <div class="flex h-full items-center justify-center">
-        <p class="text-sm text-zinc-400">{t("pdf.loading")}</p>
-      </div>
+      <ViewerStatus kind="loading" message={t('pdf.loading')} />
     {:else if error}
-      <div class="flex h-full items-center justify-center">
-        <p class="text-sm text-red-400">{error}</p>
-      </div>
+      <ViewerStatus kind="error" message={error} />
     {:else}
       <canvas bind:this={canvasEl} class="shadow-lg"></canvas>
     {/if}
