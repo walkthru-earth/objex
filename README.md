@@ -23,6 +23,7 @@ graph LR
 - **Visualize** GeoParquet, GeoJSON, COG, PMTiles, FlatGeobuf, Zarr (incl. GeoZarr), STAC catalogs, and stac-geoparquet on maps (MapLibre + deck.gl)
 - **View** 100+ file formats: code (30+ languages), Jupyter notebooks, PDF, 3D models, archives, media
 - **Share** via URL -- `?url=<storage-url>#<view>` encodes full viewer state
+- **Configure** without a rebuild -- bundled `config.json` (or remote `?config=<url>`) sets defaults, basemaps, and seed connections, with an in-app settings panel
 - **i18n** -- English + Arabic with automatic RTL layout
 - **Zero backend** -- everything runs client-side
 
@@ -92,20 +93,30 @@ Full per-module reference docs: [`packages/objex-utils/docs/`](packages/objex-ut
 
 | Export path | What |
 |-------------|------|
-| `@walkthru-earth/objex` | All types, utils, storage, query engine |
+| `@walkthru-earth/objex` | All types, pure utils, storage, query engine |
 | `./storage` | `StorageAdapter`, `UrlAdapter` |
 | `./query` | `QueryEngine`, `QueryCancelledError` |
-| `./utils/wkb` | `parseWKB`, `toBinary`, `findGeoColumn` |
-| `./utils/geoarrow` | `buildGeoArrowTables`, `normalizeGeomType` |
-| `./utils/storage-url` | `parseStorageUrl`, `looksLikeUrl` |
-| `./utils/parquet-metadata` | `readParquetMetadata`, `extractEpsgFromGeoMeta` |
-| `./utils/format` | `formatFileSize`, `formatDate`, `formatValue`, `getFileExtension`, `jsonReplacerBigInt` |
-| `./utils/hex` | `generateHexDump` |
-| `./utils/column-types` | `classifyType`, `typeColor`, `typeBadgeClass` |
 | `./file-icons` | `getFileTypeInfo`, `getDuckDbReadFn`, `getViewerKind` |
 | `./types` | `FileEntry`, `Connection`, `Tab`, `WriteResult`, `Theme` |
 
-The main export also includes `copyToClipboard`, `handleLoadError`, the stac-geoparquet helpers (`isStacGeoparquetSchema`, `stacRowToItem`, `flattenStacBbox`, `pickStacPrimaryAsset`, `resolveStacAssetHref`), and shared constants (`WGS84_CODES`, `STORAGE_KEYS`, `DEFAULT_TARGET_CRS`, etc.).
+The pure utilities live in `@walkthru-earth/objex-utils` and are also re-exported from the package root, so `parseStorageUrl`, `parseWKB`, `buildGeoArrowTables`, `readParquetMetadata`, `formatFileSize`, `generateHexDump`, `classifyType`, and the rest are importable straight from `@walkthru-earth/objex`. The root export also includes `copyToClipboard`, `handleLoadError`, the stac-geoparquet helpers (`isStacGeoparquetSchema`, `stacRowToItem`, `flattenStacBbox`, `pickStacPrimaryAsset`, `resolveStacAssetHref`), and shared constants (`WGS84_CODES`, `STORAGE_KEYS`, `DEFAULT_TARGET_CRS`, etc.).
+
+## Configuration
+
+objex reads a bundled `static/config.json` at startup, so a host can customize the app without rebuilding. Pass `?config=<url>` to load a remote config that overrides the bundled one.
+
+`config.json` sets the default theme and language, query and mosaic row limits, the basemap list with a per-theme default basemap, and seed connections that load on first visit. The `ui` block toggles whether the connection rail, file tree, and settings panel are shown.
+
+Several of these are also reachable as query params, handy for embedding and deep links.
+
+| Param | Effect |
+|-------|--------|
+| `?config=<url>` | Load a remote `config.json` instead of the bundled one |
+| `?panel=settings` | Open the settings panel on load |
+| `?rail=hide` / `?rail=show` | Hide or show the connection rail |
+| `?tree=hide` / `?tree=show` | Hide or show the file tree |
+
+Users can change theme, language, query limit, and basemap from the in-app settings panel (gear icon). Their changes persist locally and take precedence over config defaults, while settings they never touched keep following the config.
 
 ## Quick Start (Development)
 
