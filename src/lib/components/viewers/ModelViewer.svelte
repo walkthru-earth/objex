@@ -106,7 +106,7 @@ onDestroy(cleanup);
 		{#snippet badge()}<Badge variant="secondary">{t('model.badge')}</Badge>{/snippet}
 		{#snippet actions()}
 			{#if meshCount > 0}
-				<span class="hidden text-xs text-zinc-400 sm:inline">
+				<span class="hidden text-xs text-muted-foreground sm:inline">
 					{meshCount} {t('model.meshes')} &middot; {vertexCount.toLocaleString()} {t('model.vertices')}
 				</span>
 			{/if}
@@ -132,7 +132,7 @@ onDestroy(cleanup);
 			<!-- Mobile overflow menu -->
 			<div class="flex sm:hidden">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+					<DropdownMenu.Trigger class="rounded p-1 text-muted-foreground hover:bg-muted">
 						<EllipsisVerticalIcon class="size-4" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-40">
