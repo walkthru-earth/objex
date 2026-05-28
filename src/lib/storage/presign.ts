@@ -1,4 +1,5 @@
 import { safeDecodeURIComponent } from '@walkthru-earth/objex-utils';
+import { DEFAULT_AWS_REGION } from '../constants.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import type { Connection } from '../types.js';
 import { buildProviderBaseUrl, getAccessMode, type ProviderId } from './providers.js';
@@ -51,7 +52,7 @@ export async function presignHttpsUrl(
 		accessKeyId: creds.accessKey,
 		secretAccessKey: creds.secretKey,
 		service: 's3',
-		region: conn.region || 'us-east-1'
+		region: conn.region || DEFAULT_AWS_REGION
 	});
 
 	const signed = await client.sign(url.toString(), {

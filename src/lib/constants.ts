@@ -51,3 +51,8 @@ export const LAYER_HUE_MULTIPLIER = 137;
 
 /** Duration (ms) to show "Copied!" feedback before resetting. */
 export const COPY_FEEDBACK_MS = 2000;
+
+// ── AWS defaults ──
+
+/** Region assumed when a connection or bucket name yields none. AWS's global default. */
+export const DEFAULT_AWS_REGION = 'us-east-1';

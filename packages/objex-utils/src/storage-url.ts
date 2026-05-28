@@ -36,6 +36,7 @@
  * Also handles plain bucket names (no protocol).
  */
 
+import { DEFAULT_AWS_REGION } from '../../../src/lib/constants.js';
 import { PROVIDERS } from '../../../src/lib/storage/providers.js';
 
 export type StorageProvider = string;
@@ -168,7 +169,7 @@ export interface Defaults {
 function defaultResult(defaults: Defaults): ParsedStorageUrl {
 	return {
 		bucket: '',
-		region: defaults.region || 'us-east-1',
+		region: defaults.region || DEFAULT_AWS_REGION,
 		endpoint: defaults.endpoint || '',
 		provider: defaults.provider || 's3',
 		prefix: ''
@@ -200,7 +201,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 			const { bucket, prefix } = splitBucketPrefix(rest);
 			return {
 				bucket,
-				region: defaults.region || 'us-east-1',
+				region: defaults.region || DEFAULT_AWS_REGION,
 				endpoint: defaults.endpoint || '',
 				provider,
 				prefix
@@ -245,7 +246,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 			if (host === AWS_GLOBAL_HOST && pathParts.length > 0) {
 				return {
 					bucket: pathParts[0],
-					region: defaults.region || 'us-east-1',
+					region: defaults.region || DEFAULT_AWS_REGION,
 					endpoint: '',
 					provider: 's3',
 					prefix: pathParts.slice(1).join('/')
@@ -457,7 +458,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 			if (isMinioLikeHost(host) && pathParts.length > 0) {
 				return {
 					bucket: pathParts[0],
-					region: defaults.region || 'us-east-1',
+					region: defaults.region || DEFAULT_AWS_REGION,
 					endpoint: `${url.protocol}//${url.host}`,
 					provider: 'minio',
 					prefix: pathParts.slice(1).join('/')
@@ -519,7 +520,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 				const endpoint = `${url.protocol}//${url.host}`;
 				return {
 					bucket: pathParts[0],
-					region: defaults.region || 'us-east-1',
+					region: defaults.region || DEFAULT_AWS_REGION,
 					endpoint,
 					provider: defaults.provider || 's3',
 					prefix: pathParts.slice(1).join('/')
@@ -540,7 +541,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 	const cleaned = stripEdgeSlashes(trimmed);
 	return {
 		bucket: cleaned,
-		region: defaults.region || 'us-east-1',
+		region: defaults.region || DEFAULT_AWS_REGION,
 		endpoint: defaults.endpoint || '',
 		provider: defaults.provider || 's3',
 		prefix: ''
@@ -567,7 +568,8 @@ export function describeParseResult(parsed: ParsedStorageUrl): string {
 	const parts: string[] = [];
 	if (parsed.bucket) parts.push(`bucket="${parsed.bucket}"`);
 	if (parsed.endpoint) parts.push(`endpoint="${parsed.endpoint}"`);
-	if (parsed.region && parsed.region !== 'us-east-1') parts.push(`region="${parsed.region}"`);
+	if (parsed.region && parsed.region !== DEFAULT_AWS_REGION)
+		parts.push(`region="${parsed.region}"`);
 	if (parsed.provider !== 's3') parts.push(`provider=${parsed.provider}`);
 	if (parsed.prefix) parts.push(`prefix="${parsed.prefix}"`);
 	return parts.length > 0 ? `Detected: ${parts.join(', ')}` : '';
