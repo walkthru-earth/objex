@@ -312,7 +312,7 @@ const totalFiles = $derived(contents.files.length);
 	{#if selectedFile}
 		{@const fileName = selectedFile.filename.split('/').pop()}
 		<div
-			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+			class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 		>
 			{t('archive.fileDetails')}
 		</div>
@@ -367,10 +367,10 @@ const totalFiles = $derived(contents.files.length);
 
 <div class="flex h-full flex-col">
 	<!-- Header bar -->
-	<div class="shrink-0 border-b border-zinc-200 px-3 py-2 sm:px-4 dark:border-zinc-800">
+	<div class="shrink-0 border-b border-border px-3 py-2 sm:px-4">
 		<div class="flex items-center gap-1.5 sm:gap-2">
 			<Archive class="h-4 w-4 shrink-0 text-amber-500" />
-			<span class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">
+			<span class="max-w-[140px] truncate text-sm font-medium text-foreground sm:max-w-none">
 				{tab.name}
 			</span>
 			<Badge variant="outline" class="text-[10px]">{formatLabel}</Badge>
@@ -434,12 +434,12 @@ const totalFiles = $derived(contents.files.length);
 	<!-- Content area -->
 	{#if initializing}
 		<div class="flex flex-1 items-center justify-center gap-2">
-			<Loader class="h-5 w-5 animate-spin text-zinc-400" />
-			<span class="text-sm text-zinc-400">{t('archive.loading')}</span>
+			<Loader class="h-5 w-5 animate-spin text-muted-foreground" />
+			<span class="text-sm text-muted-foreground">{t('archive.loading')}</span>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center px-4">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<!-- Column browser (resizable) -->
@@ -448,7 +448,7 @@ const totalFiles = $derived(contents.files.length);
 			<ResizablePane defaultSize={35} minSize={20}>
 				<div class="flex h-full flex-col">
 					<div
-						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+						class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 					>
 						{t('archive.contents')}
 						<span class="ms-1 normal-case tracking-normal">({(totalDirs + totalFiles).toLocaleString()})</span>
@@ -464,9 +464,8 @@ const totalFiles = $derived(contents.files.length);
 							{#if i < MAX_ITEMS}
 								{@const dirName = dir.split('/').pop()}
 								<button
-									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-zinc-100={selectedDir === dir}
-									class:dark:bg-zinc-800={selectedDir === dir}
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+									class:bg-muted={selectedDir === dir}
 									onclick={() => selectDirectory(dir)}
 									ondblclick={() => navigateIntoDir(dir)}
 								>
@@ -485,9 +484,8 @@ const totalFiles = $derived(contents.files.length);
 							{#if i < MAX_ITEMS}
 								{@const fileName = file.filename.split('/').pop()}
 								<button
-									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-zinc-100={selectedFile?.filename === file.filename}
-									class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+									class:bg-muted={selectedFile?.filename === file.filename}
 									onclick={() => selectFile(file)}
 								>
 									<File class="size-3.5 shrink-0 text-muted-foreground/70" />
@@ -521,7 +519,7 @@ const totalFiles = $derived(contents.files.length);
 					{#if selectedDir}
 						{@const dirName = selectedDir.split('/').pop()}
 						<div
-							class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+							class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 						>
 							{dirName}
 							<span class="ms-1 normal-case tracking-normal">({(selectedDirContents.directories.length + selectedDirContents.files.length).toLocaleString()})</span>
@@ -537,7 +535,7 @@ const totalFiles = $derived(contents.files.length);
 								{#if i < MAX_ITEMS}
 									{@const subDirName = subDir.split('/').pop()}
 									<button
-										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
 										onclick={() => navigateIntoDir(subDir)}
 									>
 										<Folder class="size-3.5 shrink-0 text-amber-500/70" />
@@ -551,9 +549,8 @@ const totalFiles = $derived(contents.files.length);
 								{#if i < MAX_ITEMS}
 									{@const fileName = file.filename.split('/').pop()}
 									<button
-										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-										class:bg-zinc-100={selectedFile?.filename === file.filename}
-										class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+										class:bg-muted={selectedFile?.filename === file.filename}
 										onclick={() => selectFile(file)}
 									>
 										<File class="size-3.5 shrink-0 text-muted-foreground/70" />
