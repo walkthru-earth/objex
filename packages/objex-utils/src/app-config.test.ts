@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	coerceBool,
 	coercePositiveInt,
+	coerceString,
 	coerceTheme,
 	DEFAULT_APP_CONFIG,
 	mergeAppConfig,
@@ -38,6 +39,13 @@ describe('coercers', () => {
 		expect(coercePositiveInt(0)).toBeUndefined();
 		expect(coercePositiveInt(-3)).toBeUndefined();
 		expect(coercePositiveInt('10')).toBeUndefined();
+	});
+	it('coerceString rejects empty, whitespace-only, and non-strings', () => {
+		expect(coerceString('hello')).toBe('hello');
+		expect(coerceString('')).toBeUndefined();
+		expect(coerceString('   ')).toBeUndefined();
+		expect(coerceString(42)).toBeUndefined();
+		expect(coerceString(null)).toBeUndefined();
 	});
 	it('coerceBool accepts only booleans', () => {
 		expect(coerceBool(true)).toBe(true);
@@ -87,10 +95,12 @@ describe('mergeAppConfig', () => {
 		const merged = mergeAppConfig(DEFAULT_APP_CONFIG, {
 			connections: [
 				{ name: 'Pub', provider: 's3', bucket: 'b', region: 'us-west-2', anonymous: true },
+				{ name: 'Priv', provider: 'gcs', bucket: 'c', anonymous: false },
 				{ provider: 's3' } // dropped, missing name and bucket
 			]
 		});
-		expect(merged.connections).toHaveLength(1);
+		expect(merged.connections).toHaveLength(2);
 		expect(merged.connections[0].name).toBe('Pub');
+		expect(merged.connections[1].anonymous).toBe(false);
 	});
 });

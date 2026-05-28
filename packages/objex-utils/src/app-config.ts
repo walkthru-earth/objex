@@ -62,7 +62,7 @@ export function coerceTheme(v: unknown): Theme | undefined {
 }
 
 export function coerceString(v: unknown): string | undefined {
-	return typeof v === 'string' && v.length > 0 ? v : undefined;
+	return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
 }
 
 export function coercePositiveInt(v: unknown): number | undefined {
@@ -114,24 +114,28 @@ function coerceConnections(v: unknown): ConnectionSeed[] | undefined {
 		const name = coerceString(o.name);
 		const bucket = coerceString(o.bucket);
 		if (!name || !bucket) continue;
+		const region = coerceString(o.region);
+		const endpoint = coerceString(o.endpoint);
+		const anonymous = coerceBool(o.anonymous);
+		const authMethod =
+			o.authMethod === 'sigv4' || o.authMethod === 'sas-token' ? o.authMethod : undefined;
+		const rootPrefix = coerceString(o.rootPrefix);
 		out.push({
 			name,
 			bucket,
 			provider: coerceString(o.provider) ?? 's3',
-			...(coerceString(o.region) ? { region: coerceString(o.region) } : {}),
-			...(coerceString(o.endpoint) ? { endpoint: coerceString(o.endpoint) } : {}),
-			...(coerceBool(o.anonymous) !== undefined ? { anonymous: coerceBool(o.anonymous) } : {}),
-			...(o.authMethod === 'sigv4' || o.authMethod === 'sas-token'
-				? { authMethod: o.authMethod }
-				: {}),
-			...(coerceString(o.rootPrefix) ? { rootPrefix: coerceString(o.rootPrefix) } : {})
+			...(region !== undefined ? { region } : {}),
+			...(endpoint !== undefined ? { endpoint } : {}),
+			...(anonymous !== undefined ? { anonymous } : {}),
+			...(authMethod !== undefined ? { authMethod } : {}),
+			...(rootPrefix !== undefined ? { rootPrefix } : {})
 		});
 	}
 	return out;
 }
 
 /**
- * Merge an untrusted JSON value over a base config, defaults-only.
+ * Merge an untrusted JSON value over a base config, field by field.
  * Unknown fields are ignored. Malformed values fall back to the base.
  * Never reads secrets.
  */
@@ -154,10 +158,11 @@ export function mergeAppConfig(base: AppConfig, override: unknown): AppConfig {
 			showSettings: coerceBool(u.showSettings) ?? base.ui.showSettings
 		},
 		basemaps: coerceBasemaps(o.basemaps) ?? base.basemaps,
-		defaultBasemap: {
-			light: coerceString(db.light) ?? base.defaultBasemap.light,
-			dark: coerceString(db.dark) ?? base.defaultBasemap.dark
-		},
+		defaultBasemap: ((): { light?: string; dark?: string } => {
+			const light = coerceString(db.light) ?? base.defaultBasemap.light;
+			const dark = coerceString(db.dark) ?? base.defaultBasemap.dark;
+			return { ...(light !== undefined ? { light } : {}), ...(dark !== undefined ? { dark } : {}) };
+		})(),
 		connections: coerceConnections(o.connections) ?? base.connections
 	};
 }
