@@ -105,10 +105,10 @@ const rawContentMode: ViewMode = $derived(isParquet ? 'table' : 'code');
 <div class="flex h-full flex-col overflow-hidden">
 	{#key tab.id}
 		<div
-			class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
+			class="flex items-center gap-1 border-b border-border px-2 py-1.5 sm:gap-2 sm:px-4"
 		>
 			<span
-				class="max-w-[120px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300"
+				class="max-w-[120px] truncate text-sm font-medium text-foreground sm:max-w-none"
 			>
 				{tab.name}
 			</span>
