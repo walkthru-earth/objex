@@ -7,6 +7,7 @@ import {
 	extractGeometryTypes,
 	findGeoColumn,
 	findGeoColumnFromRows,
+	handleLoadError,
 	isWgs84,
 	parseWKB,
 	readParquetMetadata,
@@ -728,7 +729,7 @@ async function loadTable() {
 	} catch (err) {
 		if (thisGen !== loadGeneration) return;
 		console.error('[TableViewer] Error:', err);
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 		loadStage = '';
 	}
@@ -771,7 +772,7 @@ async function executeQuery(sql: string) {
 			error = t('table.queryCancelled');
 			return null;
 		}
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		return null;
 	}
 }
@@ -817,7 +818,7 @@ async function runCustomSql() {
 		});
 	} catch (err) {
 		executionTimeMs = Math.round(performance.now() - start);
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 
 		queryHistory.add({
 			sql: customSql,
