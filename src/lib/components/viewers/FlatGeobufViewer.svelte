@@ -71,6 +71,10 @@ let headerInfo = $state<{
 	hasIndex: boolean;
 } | null>(null);
 
+// NOTE: intentionally broader than the canonical WGS84_CODES in constants.ts.
+// 4267 (NAD27) / 4269 (NAD83) are treated as lon/lat here because FGB files
+// commonly ship NAD-coded data that needs no reprojection for display.
+// Do not narrow to [4326, 4979] without a NAD-coded FGB test file.
 const WGS84_CODES = new Set([4326, 4979, 4267, 4269]);
 const CRS84_NAMES = ['CRS84', 'CRS 84', 'OGC:CRS84'];
 
