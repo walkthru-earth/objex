@@ -30,7 +30,7 @@ Stores use shared utilities from `../utils/`:
 | `files.svelte.ts` | `files` | StatusBar |
 | `browser.svelte.ts` | `browser` | StatusBar, Sidebar, FileTreeSidebar, +page.svelte |
 | `config.svelte.ts` | `appConfig` (`.value`, `.status`), `loadConfig(basePath)`, `ConfigStatus` | +layout.ts, settings.svelte.ts, Sidebar, SettingsSheet, +page.svelte |
-| `settings.svelte.ts` | `settings` (theme, resolved, locale, featureLimit, mosaicItemLimit, showConnectionRail, showFileTree, railLockedByParam, treeLockedByParam, setters + reset), `resolveTheme()` | LocaleToggle, ThemeToggle, SettingsSheet, scroll-area, TableViewer, FlatGeobufViewer, GeoParquetMapViewer, MapContainer, CodeMirrorEditor, StacMosaicViewer, +layout.svelte, +page.svelte |
+| `settings.svelte.ts` | `settings` (theme, resolved, locale, featureLimit, mosaicItemLimit, showConnectionRail, showFileTree, railLockedByParam, treeLockedByParam, basemapId, setters incl. setBasemap + reset), `resolveTheme()` | LocaleToggle, ThemeToggle, SettingsSheet, scroll-area, TableViewer, FlatGeobufViewer, GeoParquetMapViewer, MapContainer, CodeMirrorEditor, StacMosaicViewer, +layout.svelte, +page.svelte |
 | `query-history.svelte.ts` | `queryHistory` | TableViewer, QueryHistoryPanel, SqlEditor |
 | `safelock.svelte.ts` | `safeLock` | SafeLockToggle |
 
