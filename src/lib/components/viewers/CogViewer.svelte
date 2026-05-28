@@ -6,6 +6,8 @@ import {
 	attachPixelInspector,
 	type ChannelComposite,
 	type CogAsset,
+	handleLoadError,
+	isAbortError,
 	smokeTestHref,
 	syntheticSelfAsset
 } from '@walkthru-earth/objex-utils';
@@ -260,8 +262,8 @@ async function loadCog(map: maplibregl.Map) {
 					if (signal.aborted) return;
 					if (!result.ok) smokeWarning = result.reason;
 				} catch (err) {
-					if (err instanceof DOMException && err.name === 'AbortError') return;
-					smokeWarning = err instanceof Error ? err.message : String(err);
+					if (isAbortError(err)) return;
+					smokeWarning = handleLoadError(err);
 				}
 			})();
 		}
@@ -279,7 +281,7 @@ async function loadCog(map: maplibregl.Map) {
 				const _crs = preflightGeotiff.crs;
 				void _crs;
 			} catch (crsErr) {
-				const msg = crsErr instanceof Error ? crsErr.message : String(crsErr);
+				const msg = handleLoadError(crsErr) ?? String(crsErr);
 				error = `Unsupported CRS: ${msg}`;
 				loading = false;
 				return;
@@ -293,7 +295,7 @@ async function loadCog(map: maplibregl.Map) {
 			// recognized as being in a supported file format" on the same file).
 			// Surface a clear message and bail — COGLayer would re-invoke the
 			// same loader and throw the identical error uncaught during update.
-			const msg = preflightErr instanceof Error ? preflightErr.message : String(preflightErr);
+			const msg = handleLoadError(preflightErr) ?? String(preflightErr);
 			if (/Only tiff supported version|not a tiff|Invalid.*magic/i.test(msg)) {
 				error = t('map.cogInvalidTiff');
 				loading = false;
@@ -361,8 +363,8 @@ async function loadCog(map: maplibregl.Map) {
 		buildAndAddLayer(map, preflightGeotiff, signal);
 	} catch (err) {
 		if (signal.aborted) return;
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
