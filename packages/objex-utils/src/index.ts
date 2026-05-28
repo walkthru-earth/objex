@@ -99,6 +99,8 @@ export * from './cog-info.js';
 export * from './column-types.js';
 // Connection identity (canonical key for dedup across auto-detect/manual add/edit)
 export * from './connection-identity.js';
+// CRS helpers (isWgs84, single source of truth for WGS84 detection)
+export * from './crs.js';
 // Error handling
 export * from './error.js';
 // Data export / serialization (browser-only download triggers + pure serialisers)

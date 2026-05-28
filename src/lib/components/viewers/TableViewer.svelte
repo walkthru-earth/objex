@@ -7,6 +7,7 @@ import {
 	extractGeometryTypes,
 	findGeoColumn,
 	findGeoColumnFromRows,
+	isWgs84,
 	parseWKB,
 	readParquetMetadata,
 	toBinary,
@@ -502,11 +503,7 @@ async function loadTable() {
 					const crsMatch = duckGeoField.type.match(/^GEOMETRY\('([^']+)'\)/i);
 					if (crsMatch) {
 						const crsVal = crsMatch[1];
-						const isWgs84 =
-							crsVal === 'EPSG:4326' ||
-							crsVal === 'OGC:CRS84' ||
-							(crsVal.startsWith('EPSG:') && [4326, 4979].includes(Number(crsVal.split(':')[1])));
-						sourceCrs = isWgs84 ? null : crsVal;
+						sourceCrs = isWgs84(crsVal) ? null : crsVal;
 						needsDuckDbCrs = false;
 					} else if (typeStr.startsWith('GEOMETRY')) {
 						// GEOMETRY without CRS param — still need CRS from metadata
