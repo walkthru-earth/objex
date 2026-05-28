@@ -1,4 +1,8 @@
 export const en: Record<string, string> = {
+	// Common
+	'common.loading': 'Loading...',
+	'common.error': 'Error',
+
 	// Sidebar
 	'sidebar.deleteConfirm': 'Delete connection "{name}"?',
 	'sidebar.browseDetected': 'Browse detected bucket: {name}',
