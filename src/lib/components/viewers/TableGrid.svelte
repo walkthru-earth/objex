@@ -221,16 +221,16 @@ function isNull(value: any): boolean {
 		</colgroup>
 
 		<thead class="sticky top-0 z-10">
-			<tr class="bg-zinc-100 dark:bg-zinc-900">
+			<tr class="bg-muted">
 				<th
-					class="border-b border-e border-zinc-200 px-2 py-2 text-start text-xs font-medium text-zinc-400 dark:border-zinc-700 dark:text-zinc-500"
+					class="border-b border-e border-border px-2 py-2 text-start text-xs font-medium text-muted-foreground"
 				>
 					#
 				</th>
 				{#each columns as col}
 					{@const category = columnCategories[col]}
 					<th
-						class="group relative select-none border-b border-e border-zinc-200 px-3 py-1.5 dark:border-zinc-700"
+						class="group relative select-none border-b border-e border-border px-3 py-1.5"
 						class:text-start={category !== 'number'}
 						class:text-end={category === 'number'}
 						class:cursor-pointer={!!onSort}
@@ -243,7 +243,7 @@ function isNull(value: any): boolean {
 							>
 								{typeLabel(category)}
 							</span>
-							<span class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-300">{col}</span>
+							<span class="truncate text-xs font-semibold text-foreground">{col}</span>
 							{#if sortColumn === col}
 								{#if sortDirection === 'asc'}
 									<ArrowUpIcon class="size-3 shrink-0 text-blue-500" />
@@ -253,7 +253,7 @@ function isNull(value: any): boolean {
 							{/if}
 						</div>
 						{#if columnTypes[col]}
-							<div class="mt-0.5 truncate text-[10px] font-normal text-zinc-400 dark:text-zinc-500">
+							<div class="mt-0.5 truncate text-[10px] font-normal text-muted-foreground">
 								{columnTypes[col]}
 							</div>
 						{/if}
@@ -274,7 +274,7 @@ function isNull(value: any): boolean {
 			{#each displayRows as row, i (i)}
 				<tr class="hover:bg-blue-50/50 dark:hover:bg-zinc-800/40">
 					<td
-						class="border-b border-e border-zinc-100 px-2 py-1 text-xs tabular-nums text-zinc-400 dark:border-zinc-800 dark:text-zinc-600"
+						class="border-b border-e border-border px-2 py-1 text-xs tabular-nums text-muted-foreground"
 					>
 						{i + 1}
 					</td>
@@ -283,14 +283,14 @@ function isNull(value: any): boolean {
 						{@const cellValue = row[col]}
 						{@const cellIsNull = isNull(cellValue)}
 						<td
-							class="overflow-hidden text-ellipsis whitespace-nowrap border-b border-e border-zinc-100 px-3 py-1 text-[13px] dark:border-zinc-800"
+							class="overflow-hidden text-ellipsis whitespace-nowrap border-b border-e border-border px-3 py-1 text-[13px]"
 							class:text-end={category === 'number' && !cellIsNull}
 							class:font-mono={category === 'number' && !cellIsNull}
 							title={cellIsNull ? 'NULL' : formatCell(cellValue, category)}
 							oncontextmenu={(e) => handleContextMenu(e, cellValue, row, col)}
 						>
 							{#if cellIsNull}
-								<span class="text-[11px] italic text-zinc-400 dark:text-zinc-600">null</span>
+								<span class="text-[11px] italic text-muted-foreground">null</span>
 							{:else if typeof cellValue === 'boolean'}
 								{#if cellValue}
 									<CheckIcon class="inline size-3.5 text-green-500" />
@@ -298,7 +298,7 @@ function isNull(value: any): boolean {
 									<XIcon class="inline size-3.5 text-red-400" />
 								{/if}
 							{:else}
-								<span class="text-zinc-800 dark:text-zinc-200">
+								<span class="text-foreground">
 									{formatCell(cellValue, category)}
 								</span>
 							{/if}
@@ -310,7 +310,7 @@ function isNull(value: any): boolean {
 	</table>
 
 	{#if renderedCount < rows.length}
-		<div class="py-2 text-center text-xs text-zinc-400 dark:text-zinc-600">
+		<div class="py-2 text-center text-xs text-muted-foreground">
 			{t('statusBar.rowsLabel')}: {renderedCount.toLocaleString()} / {rows.length.toLocaleString()} — scroll for more
 		</div>
 	{/if}
@@ -319,36 +319,36 @@ function isNull(value: any): boolean {
 <!-- Context menu -->
 {#if ctxMenu}
 	<div
-		class="fixed z-50 min-w-40 rounded-lg border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+		class="fixed z-50 min-w-40 rounded-lg border border-border bg-background py-1 shadow-xl"
 		style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;"
 		role="menu"
 	>
 		<button
-			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-foreground hover:bg-muted"
 			onclick={copyCell}
 			role="menuitem"
 		>
-			<ClipboardIcon class="size-3.5 text-zinc-400" />
+			<ClipboardIcon class="size-3.5 text-muted-foreground" />
 			{t('table.copyCell')}
 		</button>
 		<button
-			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-foreground hover:bg-muted"
 			onclick={copyRow}
 			role="menuitem"
 		>
-			<RowsIcon class="size-3.5 text-zinc-400" />
+			<RowsIcon class="size-3.5 text-muted-foreground" />
 			{t('table.copyRow')}
 		</button>
 		<button
-			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+			class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs text-foreground hover:bg-muted"
 			onclick={copyColumn}
 			role="menuitem"
 		>
-			<ColumnsIcon class="size-3.5 text-zinc-400" />
+			<ColumnsIcon class="size-3.5 text-muted-foreground" />
 			{t('table.copyColumn')}
 		</button>
 		{#if copied}
-			<div class="border-t border-zinc-200 px-3 py-1 text-center text-[10px] text-green-500 dark:border-zinc-700">
+			<div class="border-t border-border px-3 py-1 text-center text-[10px] text-green-500">
 				Copied!
 			</div>
 		{/if}
