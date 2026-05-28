@@ -1,4 +1,5 @@
 <script lang="ts">
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
@@ -133,7 +134,7 @@ async function loadHierarchy() {
 			expanded = new Set(['/']);
 		}
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 		updateUrlView(viewMode);
