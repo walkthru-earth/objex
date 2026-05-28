@@ -11,6 +11,7 @@ import {
 import { t } from '$lib/i18n/index.svelte.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import { highlightCode } from '$lib/utils/shiki';
+import { useIsWide } from '../../../utils/media-query.svelte.js';
 
 let {
 	metadata,
@@ -21,6 +22,8 @@ let {
 	pmtiles: PMTiles;
 	onOpenInspector?: (z: number, x: number, y: number) => void;
 } = $props();
+
+const isWide = useIsWide();
 
 interface ZoomSummary {
 	zoom: number;
@@ -278,94 +281,119 @@ const dedupRatio = $derived(
 		{/if}
 	</div>
 
-	<!-- Column browser (resizable) -->
-	<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
-		<!-- Column 1: Zoom levels -->
-		<ResizablePane defaultSize={28} minSize={15}>
-			<div class="flex h-full flex-col">
+	<!-- Column browser (resizable or stacked) -->
+	{#snippet zoomLevels()}
+		<div class="flex h-full flex-col">
+			<div
+				class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+			>
+				{t('pmtiles.zoomLevels')}
+			</div>
+			<div class="flex-1 overflow-auto">
+				{#each zoomSummaries as s}
+					<button
+						class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+						class:bg-muted={selectedZoom === s.zoom}
+						onclick={() => selectZoom(s.zoom)}
+					>
+						<span class="w-7 shrink-0 font-mono text-muted-foreground">z{s.zoom}</span>
+						<div class="min-w-0 flex-1">
+							<div
+								class="h-1.5 rounded-full bg-blue-500/60"
+								style="width: {Math.max(2, (s.count / maxCount) * 100)}%"
+							></div>
+						</div>
+						<span class="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+							{s.count.toLocaleString()}
+						</span>
+						<ChevronRightIcon class="size-3 shrink-0 text-muted-foreground" />
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/snippet}
+
+	{#snippet zoomEntryList()}
+		<div class="flex h-full flex-col">
+			{#if selectedZoom !== null}
 				<div
 					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 				>
-					{t('pmtiles.zoomLevels')}
+					{t('pmtiles.tilesAtZoom').replace('{zoom}', String(selectedZoom))}
+					<span class="ms-1 normal-case tracking-normal">({zoomEntries.length.toLocaleString()})</span>
 				</div>
 				<div class="flex-1 overflow-auto">
-					{#each zoomSummaries as s}
-						<button
-							class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-							class:bg-muted={selectedZoom === s.zoom}
-							onclick={() => selectZoom(s.zoom)}
-						>
-							<span class="w-7 shrink-0 font-mono text-muted-foreground">z{s.zoom}</span>
-							<div class="min-w-0 flex-1">
-								<div
-									class="h-1.5 rounded-full bg-blue-500/60"
-									style="width: {Math.max(2, (s.count / maxCount) * 100)}%"
-								></div>
-							</div>
-							<span class="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-								{s.count.toLocaleString()}
-							</span>
-							<ChevronRightIcon class="size-3 shrink-0 text-muted-foreground" />
-						</button>
-					{/each}
+					{#if loadingEntries}
+						<div class="p-4 text-center text-xs text-muted-foreground">Loading...</div>
+					{:else if errorMsg}
+						<div class="p-4 text-center text-xs text-destructive">{errorMsg}</div>
+					{:else if zoomEntries.length === 0}
+						<div class="p-4 text-center text-xs text-muted-foreground">{t('pmtiles.noEntries')}</div>
+					{:else}
+						{#each zoomEntries as entry}
+							<button
+								class="flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+								class:bg-muted={selectedEntry?.tileId === entry.tileId}
+								onclick={() => (selectedEntry = entry)}
+							>
+								<span class="shrink-0 truncate font-mono text-[11px]">
+									{entry.z}/{entry.x}/{entry.y}
+								</span>
+								<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
+									{formatBytes(entry.length)}
+								</span>
+								<ChevronRightIcon class="size-3 shrink-0 text-muted-foreground" />
+							</button>
+						{/each}
+					{/if}
 				</div>
+			{:else}
+				<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+					Select a zoom level
+				</div>
+			{/if}
+		</div>
+	{/snippet}
+
+	{#if isWide.value}
+		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+			<!-- Column 1: Zoom levels -->
+			<ResizablePane defaultSize={28} minSize={15}>
+				{@render zoomLevels()}
+			</ResizablePane>
+
+			<ResizableHandle />
+
+			<!-- Column 2: Entries at zoom -->
+			<ResizablePane defaultSize={42} minSize={20}>
+				{@render zoomEntryList()}
+			</ResizablePane>
+
+			<ResizableHandle />
+
+			<!-- Column 3: Entry details -->
+			<ResizablePane defaultSize={30} minSize={15}>
+				<div class="flex h-full flex-col">
+					{@render entryDetails()}
+				</div>
+			</ResizablePane>
+		</ResizablePaneGroup>
+	{:else}
+		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+			<!-- Zoom level list: compact fixed height -->
+			<div class="max-h-48 shrink-0 border-b border-border">
+				{@render zoomLevels()}
 			</div>
-		</ResizablePane>
-
-		<ResizableHandle />
-
-		<!-- Column 2: Entries at zoom -->
-		<ResizablePane defaultSize={42} minSize={20}>
-			<div class="flex h-full flex-col">
-				{#if selectedZoom !== null}
-					<div
-						class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-					>
-						{t('pmtiles.tilesAtZoom').replace('{zoom}', String(selectedZoom))}
-						<span class="ms-1 normal-case tracking-normal">({zoomEntries.length.toLocaleString()})</span>
-					</div>
-					<div class="flex-1 overflow-auto">
-						{#if loadingEntries}
-							<div class="p-4 text-center text-xs text-muted-foreground">Loading...</div>
-						{:else if errorMsg}
-							<div class="p-4 text-center text-xs text-destructive">{errorMsg}</div>
-						{:else if zoomEntries.length === 0}
-							<div class="p-4 text-center text-xs text-muted-foreground">{t('pmtiles.noEntries')}</div>
-						{:else}
-							{#each zoomEntries as entry}
-								<button
-									class="flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-muted={selectedEntry?.tileId === entry.tileId}
-									onclick={() => (selectedEntry = entry)}
-								>
-									<span class="shrink-0 truncate font-mono text-[11px]">
-										{entry.z}/{entry.x}/{entry.y}
-									</span>
-									<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
-										{formatBytes(entry.length)}
-									</span>
-									<ChevronRightIcon class="size-3 shrink-0 text-muted-foreground" />
-								</button>
-							{/each}
-						{/if}
-					</div>
-				{:else}
-					<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-						Select a zoom level
-					</div>
-				{/if}
+			<!-- Entries at selected zoom: fixed height -->
+			<div class="max-h-56 shrink-0 border-b border-border">
+				{@render zoomEntryList()}
 			</div>
-		</ResizablePane>
-
-		<ResizableHandle />
-
-		<!-- Column 3: Entry details -->
-		<ResizablePane defaultSize={30} minSize={15}>
-			<div class="flex h-full flex-col">
+			<!-- Entry details: grows to fill remaining space -->
+			<div class="flex flex-1 flex-col">
 				{@render entryDetails()}
 			</div>
-		</ResizablePane>
-	</ResizablePaneGroup>
+		</div>
+	{/if}
 </div>
 
 <style>
