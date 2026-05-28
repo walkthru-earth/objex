@@ -50,22 +50,22 @@ function truncateSql(sql: string, maxLen = 120): string {
 {#if visible}
 	<!-- Mobile: absolute overlay; Desktop: flex sidebar -->
 	<div
-		class="absolute inset-y-0 end-0 z-10 flex w-72 flex-col overflow-hidden border-s border-zinc-200 bg-zinc-50 sm:relative sm:z-auto sm:shrink-0 dark:border-zinc-800 dark:bg-zinc-900"
+		class="absolute inset-y-0 end-0 z-10 flex w-72 flex-col overflow-hidden border-s border-border bg-muted sm:relative sm:z-auto sm:shrink-0"
 	>
 		<!-- Header -->
 		<div
-			class="flex items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-zinc-800"
+			class="flex items-center justify-between border-b border-border px-3 py-2"
 		>
 			<div class="flex items-center gap-1.5">
-				<ClockIcon class="size-3.5 text-zinc-500" />
-				<h3 class="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+				<ClockIcon class="size-3.5 text-muted-foreground" />
+				<h3 class="text-xs font-medium text-muted-foreground">
 					{t('queryHistory.title')}
 				</h3>
 			</div>
 			<div class="flex items-center gap-2">
 				{#if queryHistory.entries.length > 0}
 					<button
-						class="text-[10px] text-zinc-400 hover:text-red-500 dark:hover:text-red-400"
+						class="text-[10px] text-muted-foreground hover:text-destructive"
 						onclick={() => queryHistory.clear()}
 					>
 						{t('queryHistory.clearAll')}
@@ -73,7 +73,7 @@ function truncateSql(sql: string, maxLen = 120): string {
 				{/if}
 				{#if onClose}
 					<button
-						class="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 sm:hidden dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+						class="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground sm:hidden"
 						onclick={onClose}
 					>
 						<XIcon class="size-3.5" />
@@ -83,20 +83,20 @@ function truncateSql(sql: string, maxLen = 120): string {
 		</div>
 
 		<!-- Search -->
-		<div class="border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+		<div class="border-b border-border px-3 py-1.5">
 			<div
-				class="flex items-center gap-1.5 rounded border border-zinc-200 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-800"
+				class="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1"
 			>
-				<SearchIcon class="size-3 shrink-0 text-zinc-400" />
+				<SearchIcon class="size-3 shrink-0 text-muted-foreground" />
 				<input
 					type="text"
-					class="w-full bg-transparent text-xs outline-none placeholder:text-zinc-400"
+					class="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
 					placeholder={t('queryHistory.searchPlaceholder')}
 					bind:value={searchQuery}
 				/>
 				{#if searchQuery}
 					<button
-						class="shrink-0 text-zinc-400 hover:text-zinc-600"
+						class="shrink-0 text-muted-foreground hover:text-foreground"
 						onclick={() => {
 							searchQuery = '';
 						}}
@@ -110,14 +110,14 @@ function truncateSql(sql: string, maxLen = 120): string {
 		<!-- Entries -->
 		<ScrollArea class="flex-1">
 			{#if filteredEntries.length === 0}
-				<div class="px-3 py-6 text-center text-xs text-zinc-400">
+				<div class="px-3 py-6 text-center text-xs text-muted-foreground">
 					{searchQuery ? 'No matching queries' : 'No query history yet'}
 				</div>
 			{:else}
-				<div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+				<div class="divide-y divide-border">
 					{#each filteredEntries as entry (entry.id)}
 						<div
-							class="group flex w-full cursor-pointer flex-col gap-0.5 px-3 py-2 text-start hover:bg-zinc-100 dark:hover:bg-zinc-800"
+							class="group flex w-full cursor-pointer flex-col gap-0.5 px-3 py-2 text-start hover:bg-accent"
 							role="button"
 							tabindex="0"
 							onclick={() => onSelect?.(entry.sql)}
@@ -126,18 +126,18 @@ function truncateSql(sql: string, maxLen = 120): string {
 							}}
 						>
 							<div
-								class="font-mono text-[11px] leading-snug text-zinc-600 dark:text-zinc-300"
+								class="font-mono text-[11px] leading-snug text-foreground"
 							>
 								{truncateSql(entry.sql)}
 							</div>
-							<div class="flex items-center gap-2 text-[10px] text-zinc-400">
+							<div class="flex items-center gap-2 text-[10px] text-muted-foreground">
 								<span>{formatTime(entry.timestamp)}</span>
 								<span>{entry.durationMs}ms</span>
 								{#if entry.rowCount > 0}
 									<span>{entry.rowCount.toLocaleString()} rows</span>
 								{/if}
 								{#if entry.error}
-									<span class="text-red-400">error</span>
+									<span class="text-destructive">error</span>
 								{/if}
 								<button
 									class="ms-auto opacity-0 group-hover:opacity-100"
@@ -147,7 +147,7 @@ function truncateSql(sql: string, maxLen = 120): string {
 									}}
 									title="Remove"
 								>
-									<TrashIcon class="size-3 text-zinc-400 hover:text-red-500" />
+									<TrashIcon class="size-3 text-muted-foreground hover:text-destructive" />
 								</button>
 							</div>
 						</div>
