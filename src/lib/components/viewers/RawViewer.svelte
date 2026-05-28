@@ -11,6 +11,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -69,30 +71,31 @@ async function loadHexDump() {
 </script>
 
 <div class="flex h-full flex-col">
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		{#if tab.extension}
-			<Badge variant="secondary">{tab.extension}</Badge>
-		{/if}
-		{#if !loading && fileSize > 0}
-			<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
-				{formatFileSize(fileSize)}
-			</span>
-			{#if truncated}
-				<span class="hidden text-xs text-amber-500 sm:inline">
-					({t('raw.showingFirst').replace('{size}', formatFileSize(MAX_BYTES))})
-				</span>
+	<ViewerHeader {tab}>
+		{#snippet badge()}
+			{#if tab.extension}
+				<Badge variant="secondary">{tab.extension}</Badge>
 			{/if}
-		{/if}
-	</div>
+		{/snippet}
+		{#snippet actions()}
+			{#if !loading && fileSize > 0}
+				<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+					{formatFileSize(fileSize)}
+				</span>
+				{#if truncated}
+					<span class="hidden text-xs text-amber-500 sm:inline">
+						({t('raw.showingFirst').replace('{size}', formatFileSize(MAX_BYTES))})
+					</span>
+				{/if}
+			{/if}
+		{/snippet}
+	</ViewerHeader>
 
 	<div class="flex-1 overflow-auto bg-zinc-950 p-4 font-mono text-xs">
 		{#if loading}
-			<p class="text-zinc-400">{t('raw.loading')}</p>
+			<ViewerStatus kind="loading" message={t('raw.loading')} />
 		{:else if error}
-			<p class="text-red-400">{error}</p>
+			<ViewerStatus kind="error" message={error} />
 		{:else}
 			<table class="w-full border-collapse">
 				<thead>
