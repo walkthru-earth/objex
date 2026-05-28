@@ -1,6 +1,11 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import { buildTransformExpr, wrapWkbWithCrs } from '@walkthru-earth/objex-utils';
-import { DEFAULT_TARGET_CRS, DUCKDB_INIT_TIMEOUT_MS, WGS84_CODES } from '../constants.js';
+import {
+	DEFAULT_TARGET_CRS,
+	DUCKDB_INIT_TIMEOUT_MS,
+	STORAGE_KEYS,
+	WGS84_CODES
+} from '../constants.js';
 import { getAccessMode, resolveProviderEndpoint } from '../storage/providers.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
 import {
@@ -967,7 +972,7 @@ export class WasmQueryEngine implements QueryEngine {
 				log('configureStorage → presigned HTTPS source, skipping S3 config');
 				return;
 			}
-			const stored = localStorage.getItem('obstore-explore-connections');
+			const stored = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
 			if (!stored) {
 				log('configureStorage → no connections in localStorage');
 				return;
