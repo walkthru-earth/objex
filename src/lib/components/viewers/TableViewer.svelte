@@ -939,7 +939,7 @@ function setStacView() {
 
 	{#if viewMode === 'table'}
 		<!-- SQL Query Bar — hidden during schema/CRS detection, shown once query starts running -->
-		<div class="border-b border-zinc-200 px-2 py-1.5 sm:px-4 dark:border-zinc-800" class:hidden={loading && loadStage !== t('table.runningQuery')}>
+		<div class="border-b border-border px-2 py-1.5 sm:px-4" class:hidden={loading && loadStage !== t('table.runningQuery')}>
 			<div class="flex items-start gap-1.5 sm:gap-2">
 				<div class="min-w-0 flex-1">
 					<CodeMirrorEditor
@@ -959,7 +959,7 @@ function setStacView() {
 						{queryRunning ? t('table.running') : t('table.run')}
 					</button>
 					<button
-						class="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-100 sm:px-3 dark:hover:bg-zinc-800"
+						class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted sm:px-3"
 						onclick={handleFormatSql}
 					>
 						{t('table.format')}
@@ -972,9 +972,9 @@ function setStacView() {
 			<div
 				class="border-b border-red-200 bg-red-50 px-4 py-2 dark:border-red-800 dark:bg-red-950"
 			>
-				<p class="text-xs text-red-600 dark:text-red-400">{error}</p>
+				<p class="text-xs text-destructive">{error}</p>
 				{#if tab.source === 'remote'}
-					<p class="mt-1 text-[10px] text-zinc-400 break-all">{buildStorageUrl(tab)}</p>
+					<p class="mt-1 text-[10px] text-muted-foreground break-all">{buildStorageUrl(tab)}</p>
 				{/if}
 			</div>
 		{/if}
@@ -994,7 +994,7 @@ function setStacView() {
 					<div
 						class="max-w-lg rounded-lg border border-red-300 bg-red-50 px-6 py-4 text-center dark:border-red-800 dark:bg-red-950"
 					>
-						<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
+						<p class="text-sm text-destructive">{error}</p>
 					</div>
 				</div>
 			{:else}
