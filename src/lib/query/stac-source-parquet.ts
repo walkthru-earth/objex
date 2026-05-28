@@ -92,11 +92,14 @@ export interface CreateParquetSourceOptions {
  * iOS Safari caps the WASM heap at ~1.8 GiB and rarely engages OPFS spill
  * (`credentialless` COEP only landed in 17.6), so STRUCT-heavy stac-geoparquet
  * scans OOM during the parquet decode before any rows reach the consumer.
+ * Evaluated per source construction so a device that rotates or resizes re-checks.
+ * Desktop browsers are never classified low-memory regardless of window size.
  */
 function detectLowMemoryDefault(): boolean {
 	if (typeof navigator === 'undefined') return false;
-	if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
-	if (typeof window === 'undefined') return false;
+	const isMobileUa = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+	if (!isMobileUa) return false; // desktop is never low-memory, regardless of window size
+	if (typeof window === 'undefined') return true;
 	return Math.min(window.innerWidth, window.innerHeight) <= 820;
 }
 
