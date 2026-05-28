@@ -74,6 +74,8 @@ export type {
 // (alphabetical by file basename)
 // ====================================================================
 
+// App runtime config (pure types + merge + precedence resolver)
+export * from './app-config.js';
 // Channel composite presets + URL round-trip (unified RGB picker)
 export * from './channel-composite.js';
 // Clipboard helper (navigator.clipboard + feedback timeout)
