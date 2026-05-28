@@ -165,7 +165,7 @@ async function copyRaw() {
 			<!-- Mobile overflow menu -->
 			<div class="flex sm:hidden">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+					<DropdownMenu.Trigger class="rounded p-1 text-muted-foreground hover:bg-muted">
 						<EllipsisVerticalIcon class="size-4" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-44">
