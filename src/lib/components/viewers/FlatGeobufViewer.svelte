@@ -608,11 +608,11 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">{t('map.loadingFgb')}</p>
+			<p class="text-sm text-muted-foreground">{t('map.loadingFgb')}</p>
 		</div>
 	{:else if error && featureCount === 0}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<div class="flex-1">

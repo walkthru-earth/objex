@@ -227,7 +227,7 @@ function onMapReady(map: maplibregl.Map) {
 		<LoadProgress stage={t('map.loadingGeometry')} entries={progressEntries} />
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<div class="flex-1">
