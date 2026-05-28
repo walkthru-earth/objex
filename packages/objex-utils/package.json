@@ -32,7 +32,8 @@
 	],
 	"scripts": {
 		"build": "tsup && node ../../scripts/verify-objex-utils-bundle.mjs",
-		"verify-bundle": "node ../../scripts/verify-objex-utils-bundle.mjs"
+		"verify-bundle": "node ../../scripts/verify-objex-utils-bundle.mjs",
+		"test": "vitest run"
 	},
 	"peerDependencies": {
 		"apache-arrow": ">=14",
@@ -60,6 +61,7 @@
 		"hyparquet-compressors": "^1.1.1",
 		"tsup": "^8.5.0",
 		"typescript": "^5.9.3",
+		"vitest": "^4.1.7",
 		"yaml": "^2.8.4"
 	}
 }
