@@ -60,8 +60,8 @@ async function handleCopy(type: 'https' | 's3', tab: (typeof tabs.items)[0]) {
 								<Button
 									variant="ghost"
 									size="icon-sm"
-									class="ms-1 size-5 opacity-0 transition-opacity group-hover:opacity-100
-										{isActive ? 'opacity-60' : ''}"
+									class="ms-1 size-5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100
+										{isActive ? 'sm:opacity-60' : ''}"
 									onclick={(e: MouseEvent) => handleClose(e, tab.id)}
 									aria-label={t('tabBar.closeTab', { name: tab.name })}
 								>
