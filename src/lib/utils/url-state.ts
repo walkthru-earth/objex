@@ -170,6 +170,17 @@ export function hasUrlParam(): boolean {
 }
 
 /**
+ * Read the `?panel=` param (e.g. `?panel=settings`) to auto-open a panel on load.
+ */
+export function getPanelParam(): string | null {
+	try {
+		return new URL(window.location.href).searchParams.get('panel');
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Clear all URL state params.
  */
 export function clearUrlState() {
