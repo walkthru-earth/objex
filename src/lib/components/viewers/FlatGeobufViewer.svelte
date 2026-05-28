@@ -1,6 +1,6 @@
 <script lang="ts">
 import LocateIcon from '@lucide/svelte/icons/locate';
-import { FIRST_FEATURE_FLY_ZOOM } from '@walkthru-earth/objex-utils';
+import { FIRST_FEATURE_FLY_ZOOM, handleLoadError, isAbortError } from '@walkthru-earth/objex-utils';
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import { magicbytes } from 'flatgeobuf/lib/mjs/constants.js';
 import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featurecollection.js';
@@ -301,7 +301,7 @@ async function loadFlatGeobuf() {
 				}
 			} catch (err) {
 				console.error('[FGB]', 'Failed to set up reprojection:', err);
-				error = `Cannot reproject CRS ${crsLabel} → WGS84: ${err instanceof Error ? err.message : err}`;
+				error = `Cannot reproject CRS ${crsLabel} → WGS84: ${handleLoadError(err) ?? String(err)}`;
 				streaming = false;
 				return;
 			}
@@ -311,8 +311,8 @@ async function loadFlatGeobuf() {
 		await streamFeatures(url, settings.featureLimit);
 	} catch (err) {
 		console.error('[FGB]', 'loadFlatGeobuf error:', err);
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		loading = false;
 	} finally {
 		streaming = false;
@@ -354,8 +354,8 @@ async function loadAllFeatures() {
 		await streamFeatures(url);
 	} catch (err) {
 		console.error('[FGB]', 'loadAllFeatures error:', err);
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 	} finally {
 		streaming = false;
 	}
