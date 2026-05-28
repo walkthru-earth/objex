@@ -167,6 +167,9 @@ function buildDefaultSql(
 }
 
 function extractMapData(queryRows: Record<string, any>[]): MapQueryResult | null {
+	// The map attribute table is only consumed by the map view. Skip the
+	// O(rows x cols) walk entirely when the table/info/stac view is showing.
+	if (viewMode !== 'map') return null;
 	if (!geoCol || queryRows.length === 0 || !columns.includes('__wkb')) return null;
 
 	const wkbArrays: Uint8Array[] = [];
@@ -244,6 +247,14 @@ $effect(() => {
 			console.warn('[TableViewer] $effect re-fired but tab unchanged, skipping loadTable', tabId);
 		}
 	});
+});
+
+// When the user switches into map view and mapData is null (because extraction was
+// skipped by the viewMode gate while in table/info/stac view), compute it now.
+$effect(() => {
+	if (viewMode === 'map' && mapData === null && rows.length > 0) {
+		mapData = extractMapData(rows);
+	}
 });
 
 function cancelLoad() {
