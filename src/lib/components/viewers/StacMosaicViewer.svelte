@@ -22,6 +22,7 @@ import {
 	extractMosaicAssets,
 	type FacetState,
 	formatFileSize,
+	handleLoadError,
 	hasActiveFilters,
 	isAbortError,
 	isSingleAssetComposite,
@@ -504,7 +505,7 @@ const mosaicLayer = $derived.by(() => {
 					console.warn('[StacMosaic] getSource failed', {
 						id: source.id,
 						href: source.href,
-						error: err instanceof Error ? err.message : err
+						error: handleLoadError(err) ?? String(err)
 					});
 				}
 				return undefined as unknown as GeoTIFF;
@@ -1347,9 +1348,9 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 						if (gen !== loadGen || signal.aborted) return;
 						if (!result.ok) smokeWarning = result.reason;
 					} catch (err) {
-						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (isAbortError(err)) return;
 						if (gen !== loadGen) return;
-						smokeWarning = err instanceof Error ? err.message : String(err);
+						smokeWarning = handleLoadError(err);
 					}
 				})();
 			}
@@ -1445,8 +1446,8 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 	} catch (err) {
 		if (gen !== loadGen) return;
 		if (signal.aborted) return;
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		stage = 'error';
 		loading = false;
 	}
