@@ -16,7 +16,7 @@ graph LR
 
 Host-side re-exports from `src/lib/` (only the type-level / configuration surface that the Svelte components also rely on, kept in one place so both packages share the same shapes):
 - **types**: `Connection`, `ConnectionConfig`, `FileEntry`, `Tab`, `Theme`, `WriteResult`
-- **constants**: `COPY_FEEDBACK_MS`, `DEFAULT_AWS_REGION`, `DEFAULT_TARGET_CRS`, `DUCKDB_INIT_TIMEOUT_MS`, `LAYER_HUE_MULTIPLIER`, `MAX_QUERY_HISTORY_ENTRIES`, `SQL_PREVIEW_LENGTH`, `STORAGE_KEYS`, `VIEWER_DIR_EXTENSIONS`, `WGS84_CODES`
+- **constants**: `COPY_FEEDBACK_MS`, `DEFAULT_AWS_REGION`, `DEFAULT_TARGET_CRS`, `DUCKDB_INIT_TIMEOUT_MS`, `FIRST_FEATURE_FLY_ZOOM`, `LAYER_HUE_MULTIPLIER`, `MAX_QUERY_HISTORY_ENTRIES`, `SQL_PREVIEW_LENGTH`, `STORAGE_KEYS`, `TILE_DEBOUNCE_MS`, `VIEWER_DIR_EXTENSIONS`, `WGS84_CODES`
 - **storage/adapter**: `StorageAdapter` (interface), `ListPage` (type)
 - **storage/url-adapter**: `UrlAdapter` (class)
 - **storage/providers**: `PROVIDERS`, `PROVIDER_IDS`, `ProviderId` (type), `ProviderDef` (type), `ProviderRegion` (type), `AccessMode` (type), `AccessModeInput` (type), `getProvider()`, `buildEndpointFromTemplate()`, `resolveProviderEndpoint()`, `buildProviderBaseUrl()`, `isGcsProvider()`, `getAccessMode()`, `isPubliclyStreamable()`

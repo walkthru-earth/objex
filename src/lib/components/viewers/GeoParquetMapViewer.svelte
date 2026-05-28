@@ -2,6 +2,7 @@
 import LocateIcon from '@lucide/svelte/icons/locate';
 import {
 	buildGeoArrowTables,
+	FIRST_FEATURE_FLY_ZOOM,
 	type GeoArrowGeomType,
 	type GeoArrowResult,
 	parseWKB
@@ -73,7 +74,7 @@ function extractFirstCoord(coords: any): [number, number] | null {
 
 function flyToFirstFeature() {
 	if (!mapRef || !firstFeatureCoord) return;
-	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: FIRST_FEATURE_FLY_ZOOM });
 }
 
 // mapData is read synchronously in loadGeoData (before any await),

@@ -1,5 +1,6 @@
 <script lang="ts">
 import LocateIcon from '@lucide/svelte/icons/locate';
+import { FIRST_FEATURE_FLY_ZOOM } from '@walkthru-earth/objex-utils';
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import { magicbytes } from 'flatgeobuf/lib/mjs/constants.js';
 import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featurecollection.js';
@@ -16,6 +17,7 @@ import {
 	buildSelectionLayer,
 	geojsonFillColor,
 	geojsonLineColor,
+	HIGHLIGHT_COLOR,
 	hoverCursor,
 	loadDeckModules
 } from '$lib/utils/deck.js';
@@ -194,7 +196,7 @@ function extractFirstCoord(coords: any): [number, number] | null {
 
 function flyToFirstFeature() {
 	if (!mapRef || !firstFeatureCoord) return;
-	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: FIRST_FEATURE_FLY_ZOOM });
 }
 
 function cleanup() {
@@ -605,7 +607,7 @@ function updateLayer() {
 				pointRadiusMinPixels: 4,
 				pointRadiusMaxPixels: 12,
 				autoHighlight: true,
-				highlightColor: [255, 255, 255, 100],
+				highlightColor: HIGHLIGHT_COLOR,
 				onHover: mapRef ? hoverCursor(mapRef) : undefined,
 				onClick: (info: any) => {
 					if (info.object?.properties) {

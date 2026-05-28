@@ -36,7 +36,8 @@ import {
 	type StacItemView,
 	type StacRoutableKind,
 	smokeTestHref,
-	spatialCellKey
+	spatialCellKey,
+	TILE_DEBOUNCE_MS
 } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
@@ -669,7 +670,7 @@ const multiCogLayers = $derived.by(() => {
 			// layers, so the aggregate concurrency budget is even tighter —
 			// keep `maxRequests` low.
 			maxRequests: 6,
-			debounceTime: 200,
+			debounceTime: TILE_DEBOUNCE_MS,
 			onTileError: (err: Error) => {
 				if (isAbortError(err)) return;
 				logTileErrorOnce(view.id, err);

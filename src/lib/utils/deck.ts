@@ -25,6 +25,9 @@ export function hoverCursor(map: { getCanvas: () => HTMLElement }) {
 
 type RGBA = [number, number, number, number];
 
+/** RGBA used to highlight a hovered/selected feature across map viewers. */
+export const HIGHLIGHT_COLOR: [number, number, number, number] = [255, 255, 255, 100];
+
 /** Distinct fill/line colors per geometry type. */
 export const GEOMETRY_COLORS: Record<string, { fill: RGBA; line: RGBA }> = {
 	point: { fill: [66, 133, 244, 180], line: [25, 103, 210, 220] },
@@ -117,7 +120,7 @@ function createLayerForResult(
 			radiusMaxPixels: 12,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 100],
+			highlightColor: HIGHLIGHT_COLOR,
 			_validate: false,
 			onHover,
 			onClick: handleClick
@@ -132,7 +135,7 @@ function createLayerForResult(
 			widthMinPixels: 1.5,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 100],
+			highlightColor: HIGHLIGHT_COLOR,
 			_validate: false,
 			onHover,
 			onClick: handleClick
@@ -147,7 +150,7 @@ function createLayerForResult(
 			lineWidthMinPixels: 1.5,
 			pickable: true,
 			autoHighlight: true,
-			highlightColor: [255, 255, 255, 100],
+			highlightColor: HIGHLIGHT_COLOR,
 			_validate: false,
 			onHover,
 			onClick: handleClick
