@@ -408,8 +408,9 @@ function buildCogLayer(
 
 	const cogInput = preflightGeotiff ?? resolvedHttpsUrl ?? '';
 
-	// Cast: `onViewportLoad` is forwarded by our pnpm patch to the inner
-	// TileLayer, but COGLayer's generated .d.ts does not expose it.
+	// Cast: `onViewportLoad` is forwarded natively by COGLayer's RasterTileLayer
+	// base in 0.7.0 (deck.gl-raster PR #546), but COGLayer's generated .d.ts does
+	// not surface it.
 	const cogProps: any = {
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
 		// to treat this as a brand-new layer and drop cached tile state.

@@ -1,9 +1,15 @@
 import { SourceCache, SourceChunk } from '@chunkd/middleware';
 import { SourceView } from '@chunkd/source';
 import { SourceHttp } from '@chunkd/source-http';
-import type { GetTileDataOptions, MinimalTileData } from '@developmentseed/deck.gl-geotiff';
+import type { GetTileDataOptions } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
-import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
+// MinimalTileData moved from deck.gl-geotiff to deck.gl-raster in 0.7.0
+// (deck.gl-geotiff only re-exports GetTileDataOptions now).
+import type {
+	MinimalTileData,
+	RasterModule,
+	RenderTileResult
+} from '@developmentseed/deck.gl-raster';
 import {
 	Colormap,
 	FilterNoDataVal,

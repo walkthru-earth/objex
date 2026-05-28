@@ -22,23 +22,23 @@ index 5c3deb11ec6cc27e14c988db4d0b63a98108f80e..38d847595385e079ec7c33e065d0689f
          const projectFrom3857 = (x, y) => converter3857.inverse([x, y], false);
          const units = sourceProjection.units;
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 7f8e9064a4ac7c08c286d7d2eac14ebbb8440dc6..19509d94e16bb4fc4a0fa380f69a0a5e3a890968 100644
+index b698dc7d839f9290b72e01144c689d8a3849f13a..99949a184313560a6c1b6bbb95aadf78c3e26a4d 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
-@@ -6,4 +6,5 @@ export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
- export { type MosaicSource, MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d.js";
+@@ -7,4 +7,5 @@ export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
+ export type { MosaicSource } from "./mosaic-layer/mosaic-tileset-2d.js";
  export type { MultiCOGLayerProps, MultiCOGSourceConfig, } from "./multi-cog-layer.js";
  export { MultiCOGLayer } from "./multi-cog-layer.js";
 +export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index dfc4e3cd9ed2d6a1e08f4266b8cdeaf0b0fedaac..578cf01e60b944a9c376b32dc43b1522d1c02583 100644
+index dbacdde78e52912c4ab7b76b2b8f5b3d79c1305f..fe7a27ad5300c18c1b71c57fa9e6c440bcffb211 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3,4 +3,9 @@ export * as texture from "./geotiff/texture.js";
+@@ -3,4 +3,9 @@ export { addAlphaChannel } from "./geotiff/geotiff.js";
+ export * as texture from "./geotiff/texture.js";
  export { MosaicLayer } from "./mosaic-layer/mosaic-layer.js";
- export { MosaicTileset2D, } from "./mosaic-layer/mosaic-tileset-2d.js";
  export { MultiCOGLayer } from "./multi-cog-layer.js";
 +// objex patch: re-export inferRenderPipeline so consumers can build the
 +// library-default uint pipeline and append modules (e.g. LinearRescale) without
@@ -47,36 +47,11 @@ index dfc4e3cd9ed2d6a1e08f4266b8cdeaf0b0fedaac..578cf01e60b944a9c376b32dc43b1522
 +export { inferRenderPipeline } from "./geotiff/render-pipeline.js";
  //# sourceMappingURL=index.js.map
 \ No newline at end of file
-diff --git a/dist/mosaic-layer/mosaic-layer.js b/dist/mosaic-layer/mosaic-layer.js
-index 61cb2e215f819b6215bf4ec20243c40c7cc81071..a0904f2f206fb8f3a563e2f8247ce18f27247baa 100644
---- a/dist/mosaic-layer/mosaic-layer.js
-+++ b/dist/mosaic-layer/mosaic-layer.js
-@@ -12,7 +12,7 @@ export class MosaicLayer extends CompositeLayer {
-     static layerName = "MosaicLayer";
-     static defaultProps = defaultProps;
-     renderTileLayer(mosaicSources, renderSource) {
--        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, } = this.props;
-+        const { id, minZoom, maxZoom, extent, maxCacheByteSize, maxCacheSize, maxRequests, debounceTime, onViewportLoad, onTileLoad, onTileError, onTileUnload, } = this.props;
-         class MosaicTileset2DFactory extends MosaicTileset2D {
-             constructor(opts) {
-                 super(mosaicSources, opts);
-@@ -46,6 +46,11 @@ export class MosaicLayer extends CompositeLayer {
-                 const { source, signal, data: userData } = data;
-                 return renderSource(source, { data: userData, signal });
-             },
-+            ...(typeof debounceTime === "number" && { debounceTime }),
-+            ...(typeof onViewportLoad === "function" && { onViewportLoad }),
-+            ...(typeof onTileLoad === "function" && { onTileLoad }),
-+            ...(typeof onTileError === "function" && { onTileError }),
-+            ...(typeof onTileUnload === "function" && { onTileUnload }),
-         });
-     }
-     renderLayers() {
 diff --git a/dist/multi-cog-layer.js b/dist/multi-cog-layer.js
-index a3aef00d9331ecc0a1e3d699fb3aaab2bae54c52..5a91f90b177e55d6d79941d4ec85b76c4b551b7d 100644
+index 6d4cf5123c146837e87c8871994d6b167b702c56..9e57b3e67f2c8dc84ece87b83242d70a4e891cf8 100644
 --- a/dist/multi-cog-layer.js
 +++ b/dist/multi-cog-layer.js
-@@ -606,17 +606,41 @@ function createBandTexture(device, array) {
+@@ -503,17 +503,41 @@ function createBandTexture(device, array) {
      if (array.layout !== "pixel-interleaved") {
          throw new Error("Band-separate layout not yet supported in MultiCOGLayer");
      }
