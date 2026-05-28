@@ -1,6 +1,6 @@
 <script lang="ts">
 import { handleLoadError } from '@walkthru-earth/objex-utils';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import {
@@ -9,6 +9,7 @@ import {
 	ResizablePaneGroup
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
@@ -110,6 +111,19 @@ $effect(() => {
 		loadHierarchy();
 	});
 });
+
+function cleanup() {
+	hierarchy = null;
+	selectedNode = null;
+	expanded = new Set();
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
 
 function setViewMode(mode: 'inspect' | 'map') {
 	viewMode = mode;
