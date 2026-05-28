@@ -10,7 +10,12 @@ import LockIcon from '@lucide/svelte/icons/lock';
 import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
 import ShieldIcon from '@lucide/svelte/icons/shield';
 import XIcon from '@lucide/svelte/icons/x';
-import { describeParseResult, looksLikeUrl, parseStorageUrl } from '@walkthru-earth/objex-utils';
+import {
+	DEFAULT_AWS_REGION,
+	describeParseResult,
+	looksLikeUrl,
+	parseStorageUrl
+} from '@walkthru-earth/objex-utils';
 import { Button } from '$lib/components/ui/button/index.js';
 import { Input } from '$lib/components/ui/input/index.js';
 import {
@@ -56,7 +61,7 @@ let {
 let name = $state('');
 let provider = $state<ProviderId>('s3');
 let bucket = $state('');
-let region = $state('us-east-1');
+let region = $state(DEFAULT_AWS_REGION);
 let endpoint = $state('');
 let anonymous = $state(true);
 let accessKey = $state('');

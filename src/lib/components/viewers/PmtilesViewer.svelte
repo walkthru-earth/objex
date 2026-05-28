@@ -2,6 +2,7 @@
 import ArchiveIcon from '@lucide/svelte/icons/archive';
 import GridIcon from '@lucide/svelte/icons/grid-3x3';
 import MapIcon from '@lucide/svelte/icons/map';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -75,7 +76,7 @@ async function load() {
 		pmtilesInstance = result.pmtiles;
 		metadata = result.metadata;
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 	}
@@ -88,18 +89,18 @@ const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 	<!-- Toolbar -->
 	{#if !loading && !error && metadata}
 		<div
-			class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
+			class="flex items-center gap-1 border-b border-border px-2 py-1.5 sm:gap-2 sm:px-4"
 		>
 			<!-- File info -->
 			<span
-				class="max-w-[100px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300"
+				class="max-w-[100px] truncate text-sm font-medium text-foreground sm:max-w-none"
 			>
 				{fileName}
 			</span>
 			<Badge variant="outline" class="hidden text-[10px] sm:inline-flex">
 				{metadata.formatLabel}
 			</Badge>
-			<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+			<span class="hidden text-xs text-muted-foreground sm:inline">
 				z{metadata.minZoom}-{metadata.maxZoom} · {metadata.numAddressedTiles.toLocaleString()} tiles
 			</span>
 
@@ -109,7 +110,7 @@ const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 					variant={viewMode === 'map' ? 'default' : 'outline'}
 					size="sm"
 					class="h-7 gap-1 px-2 text-xs {viewMode !== 'map'
-						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						? 'border-border text-muted-foreground hover:bg-muted'
 						: ''}"
 					onclick={() => setViewMode('map')}
 				>
@@ -121,7 +122,7 @@ const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 					variant={viewMode === 'archive' ? 'default' : 'outline'}
 					size="sm"
 					class="h-7 gap-1 px-2 text-xs {viewMode !== 'archive'
-						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						? 'border-border text-muted-foreground hover:bg-muted'
 						: ''}"
 					onclick={() => setViewMode('archive')}
 				>
@@ -133,7 +134,7 @@ const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 					variant={viewMode === 'inspector' ? 'default' : 'outline'}
 					size="sm"
 					class="h-7 gap-1 px-2 text-xs {viewMode !== 'inspector'
-						? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900'
+						? 'border-border text-muted-foreground hover:bg-muted'
 						: ''}"
 					onclick={() => setViewMode('inspector')}
 				>
@@ -148,11 +149,11 @@ const fileName = $derived(tab.path.split('/').pop() ?? 'pmtiles');
 	<div class="min-h-0 flex-1 overflow-hidden">
 		{#if loading}
 			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">{t('map.loadingPmtiles')}</p>
+				<p class="text-sm text-muted-foreground">{t('map.loadingPmtiles')}</p>
 			</div>
 		{:else if error}
 			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-red-400">{error}</p>
+				<p class="text-sm text-destructive">{error}</p>
 			</div>
 		{:else if metadata && pmtilesInstance}
 			{#if viewMode === 'map'}

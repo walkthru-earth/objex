@@ -1,5 +1,6 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
@@ -491,7 +492,7 @@ async function addZarrLayer(map: maplibregl.Map) {
 		zarrLayer = new ZarrLayer(opts);
 		map.addLayer(zarrLayer);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
@@ -599,7 +600,7 @@ async function updateSelector() {
 	try {
 		await zarrLayer.setSelector(buildSelector());
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 
@@ -641,12 +642,12 @@ onDestroy(cleanup);
 <div class="flex h-full w-full flex-col overflow-hidden">
 	<!-- Controls bar -->
 	<div
-		class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800"
+		class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5"
 	>
-		<label class="flex items-center gap-1 text-xs text-zinc-400">
+		<label class="flex items-center gap-1 text-xs text-muted-foreground">
 			{t('map.variable')}
 			<select
-				class="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+				class="rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground"
 				bind:value={selectedVar}
 				onchange={changeVariable}
 			>
@@ -658,10 +659,10 @@ onDestroy(cleanup);
 
 		{#each selectorDims as dim}
 			<label
-				class="flex shrink-0 items-center gap-1.5 rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-400 dark:border-zinc-700"
+				class="flex shrink-0 items-center gap-1.5 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground"
 				title={dimLabel(dim)}
 			>
-				<span class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">{dim.name}</span>
+				<span class="shrink-0 font-medium text-muted-foreground">{dim.name}</span>
 				<Slider
 					type="single"
 					min={0}
@@ -676,7 +677,7 @@ onDestroy(cleanup);
 				/>
 				{#if dim.isDatetime && dim.minDate && dim.maxDate}
 					{@const dateVal = indexToDateStr(selectorValues[dim.name] ?? 0, dim)}
-					<span class="shrink-0 tabular-nums text-zinc-500">
+					<span class="shrink-0 tabular-nums text-muted-foreground">
 						{dateVal ? (dim.subDaily ? dateVal.replace('T', ' ') : dateVal) : (selectorValues[dim.name] ?? 0)}
 					</span>
 					<input
@@ -691,10 +692,10 @@ onDestroy(cleanup);
 								updateSelector();
 							}
 						}}
-						class="h-5 rounded border border-zinc-300 bg-white px-1 text-[10px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+						class="h-5 rounded border border-border bg-background px-1 text-[10px] text-muted-foreground"
 					/>
 				{:else}
-					<span class="shrink-0 tabular-nums text-zinc-500">{selectorValues[dim.name] ?? 0}<span class="text-zinc-500/60">/{dim.size - 1}</span></span>
+					<span class="shrink-0 tabular-nums text-muted-foreground">{selectorValues[dim.name] ?? 0}<span class="text-muted-foreground/60">/{dim.size - 1}</span></span>
 					{#if dim.dtype}
 						<span class="shrink-0 text-[10px] text-zinc-400/70">{dim.dtype}</span>
 					{/if}
@@ -703,7 +704,7 @@ onDestroy(cleanup);
 		{/each}
 
 		{#if selectedMeta?.shape}
-			<span class="ms-auto text-xs text-zinc-400">
+			<span class="ms-auto text-xs text-muted-foreground">
 				{selectedMeta.dtype} [{selectedMeta.shape.join(', ')}]
 			</span>
 		{/if}
@@ -713,7 +714,7 @@ onDestroy(cleanup);
 	<div class="relative min-h-0 flex-1">
 		{#if error && !loading}
 			<div class="flex h-full items-center justify-center">
-				<p class="max-w-md text-center text-sm text-red-400">{error}</p>
+				<p class="max-w-md text-center text-sm text-destructive">{error}</p>
 			</div>
 		{:else}
 			<MapContainer {onMapReady} bounds={[-130, 20, -60, 55]} />

@@ -16,6 +16,8 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -149,13 +151,9 @@ onDestroy(cleanup);
 </script>
 
 <div class="flex h-full flex-col">
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		<Badge variant="secondary">{tab.extension.toUpperCase()}</Badge>
-
-		<div class="ms-auto flex items-center gap-1">
+	<ViewerHeader {tab}>
+		{#snippet badge()}<Badge variant="secondary">{tab.extension.toUpperCase()}</Badge>{/snippet}
+		{#snippet actions()}
 			<!-- Desktop controls -->
 			<div class="hidden items-center gap-1 sm:flex">
 				<Button variant="ghost" size="sm" class="h-7 px-1.5" onclick={zoomIn} title={t('image.zoomIn')}>
@@ -178,7 +176,7 @@ onDestroy(cleanup);
 			<!-- Mobile overflow menu -->
 			<div class="flex sm:hidden">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+					<DropdownMenu.Trigger class="rounded p-1 text-muted-foreground hover:bg-muted">
 						<EllipsisVerticalIcon class="size-4" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-40">
@@ -190,8 +188,8 @@ onDestroy(cleanup);
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</div>
-		</div>
-	</div>
+		{/snippet}
+	</ViewerHeader>
 
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
@@ -203,9 +201,9 @@ onDestroy(cleanup);
 		ondblclick={handleDblClick}
 	>
 		{#if loading}
-			<p class="text-sm text-zinc-400">{t('image.loading')}</p>
+			<ViewerStatus kind="loading" message={t('image.loading')} />
 		{:else if error}
-			<p class="text-sm text-red-400">{error}</p>
+			<ViewerStatus kind="error" message={error} />
 		{:else if imgSrc}
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<img

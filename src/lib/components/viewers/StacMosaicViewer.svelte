@@ -22,6 +22,7 @@ import {
 	extractMosaicAssets,
 	type FacetState,
 	formatFileSize,
+	handleLoadError,
 	hasActiveFilters,
 	isAbortError,
 	isSingleAssetComposite,
@@ -36,7 +37,8 @@ import {
 	type StacItemView,
 	type StacRoutableKind,
 	smokeTestHref,
-	spatialCellKey
+	spatialCellKey,
+	TILE_DEBOUNCE_MS
 } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
@@ -503,7 +505,7 @@ const mosaicLayer = $derived.by(() => {
 					console.warn('[StacMosaic] getSource failed', {
 						id: source.id,
 						href: source.href,
-						error: err instanceof Error ? err.message : err
+						error: handleLoadError(err) ?? String(err)
 					});
 				}
 				return undefined as unknown as GeoTIFF;
@@ -669,7 +671,7 @@ const multiCogLayers = $derived.by(() => {
 			// layers, so the aggregate concurrency budget is even tighter —
 			// keep `maxRequests` low.
 			maxRequests: 6,
-			debounceTime: 200,
+			debounceTime: TILE_DEBOUNCE_MS,
 			onTileError: (err: Error) => {
 				if (isAbortError(err)) return;
 				logTileErrorOnce(view.id, err);
@@ -1346,9 +1348,9 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 						if (gen !== loadGen || signal.aborted) return;
 						if (!result.ok) smokeWarning = result.reason;
 					} catch (err) {
-						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (isAbortError(err)) return;
 						if (gen !== loadGen) return;
-						smokeWarning = err instanceof Error ? err.message : String(err);
+						smokeWarning = handleLoadError(err);
 					}
 				})();
 			}
@@ -1444,8 +1446,8 @@ async function loadMosaic(map: maplibregl.Map): Promise<void> {
 	} catch (err) {
 		if (gen !== loadGen) return;
 		if (signal.aborted) return;
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		stage = 'error';
 		loading = false;
 	}

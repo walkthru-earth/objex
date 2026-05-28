@@ -16,9 +16,12 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
-import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/signed-url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
+import { resolveSignedTabUrl } from '$lib/utils/signed-url-effect.js';
 import { getUrlView, pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 interface CodeActions {
 	toggleFormat: () => Promise<void>;
@@ -123,17 +126,10 @@ const stacBadgeKey = $derived<Record<string, string>>({
 // must wait for the presign so the iframe never loads a bare `s3://` href.
 let styleUrl = $state('');
 $effect(() => {
-	const id = tab.id;
 	styleUrl = canStreamDirectly(tab) ? buildHttpsUrl(tab) : '';
-	let cancelled = false;
-	(async () => {
-		const url = await buildHttpsUrlAsync(tab);
-		if (cancelled || id !== tab.id) return;
-		styleUrl = url;
-	})();
-	return () => {
-		cancelled = true;
-	};
+	return resolveSignedTabUrl(tab, (u) => {
+		styleUrl = u;
+	});
 });
 const stacBrowserSrc = $derived(
 	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
@@ -370,13 +366,9 @@ async function copyCode() {
 
 <div class="flex h-full flex-col">
 	{#if !nested}
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		<Badge variant="secondary">{language}</Badge>
-
-		<div class="ms-auto flex items-center gap-1 sm:gap-2">
+	<ViewerHeader {tab}>
+		{#snippet badge()}<Badge variant="secondary">{language}</Badge>{/snippet}
+		{#snippet actions()}
 			{#if jsonKind === 'maplibre-style'}
 				<Badge variant="outline" class="hidden border-blue-200 text-blue-600 sm:inline-flex dark:border-blue-800 dark:text-blue-300">
 					{t('code.maplibreStyle')}
@@ -482,7 +474,7 @@ async function copyCode() {
 			<!-- Mobile overflow menu -->
 			<div class="flex sm:hidden">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+					<DropdownMenu.Trigger class="rounded p-1 text-muted-foreground hover:bg-muted">
 						<EllipsisVerticalIcon class="size-4" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-44">
@@ -539,8 +531,8 @@ async function copyCode() {
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</div>
-		</div>
-	</div>
+		{/snippet}
+	</ViewerHeader>
 	{/if}
 
 	{#if viewMode === 'stac-browser' && styleUrl}
@@ -596,13 +588,9 @@ async function copyCode() {
 			class:word-wrap={wordWrap}
 		>
 			{#if loading}
-				<div class="flex h-full items-center justify-center">
-					<p class="text-sm text-zinc-400">{t('code.loading')}</p>
-				</div>
+				<ViewerStatus kind="loading" message={t('code.loading')} />
 			{:else if error}
-				<div class="flex h-full items-center justify-center">
-					<p class="text-sm text-red-400">{error}</p>
-				</div>
+				<ViewerStatus kind="error" message={error} />
 			{:else}
 				{@html html}
 			{/if}

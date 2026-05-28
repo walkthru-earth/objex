@@ -1,26 +1,19 @@
 <script lang="ts">
 import type { Tab } from '$lib/types';
-import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
+import { resolveSignedTabUrl } from '$lib/utils/signed-url-effect.js';
 
 let { tab }: { tab: Tab } = $props();
 
 let fileUrl = $state('');
 
 $effect(() => {
-	const id = tab.id;
-	let cancelled = false;
-	(async () => {
-		if (tab.source === 'url') {
-			fileUrl = tab.path;
-			return;
-		}
-		const url = await buildHttpsUrlAsync(tab);
-		if (cancelled || id !== tab.id) return;
-		fileUrl = url;
-	})();
-	return () => {
-		cancelled = true;
-	};
+	if (tab.source === 'url') {
+		fileUrl = tab.path;
+		return;
+	}
+	return resolveSignedTabUrl(tab, (u) => {
+		fileUrl = u;
+	});
 });
 
 const viewerUrl = $derived(

@@ -1,5 +1,6 @@
 <script lang="ts">
 import ClockIcon from '@lucide/svelte/icons/clock';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -127,7 +128,7 @@ async function loadDatabase() {
 			tables = (result.rows ?? []).map((row) => row.name).filter((name): name is string => !!name);
 		}
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 	}
@@ -254,7 +255,7 @@ async function switchSnapshot(id: number) {
 		const connId = tab.connectionId ?? '';
 		await loadDuckLake(engine, connId, id);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		switchingSnapshot = false;
 	}
@@ -318,7 +319,7 @@ async function switchSchema(schema: string) {
 		const connId = tab.connectionId ?? '';
 		await loadDuckLakeTables(engine, connId);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 
@@ -357,23 +358,23 @@ function selectTable(tableName: string) {
 
 <div class="flex h-full flex-col">
 	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
+		class="flex items-center gap-1 border-b border-border px-2 py-1.5 sm:gap-2 sm:px-4"
 	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
+		<span class="truncate max-w-[120px] text-sm font-medium text-foreground sm:max-w-none">{tab.name}</span>
 		{#if isDuckLake}
 			<Badge variant="secondary" class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">DuckLake</Badge>
 		{:else}
 			<Badge variant="secondary">{t('database.badge')}</Badge>
 		{/if}
 		{#if tables.length > 0}
-			<span class="hidden text-xs text-zinc-400 sm:inline">{tables.length} {t('database.tables')}</span>
+			<span class="hidden text-xs text-muted-foreground sm:inline">{tables.length} {t('database.tables')}</span>
 		{/if}
 		{#if isDuckLake && snapshotVersion !== null}
-			<div class="hidden items-center gap-1 text-xs text-zinc-400 sm:inline-flex">
+			<div class="hidden items-center gap-1 text-xs text-muted-foreground sm:inline-flex">
 				<ClockIcon class="h-3 w-3" />
 				{#if snapshots.length > 1}
 					<select
-						class="rounded bg-white px-1.5 py-0.5 text-xs text-zinc-700 disabled:opacity-60 dark:bg-zinc-800 dark:text-zinc-300"
+						class="rounded bg-background px-1.5 py-0.5 text-xs text-foreground disabled:opacity-60"
 						disabled={switchingSnapshot}
 						title={t('ducklake.snapshot')}
 						value={snapshotVersion}
@@ -383,7 +384,7 @@ function selectTable(tableName: string) {
 							<option value={snap.id}>{formatSnapshotLabel(snap)}</option>
 						{/each}
 					</select>
-					<span class="text-zinc-400">({snapshots.length} {t('ducklake.snapshots')})</span>
+					<span class="text-muted-foreground">({snapshots.length} {t('ducklake.snapshots')})</span>
 				{:else}
 					{@const formatted = formatSnapshotTime(snapshotTimeMs)}
 					<span>v{snapshotVersion}{#if formatted}&nbsp;({formatted}){/if}</span>
@@ -406,26 +407,26 @@ function selectTable(tableName: string) {
 	<div class="flex flex-1 overflow-hidden">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-400">{isDuckLake ? t('ducklake.loading') : t('database.loading')}</p>
+				<p class="text-sm text-muted-foreground">{isDuckLake ? t('ducklake.loading') : t('database.loading')}</p>
 			</div>
 		{:else if error}
 			<div class="flex flex-1 items-center justify-center p-4">
 				<div class="max-w-md text-center">
-					<p class="text-sm text-red-400">{error}</p>
+					<p class="text-sm text-destructive">{error}</p>
 					{#if isDuckLake && error.includes('ducklake')}
-						<p class="mt-2 text-xs text-zinc-500">{t('ducklake.extensionHint')}</p>
+						<p class="mt-2 text-xs text-muted-foreground">{t('ducklake.extensionHint')}</p>
 					{/if}
 				</div>
 			</div>
 		{:else}
 			<!-- Table list sidebar -->
 			<div
-				class="w-56 shrink-0 overflow-auto border-e border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+				class="w-56 shrink-0 overflow-auto border-e border-border bg-muted"
 			>
 				{#if isDuckLake && schemas.length > 1}
-					<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+					<div class="border-b border-border px-3 py-2">
 						<select
-							class="w-full rounded bg-white px-2 py-1 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+							class="w-full rounded bg-background px-2 py-1 text-xs text-foreground"
 							onchange={(e) => switchSchema(e.currentTarget.value)}
 						>
 							{#each schemas as schema}
@@ -434,21 +435,21 @@ function selectTable(tableName: string) {
 						</select>
 					</div>
 				{/if}
-				<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-					<h3 class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('database.tablesHeader')}</h3>
+				<div class="border-b border-border px-3 py-2">
+					<h3 class="text-xs font-medium text-muted-foreground">{t('database.tablesHeader')}</h3>
 				</div>
 				{#each tables as tableName}
 					<button
-						class="flex w-full items-center px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+						class="flex w-full items-center px-3 py-1.5 text-start text-xs hover:bg-accent"
 						class:bg-blue-50={selectedTable === tableName}
 						class:dark:bg-blue-950={selectedTable === tableName}
 						onclick={() => selectTable(tableName)}
 					>
-						<span class="text-zinc-700 dark:text-zinc-300">{tableName}</span>
+						<span class="text-foreground">{tableName}</span>
 					</button>
 				{/each}
 				{#if tables.length === 0}
-					<div class="px-3 py-4 text-center text-xs text-zinc-400">
+					<div class="px-3 py-4 text-center text-xs text-muted-foreground">
 						{isDuckLake ? t('ducklake.noTables') : t('database.selectTable')}
 					</div>
 				{/if}
@@ -468,7 +469,7 @@ function selectTable(tableName: string) {
 					{/key}
 				{:else}
 					<div class="flex flex-1 items-center justify-center">
-						<p class="text-sm text-zinc-400">{t('database.selectTable')}</p>
+						<p class="text-sm text-muted-foreground">{t('database.selectTable')}</p>
 					</div>
 				{/if}
 			</div>

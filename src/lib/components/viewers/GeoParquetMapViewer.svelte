@@ -2,8 +2,10 @@
 import LocateIcon from '@lucide/svelte/icons/locate';
 import {
 	buildGeoArrowTables,
+	FIRST_FEATURE_FLY_ZOOM,
 	type GeoArrowGeomType,
 	type GeoArrowResult,
+	handleLoadError,
 	parseWKB
 } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
@@ -73,7 +75,7 @@ function extractFirstCoord(coords: any): [number, number] | null {
 
 function flyToFirstFeature() {
 	if (!mapRef || !firstFeatureCoord) return;
-	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: FIRST_FEATURE_FLY_ZOOM });
 }
 
 // mapData is read synchronously in loadGeoData (before any await),
@@ -173,7 +175,7 @@ async function loadGeoData() {
 		loading = false;
 	} catch (err) {
 		if (gen !== loadGen) return;
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
@@ -225,7 +227,7 @@ function onMapReady(map: maplibregl.Map) {
 		<LoadProgress stage={t('map.loadingGeometry')} entries={progressEntries} />
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<div class="flex-1">

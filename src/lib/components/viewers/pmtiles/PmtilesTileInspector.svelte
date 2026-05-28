@@ -1,7 +1,7 @@
 <script lang="ts">
 import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 import XIcon from '@lucide/svelte/icons/x';
-import { formatFileSize } from '@walkthru-earth/objex-utils';
+import { formatFileSize, handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -121,7 +121,7 @@ async function fetchTile() {
 			}
 		}
 	} catch (e) {
-		error = e instanceof Error ? e.message : String(e);
+		error = handleLoadError(e);
 	} finally {
 		loading = false;
 	}
@@ -180,7 +180,7 @@ function formatValue(v: unknown): string {
 <div class="flex h-full flex-col overflow-hidden">
 	<!-- Navigation bar -->
 	<div
-		class="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800"
+		class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2"
 	>
 		<!-- Z/X/Y inputs -->
 		<div class="flex items-center gap-1 text-xs">
@@ -190,7 +190,7 @@ function formatValue(v: unknown): string {
 				bind:value={inputZ}
 				min={0}
 				max={30}
-				class="w-12 rounded border border-zinc-300 bg-transparent px-1.5 py-0.5 text-center font-mono text-xs dark:border-zinc-700"
+				class="w-12 rounded border border-border bg-transparent px-1.5 py-0.5 text-center font-mono text-xs"
 				onkeydown={handleKeydown}
 			/>
 			<span class="text-muted-foreground">x</span>
@@ -198,7 +198,7 @@ function formatValue(v: unknown): string {
 				type="number"
 				bind:value={inputX}
 				min={0}
-				class="w-16 rounded border border-zinc-300 bg-transparent px-1.5 py-0.5 text-center font-mono text-xs dark:border-zinc-700"
+				class="w-16 rounded border border-border bg-transparent px-1.5 py-0.5 text-center font-mono text-xs"
 				onkeydown={handleKeydown}
 			/>
 			<span class="text-muted-foreground">y</span>
@@ -206,7 +206,7 @@ function formatValue(v: unknown): string {
 				type="number"
 				bind:value={inputY}
 				min={0}
-				class="w-16 rounded border border-zinc-300 bg-transparent px-1.5 py-0.5 text-center font-mono text-xs dark:border-zinc-700"
+				class="w-16 rounded border border-border bg-transparent px-1.5 py-0.5 text-center font-mono text-xs"
 				onkeydown={handleKeydown}
 			/>
 		</div>
@@ -253,13 +253,13 @@ function formatValue(v: unknown): string {
 	</div>
 
 	<!-- Main content -->
-	<div class="flex min-h-0 flex-1 overflow-hidden">
+	<div class="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
 				Loading tile...
 			</div>
 		{:else if error}
-			<div class="flex flex-1 items-center justify-center text-xs text-red-400">
+			<div class="flex flex-1 items-center justify-center text-xs text-destructive">
 				{error}
 			</div>
 		{:else if tile}
@@ -312,16 +312,16 @@ function formatValue(v: unknown): string {
 
 			<!-- Feature properties panel -->
 			<div
-				class="flex w-56 shrink-0 flex-col border-s border-zinc-200 lg:w-64 dark:border-zinc-800"
+				class="flex w-full flex-col border-t border-border sm:w-56 sm:shrink-0 sm:border-s sm:border-t-0 lg:w-64"
 			>
 				<div
-					class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 				>
 					{t('pmtiles.featureProperties')}
 				</div>
 				{#if selectedFeature && selectedLayerName !== null}
 					<div class="flex-1 overflow-auto">
-						<div class="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+						<div class="border-b border-border px-3 py-2">
 							<div class="flex items-center gap-1.5 text-xs">
 								<span
 									class="inline-block size-2 rounded-sm"
@@ -337,14 +337,14 @@ function formatValue(v: unknown): string {
 								· #{selectedFeatureIdx}
 							</div>
 						</div>
-						<div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+						<div class="divide-y divide-border">
 							{#each Object.entries(selectedFeature.properties) as [key, value]}
 								<div class="px-3 py-1.5">
-									<div class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+									<div class="text-[10px] font-medium text-muted-foreground">
 										{key}
 									</div>
 									<div
-										class="break-all text-xs text-zinc-700 dark:text-zinc-300"
+										class="break-all text-xs text-foreground"
 										title={formatValue(value)}
 									>
 										{formatValue(value)}
@@ -402,10 +402,10 @@ function formatValue(v: unknown): string {
 
 			<!-- Raster tile info panel -->
 			<div
-				class="flex w-56 shrink-0 flex-col border-s border-zinc-200 lg:w-64 dark:border-zinc-800"
+				class="flex w-full flex-col border-t border-border sm:w-56 sm:shrink-0 sm:border-s sm:border-t-0 lg:w-64"
 			>
 				<div
-					class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 				>
 					{t('pmtiles.tileInfo')}
 				</div>

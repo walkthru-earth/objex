@@ -5,6 +5,8 @@
  * Used by ConnectionDialog, browser-cloud adapter, host-detection, url-state, etc.
  */
 
+import { DEFAULT_AWS_REGION } from '../constants.js';
+
 // ---------------------------------------------------------------------------
 // Provider type — the canonical union used by Connection, ConnectionConfig, etc.
 // ---------------------------------------------------------------------------
@@ -580,7 +582,7 @@ export function buildProviderBaseUrl(
 		return `${resolved}/${bucket}`;
 	}
 	// Fallback: AWS S3 path-style
-	return `https://s3.${region || 'us-east-1'}.amazonaws.com/${bucket}`;
+	return `https://s3.${region || DEFAULT_AWS_REGION}.amazonaws.com/${bucket}`;
 }
 
 /** Check if a provider uses the GCS JSON API (not S3 XML). */

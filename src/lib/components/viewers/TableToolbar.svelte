@@ -10,6 +10,7 @@ import InfoIcon from '@lucide/svelte/icons/info';
 import LinkIcon from '@lucide/svelte/icons/link';
 import MapIcon from '@lucide/svelte/icons/map';
 import TableIcon from '@lucide/svelte/icons/table';
+import { COPY_FEEDBACK_MS } from '@walkthru-earth/objex-utils';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { Separator } from '$lib/components/ui/separator/index.js';
@@ -89,7 +90,7 @@ async function handleCopy(type: 'https' | 'provider') {
 	try {
 		await navigator.clipboard.writeText(url);
 		copiedType = type;
-		setTimeout(() => (copiedType = null), 2000);
+		setTimeout(() => (copiedType = null), COPY_FEEDBACK_MS);
 	} catch {
 		// clipboard API may fail in some contexts
 	}
@@ -117,13 +118,13 @@ function handleJumpKeydown(e: KeyboardEvent) {
 </script>
 
 <div
-	class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
+	class="flex items-center gap-1 border-b border-border px-2 py-1.5 sm:gap-2 sm:px-4"
 >
 	<!-- File name — truncated on mobile -->
-	<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{fileName}</span>
+	<span class="truncate max-w-[120px] text-sm font-medium text-foreground sm:max-w-none">{fileName}</span>
 
 	<!-- Row/col count — hidden on mobile -->
-	<span class="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+	<span class="hidden text-xs text-muted-foreground sm:inline">
 		{#if rowCount > 0}
 			{rowCount.toLocaleString()} {t('toolbar.rows')} &times; {columnCount} cols
 		{:else if columnCount > 0}
@@ -137,7 +138,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 			<Button
 				variant={viewMode === 'info' ? 'default' : 'outline'}
 				size="sm"
-				class="h-7 gap-1 px-2 text-xs {viewMode !== 'info' ? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900' : ''}"
+				class="h-7 gap-1 px-2 text-xs {viewMode !== 'info' ? 'border-border text-muted-foreground hover:bg-muted hover:text-foreground' : ''}"
 				onclick={onToggleInfo}
 			>
 				<InfoIcon class="size-3" />
@@ -227,7 +228,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 			{#if onPageSizeChange && viewMode === 'table'}
 				<Separator orientation="vertical" class="!h-4" />
 				<select
-					class="rounded border border-zinc-200 bg-transparent px-1.5 py-0.5 text-xs text-zinc-500 outline-none dark:border-zinc-700 dark:text-zinc-400"
+					class="rounded border border-border bg-transparent px-1.5 py-0.5 text-xs text-muted-foreground outline-none"
 					value={pageSize}
 					onchange={(e) => onPageSizeChange?.(parseInt(e.currentTarget.value, 10))}
 				>
@@ -271,7 +272,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 					<!-- svelte-ignore a11y_autofocus -->
 					<input
 						type="number"
-						class="h-7 w-14 border border-zinc-200 bg-transparent px-1 text-center text-xs outline-none dark:border-zinc-700 dark:bg-zinc-900"
+						class="h-7 w-14 border border-border bg-transparent px-1 text-center text-xs outline-none"
 						bind:value={jumpPageValue}
 						onkeydown={handleJumpKeydown}
 						onblur={handleJumpSubmit}
@@ -320,7 +321,7 @@ function handleJumpKeydown(e: KeyboardEvent) {
 		<div class="flex sm:hidden">
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger
-					class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+					class="rounded p-1 text-muted-foreground hover:bg-muted"
 				>
 					<EllipsisVerticalIcon class="size-4" />
 				</DropdownMenu.Trigger>

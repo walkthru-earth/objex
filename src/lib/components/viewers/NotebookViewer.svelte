@@ -16,6 +16,8 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { highlightCodeReversed } from '$lib/utils/shiki';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 let { tab }: { tab: Tab } = $props();
 
@@ -135,23 +137,21 @@ async function copyRaw() {
 </script>
 
 <div class="flex h-full flex-col">
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		<Badge variant="secondary">{t('notebook.badge')}</Badge>
-		{#if kernelName}
-			<Badge variant="outline" class="hidden border-orange-200 text-orange-600 sm:inline-flex dark:border-orange-800 dark:text-orange-300">
-				{kernelName}
-			</Badge>
-		{/if}
-		{#if cellCount > 0}
-			<span class="hidden text-xs text-muted-foreground sm:inline">
-				{cellCount} {t('notebook.cells')}
-			</span>
-		{/if}
-
-		<div class="ms-auto flex items-center gap-1 sm:gap-2">
+	<ViewerHeader {tab}>
+		{#snippet badge()}
+			<Badge variant="secondary">{t('notebook.badge')}</Badge>
+			{#if kernelName}
+				<Badge variant="outline" class="hidden border-orange-200 text-orange-600 sm:inline-flex dark:border-orange-800 dark:text-orange-300">
+					{kernelName}
+				</Badge>
+			{/if}
+			{#if cellCount > 0}
+				<span class="hidden text-xs text-muted-foreground sm:inline">
+					{cellCount} {t('notebook.cells')}
+				</span>
+			{/if}
+		{/snippet}
+		{#snippet actions()}
 			<!-- Desktop controls -->
 			<div class="hidden items-center gap-1 sm:flex">
 				<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={toggleCode}>
@@ -165,7 +165,7 @@ async function copyRaw() {
 			<!-- Mobile overflow menu -->
 			<div class="flex sm:hidden">
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+					<DropdownMenu.Trigger class="rounded p-1 text-muted-foreground hover:bg-muted">
 						<EllipsisVerticalIcon class="size-4" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-44">
@@ -178,18 +178,14 @@ async function copyRaw() {
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</div>
-		</div>
-	</div>
+		{/snippet}
+	</ViewerHeader>
 
 	<div class="notebook-viewer flex-1 overflow-auto" dir="ltr">
 		{#if loading}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">{t('notebook.loading')}</p>
-			</div>
+			<ViewerStatus kind="loading" message={t('notebook.loading')} />
 		{:else if error}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-red-400">{error}</p>
-			</div>
+			<ViewerStatus kind="error" message={error} />
 		{/if}
 		<div bind:this={container} class="notebook-content" class:hidden={loading || !!error}></div>
 	</div>

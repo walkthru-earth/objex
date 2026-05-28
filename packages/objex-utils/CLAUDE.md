@@ -16,7 +16,7 @@ graph LR
 
 Host-side re-exports from `src/lib/` (only the type-level / configuration surface that the Svelte components also rely on, kept in one place so both packages share the same shapes):
 - **types**: `Connection`, `ConnectionConfig`, `FileEntry`, `Tab`, `Theme`, `WriteResult`
-- **constants**: `COPY_FEEDBACK_MS`, `DEFAULT_TARGET_CRS`, `DUCKDB_INIT_TIMEOUT_MS`, `LAYER_HUE_MULTIPLIER`, `MAX_QUERY_HISTORY_ENTRIES`, `SQL_PREVIEW_LENGTH`, `STORAGE_KEYS`, `VIEWER_DIR_EXTENSIONS`, `WGS84_CODES`
+- **constants**: `COPY_FEEDBACK_MS`, `DEFAULT_AWS_REGION`, `DEFAULT_TARGET_CRS`, `DUCKDB_INIT_TIMEOUT_MS`, `FIRST_FEATURE_FLY_ZOOM`, `LAYER_HUE_MULTIPLIER`, `MAX_QUERY_HISTORY_ENTRIES`, `SQL_PREVIEW_LENGTH`, `STORAGE_KEYS`, `TILE_DEBOUNCE_MS`, `VIEWER_DIR_EXTENSIONS`, `WGS84_CODES`
 - **storage/adapter**: `StorageAdapter` (interface), `ListPage` (type)
 - **storage/url-adapter**: `UrlAdapter` (class)
 - **storage/providers**: `PROVIDERS`, `PROVIDER_IDS`, `ProviderId` (type), `ProviderDef` (type), `ProviderRegion` (type), `AccessMode` (type), `AccessModeInput` (type), `getProvider()`, `buildEndpointFromTemplate()`, `resolveProviderEndpoint()`, `buildProviderBaseUrl()`, `isGcsProvider()`, `getAccessMode()`, `isPubliclyStreamable()`
@@ -36,6 +36,7 @@ Sibling modules physically located in `packages/objex-utils/src/` (each re-expor
 - **cog-asset**: `CogAsset` / `ChannelRef` / `ChannelComposite` (types), `extractCogAssets()`, `syntheticSelfAsset()`, `pickNaturalColorComposite()`, `isSingleAssetComposite()`, `allChannelsBand0()`. Reads `raster:bands.length` and `eo:bands` without network.
 - **cloud-url**: `resolveCloudUrl()`, `getNativeScheme()`, `safeDecodeURIComponent()`
 - **clipboard**: `copyToClipboard()`, `wireCodeCopyButtons()`. Uses `navigator.clipboard` and `COPY_FEEDBACK_MS`.
+- **crs**: `isWgs84(crs)`. Returns `true` when the given numeric EPSG code or string (`"EPSG:4326"`, `"OGC:CRS84"`, `"epsg:4979"`, etc.) is WGS84 lon/lat and requires no `ST_Transform`. Reads `WGS84_CODES` and `DEFAULT_TARGET_CRS` from host constants so the set is never re-typed in a viewer. Distinct from `isWgs84Crs` (geometry-type.ts), which treats absent CRS as WGS84; `isWgs84` returns `false` for null/unknown.
 - **app-config**: `AppConfig`, `AppConfigDefaults`, `AppConfigUi`, `BasemapConfig`, `ConnectionSeed` (types), `DEFAULT_APP_CONFIG`, `mergeAppConfig()`, `resolveSetting()`, `resolveBasemap()`, `parseVisibilityParam()`, `coerceTheme()`, `coerceString()`, `coercePositiveInt()`, `coerceBool()`. Pure config schema, field-by-field merge of untrusted JSON (unknown fields ignored, malformed values fall back to base, basemaps/connections filtered to well-formed entries), the first-match-wins precedence resolver, and `resolveBasemap(config, variant, userId)` which picks the basemap to render (user pick > defaultBasemap[variant] > first matching variant > first basemap, undefined when none configured). Imports only the `Theme` type from `src/lib/types`.
 - **connection-identity**: `connectionIdentityKey()`, `isSameConnectionIdentity()`, `normalizeEndpoint()`, `normalizeProvider()`, `ConnectionIdentityInput`
 - **error**: `handleLoadError()`, `isAbortError()`

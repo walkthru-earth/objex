@@ -1,5 +1,6 @@
 <script lang="ts">
-import { untrack } from 'svelte';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
+import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
 import {
@@ -8,6 +9,7 @@ import {
 	ResizablePaneGroup
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
+import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
@@ -25,8 +27,11 @@ import {
 	type ZarrHierarchy,
 	type ZarrNode
 } from '$lib/utils/zarr.js';
+import { useIsWide } from '../../utils/media-query.svelte.js';
 
 let { tab }: { tab: Tab } = $props();
+
+const isWide = useIsWide();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -110,6 +115,19 @@ $effect(() => {
 	});
 });
 
+function cleanup() {
+	hierarchy = null;
+	selectedNode = null;
+	expanded = new Set();
+}
+
+$effect(() => {
+	const id = tab.id;
+	const unregister = tabResources.register(id, cleanup);
+	return unregister;
+});
+onDestroy(cleanup);
+
 function setViewMode(mode: 'inspect' | 'map') {
 	viewMode = mode;
 	updateUrlView(viewMode);
@@ -133,7 +151,7 @@ async function loadHierarchy() {
 			expanded = new Set(['/']);
 		}
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 		updateUrlView(viewMode);
@@ -182,7 +200,7 @@ function selectStoreAttrs() {
 			{#if hasChildren}
 				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 				<span
-					class="flex size-4 shrink-0 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
+					class="flex size-4 shrink-0 items-center justify-center rounded hover:bg-accent"
 					role="button"
 					tabindex="-1"
 					aria-label={isExpanded ? 'Collapse' : 'Expand'}
@@ -192,7 +210,7 @@ function selectStoreAttrs() {
 					}}
 				>
 					<svg
-						class="size-3 text-zinc-400 transition-transform"
+						class="size-3 text-muted-foreground transition-transform"
 						class:rotate-90={isExpanded}
 						viewBox="0 0 16 16"
 						fill="currentColor"
@@ -229,10 +247,8 @@ function selectStoreAttrs() {
 			<span
 				class="truncate"
 				class:font-medium={node.kind === 'array'}
-				class:text-zinc-700={node.kind === 'array'}
-				class:dark:text-zinc-300={node.kind === 'array'}
-				class:text-zinc-600={node.kind === 'group'}
-				class:dark:text-zinc-400={node.kind === 'group'}
+				class:text-foreground={node.kind === 'array'}
+				class:text-muted-foreground={node.kind === 'group'}
 			>
 				{node.path === '/' ? '/ (root)' : node.name}
 			</span>
@@ -259,18 +275,18 @@ function selectStoreAttrs() {
 {#snippet nodeDetails()}
 	{#if showingStoreAttrs && hierarchy}
 		<div
-			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+			class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 		>
 			{t('zarr.storeAttributes')}
 		</div>
 		<div class="flex-1 overflow-auto p-3">
 			<div
-				class="rounded border border-zinc-200 bg-zinc-100 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800"
+				class="rounded border border-border bg-muted p-2 text-xs"
 			>
 				{#each Object.entries(hierarchy.storeAttrs) as [key, value]}
 					<div class="flex gap-2 py-0.5">
 						<span class="shrink-0 font-medium text-muted-foreground">{key}:</span>
-						<span class="break-all text-zinc-700 dark:text-zinc-300">
+						<span class="break-all text-foreground">
 							{typeof value === 'string' ? value : JSON.stringify(value)}
 						</span>
 					</div>
@@ -279,7 +295,7 @@ function selectStoreAttrs() {
 		</div>
 	{:else if selectedNode}
 		<div
-			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+			class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 		>
 			{selectedNode.path}
 		</div>
@@ -389,12 +405,12 @@ function selectStoreAttrs() {
 						<dt class="text-muted-foreground">{t('zarr.attributes')}</dt>
 						<dd>
 							<div
-								class="mt-1 rounded border border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-700 dark:bg-zinc-800"
+								class="mt-1 rounded border border-border bg-muted p-2"
 							>
 								{#each Object.entries(selectedNode.attributes) as [key, value]}
 									<div class="flex gap-2 py-0.5">
 										<span class="shrink-0 font-medium text-muted-foreground">{key}:</span>
-										<span class="break-all text-zinc-700 dark:text-zinc-300">
+										<span class="break-all text-foreground">
 											{typeof value === 'string' ? value : JSON.stringify(value)}
 										</span>
 									</div>
@@ -414,10 +430,10 @@ function selectStoreAttrs() {
 
 <div class="flex h-full flex-col">
 	<!-- Header bar -->
-	<div class="shrink-0 border-b border-zinc-200 px-3 py-2 sm:px-4 dark:border-zinc-800">
+	<div class="shrink-0 border-b border-border px-3 py-2 sm:px-4">
 		<div class="flex items-center gap-1.5 sm:gap-2">
 			<span
-				class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300"
+				class="max-w-[140px] truncate text-sm font-medium text-foreground sm:max-w-none"
 				>{tab.name}</span
 			>
 			<Badge
@@ -459,11 +475,11 @@ function selectStoreAttrs() {
 	<!-- Content -->
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">{t('zarr.loading')}</p>
+			<p class="text-sm text-muted-foreground">{t('zarr.loading')}</p>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="max-w-md text-center text-sm text-red-400">{error}</p>
+			<p class="max-w-md text-center text-sm text-destructive">{error}</p>
 		</div>
 	{:else if viewMode === 'map' && hasMapVars}
 		{#key viewMode}
@@ -480,56 +496,73 @@ function selectStoreAttrs() {
 		{/key}
 	{:else if hierarchy}
 		<!-- Inspect mode (tree + detail panel) -->
-		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
-			<!-- Left: Tree view -->
-			<ResizablePane defaultSize={40} minSize={20}>
-				<div class="flex h-full flex-col">
-					<div
-						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+		{#snippet zarrTree()}
+			<div class="flex h-full flex-col">
+				<div
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+				>
+					{t('zarr.contents')}
+					<span class="ms-1 normal-case tracking-normal"
+						>({hierarchy!.totalNodes})</span
 					>
-						{t('zarr.contents')}
-						<span class="ms-1 normal-case tracking-normal"
-							>({hierarchy.totalNodes})</span
-						>
-					</div>
-					<div class="flex-1 overflow-auto">
-						{#if hasStoreAttrs}
-							<button
-								class="flex w-full items-center gap-2 border-b border-zinc-100 px-3 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800/50 dark:hover:bg-zinc-800/50"
-								class:bg-blue-50={showingStoreAttrs}
-								class:dark:bg-blue-950={showingStoreAttrs}
-								onclick={selectStoreAttrs}
-							>
-								<span class="size-4 shrink-0"></span>
-								<svg
-									class="size-3.5 shrink-0 text-zinc-400"
-									viewBox="0 0 16 16"
-									fill="currentColor"
-								>
-									<path
-										fill-rule="evenodd"
-										d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H3a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
-										clip-rule="evenodd"
-									/>
-								</svg>
-								<span class="truncate font-medium text-muted-foreground">
-									{t('zarr.storeAttributes')}
-								</span>
-							</button>
-						{/if}
-						{@render treeNode(hierarchy.root, 0)}
-					</div>
 				</div>
-			</ResizablePane>
+				<div class="flex-1 overflow-auto">
+					{#if hasStoreAttrs}
+						<button
+							class="flex w-full items-center gap-2 border-b border-zinc-100 px-3 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800/50 dark:hover:bg-zinc-800/50"
+							class:bg-blue-50={showingStoreAttrs}
+							class:dark:bg-blue-950={showingStoreAttrs}
+							onclick={selectStoreAttrs}
+						>
+							<span class="size-4 shrink-0"></span>
+							<svg
+								class="size-3.5 shrink-0 text-muted-foreground"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H3a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+							<span class="truncate font-medium text-muted-foreground">
+								{t('zarr.storeAttributes')}
+							</span>
+						</button>
+					{/if}
+					{@render treeNode(hierarchy!.root, 0)}
+				</div>
+			</div>
+		{/snippet}
 
-			<ResizableHandle />
+		{#if isWide.value}
+			<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+				<!-- Left: Tree view -->
+				<ResizablePane defaultSize={40} minSize={20}>
+					{@render zarrTree()}
+				</ResizablePane>
 
-			<!-- Right: Detail panel -->
-			<ResizablePane defaultSize={60} minSize={30}>
-				<div class="flex h-full flex-col">
+				<ResizableHandle />
+
+				<!-- Right: Detail panel -->
+				<ResizablePane defaultSize={60} minSize={30}>
+					<div class="flex h-full flex-col">
+						{@render nodeDetails()}
+					</div>
+				</ResizablePane>
+			</ResizablePaneGroup>
+		{:else}
+			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<!-- Tree pane: fixed height so it doesn't crowd the detail section -->
+				<div class="max-h-64 shrink-0 border-b border-border">
+					{@render zarrTree()}
+				</div>
+				<!-- Detail panel: grows to fill remaining space -->
+				<div class="flex flex-1 flex-col">
 					{@render nodeDetails()}
 				</div>
-			</ResizablePane>
-		</ResizablePaneGroup>
+			</div>
+		{/if}
 	{/if}
 </div>

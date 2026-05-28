@@ -1,4 +1,8 @@
 export const ar: Record<string, string> = {
+	// Common
+	'common.loading': 'جارٍ التحميل...',
+	'common.error': 'خطأ',
+
 	// Sidebar
 	'sidebar.deleteConfirm': 'حذف الاتصال "{name}"؟',
 	'sidebar.browseDetected': 'تصفح الحاوية المكتشفة: {name}',

@@ -17,6 +17,8 @@ import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { detectRTL, processDirection, renderMarkdown } from '$lib/utils/markdown';
 import { getQueryEngine } from '../../query/index.js';
+import ViewerHeader from './ViewerHeader.svelte';
+import ViewerStatus from './ViewerStatus.svelte';
 
 let mermaidInitialized = false;
 const CAIRO_FONT = '"Cairo", sans-serif';
@@ -204,24 +206,22 @@ async function saveMarkdown(markdown: string) {
 		editMode = false;
 		await loadMarkdown();
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 </script>
 
 <div class="flex h-full flex-col">
-	<div
-		class="flex items-center gap-1 border-b border-zinc-200 px-2 py-1.5 sm:gap-2 sm:px-4 dark:border-zinc-800"
-	>
-		<span class="truncate max-w-[120px] text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">{tab.name}</span>
-		<Badge variant="secondary">{t('markdown.badge')}</Badge>
-		{#if hasSqlBlocks}
-			<Badge variant="outline" class="border-blue-200 text-blue-600 dark:border-blue-800 dark:text-blue-300">
-				{t('markdown.evidence')}
-			</Badge>
-		{/if}
-
-		<div class="ms-auto">
+	<ViewerHeader {tab}>
+		{#snippet badge()}
+			<Badge variant="secondary">{t('markdown.badge')}</Badge>
+			{#if hasSqlBlocks}
+				<Badge variant="outline" class="border-blue-200 text-blue-600 dark:border-blue-800 dark:text-blue-300">
+					{t('markdown.evidence')}
+				</Badge>
+			{/if}
+		{/snippet}
+		{#snippet actions()}
 			<Button
 				variant="ghost"
 				size="sm"
@@ -230,18 +230,14 @@ async function saveMarkdown(markdown: string) {
 			>
 				{editMode ? t('markdown.view') : t('markdown.edit')}
 			</Button>
-		</div>
-	</div>
+		{/snippet}
+	</ViewerHeader>
 
 	<div class="flex-1 overflow-auto">
 		{#if loading}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-zinc-400">Loading...</p>
-			</div>
+			<ViewerStatus kind="loading" />
 		{:else if error}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-sm text-red-400">{error}</p>
-			</div>
+			<ViewerStatus kind="error" message={error} />
 		{:else if editMode}
 			{#await import('$lib/components/editor/MilkdownEditor.svelte') then MilkdownEditor}
 				<MilkdownEditor.default

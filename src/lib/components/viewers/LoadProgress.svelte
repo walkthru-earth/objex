@@ -29,7 +29,7 @@ let {
 	<!-- Active step -->
 	<div class="flex items-center gap-2 text-center">
 		<Loader2Icon class="size-4 shrink-0 animate-spin text-primary" />
-		<p class="text-sm text-zinc-500 dark:text-zinc-400">{stage || t('table.loading')}</p>
+		<p class="text-sm text-muted-foreground">{stage || t('table.loading')}</p>
 	</div>
 
 	<!-- Discovered metadata -->
@@ -42,17 +42,17 @@ let {
 					<div class="flex items-start gap-1.5 sm:gap-2">
 						<CheckCircleIcon class="mt-0.5 size-3 shrink-0 text-green-500/80" />
 						<span
-							class="w-14 shrink-0 text-[11px] leading-4 text-zinc-400 sm:w-[4.5rem] sm:text-xs dark:text-zinc-500"
+							class="w-14 shrink-0 text-[11px] leading-4 text-muted-foreground sm:w-[4.5rem] sm:text-xs"
 						>
 							{entry.label}
 						</span>
 						<div class="min-w-0 flex-1">
-							<span class="break-all text-[11px] font-medium leading-4 text-zinc-600 sm:text-xs dark:text-zinc-300">
+							<span class="break-all text-[11px] font-medium leading-4 text-foreground sm:text-xs">
 								{entry.value}
 							</span>
 							{#if entry.detail}
 								<p
-									class="mt-0.5 truncate font-mono text-[10px] leading-tight text-zinc-400 dark:text-zinc-500"
+									class="mt-0.5 truncate font-mono text-[10px] leading-tight text-muted-foreground"
 								>
 									{entry.detail}
 								</p>
@@ -68,7 +68,7 @@ let {
 	{#if onCancel}
 		<div class="flex flex-col items-center gap-2">
 			<button
-				class="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+				class="flex items-center gap-1 rounded border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
 				onclick={onCancel}
 			>
 				<XCircleIcon class="size-3" />
@@ -83,7 +83,7 @@ let {
 						<XCircleIcon class="size-3" />
 						{t('table.forceStop')}
 					</button>
-					<p class="max-w-xs text-center text-[10px] text-zinc-400 dark:text-zinc-500">
+					<p class="max-w-xs text-center text-[10px] text-muted-foreground">
 						{t('table.forceStopWarning')}
 					</p>
 				</div>

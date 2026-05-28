@@ -39,7 +39,7 @@ function handleClickOutside(e: MouseEvent) {
 
 <svelte:window onclick={() => { if (exportOpen) exportOpen = false; }} />
 
-<div class="flex h-7 items-center justify-between border-t border-zinc-200 bg-zinc-50 px-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+<div class="flex h-7 items-center justify-between border-t border-border bg-muted px-3 text-xs text-muted-foreground">
 	<!-- Left side -->
 	<div>
 		{#if loading}
@@ -47,7 +47,7 @@ function handleClickOutside(e: MouseEvent) {
 		{:else if rowCount > 0}
 			<span>{rowCount.toLocaleString()} {t('statusBar.rowsLabel')}</span>
 			{#if executionTimeMs > 0}
-				<span class="text-zinc-400 dark:text-zinc-500"> {t('statusBar.inTime', { time: executionTimeMs })}</span>
+				<span class="text-muted-foreground"> {t('statusBar.inTime', { time: executionTimeMs })}</span>
 			{/if}
 		{:else}
 			<span>{t('statusBar.noResults')}</span>
@@ -57,7 +57,7 @@ function handleClickOutside(e: MouseEvent) {
 	<!-- Right side: export dropdown -->
 	<div class="relative">
 		<button
-			class="flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+			class="flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent"
 			onclick={(e) => { e.stopPropagation(); exportOpen = !exportOpen; }}
 			disabled={rows.length === 0}
 			class:opacity-40={rows.length === 0}
@@ -69,18 +69,18 @@ function handleClickOutside(e: MouseEvent) {
 
 		{#if exportOpen}
 			<div
-				class="absolute bottom-full end-0 mb-1 w-32 rounded border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+				class="absolute bottom-full end-0 mb-1 w-32 rounded border border-border bg-background py-1 shadow-lg"
 				role="menu"
 			>
 				<button
-					class="w-full px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
+					class="w-full px-3 py-1.5 text-start text-xs hover:bg-muted"
 					onclick={(e) => { e.stopPropagation(); handleExportCsv(); }}
 					role="menuitem"
 				>
 					{t('statusBar.exportCsv')}
 				</button>
 				<button
-					class="w-full px-3 py-1.5 text-start text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700"
+					class="w-full px-3 py-1.5 text-start text-xs hover:bg-muted"
 					onclick={(e) => { e.stopPropagation(); handleExportJson(); }}
 					role="menuitem"
 				>

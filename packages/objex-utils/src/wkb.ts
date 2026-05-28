@@ -326,8 +326,9 @@ function looksLikeWKB(value: unknown): boolean {
 	// Strip EWKB flags
 	typeInt = (typeInt & 0x0000ffff) % 1000;
 
-	// Valid base geometry types are 1–7
-	return typeInt >= 1 && typeInt <= 7;
+	// Valid renderable base geometry types are 1-6 (7 = GeometryCollection,
+	// which parseWKB returns as Unknown/empty - never select it as the geo column)
+	return typeInt >= 1 && typeInt <= 6;
 }
 
 /**
@@ -341,17 +342,31 @@ export function findGeoColumnFromRows(
 ): string | null {
 	if (rows.length === 0) return null;
 
-	const sample = rows[0];
+	const MAX_SCAN = 50;
+	const scan = rows.slice(0, MAX_SCAN);
+
+	const firstNonNull = (key: string): unknown => {
+		for (const row of scan) {
+			const v = row[key];
+			if (v !== null && v !== undefined) return v;
+		}
+		return undefined;
+	};
 
 	// First pass: check binary-typed columns
 	for (const f of schema) {
 		const t = f.type.toLowerCase();
 		const isBinary = t.includes('blob') || t.includes('binary') || t.includes('bytea');
-		if (isBinary && looksLikeWKB(sample[f.name])) return f.name;
+		if (isBinary && looksLikeWKB(firstNonNull(f.name))) return f.name;
 	}
 
 	// Second pass: check any column that holds binary-like data or WKT strings
-	for (const [key, value] of Object.entries(sample)) {
+	const keys = new Set<string>();
+	for (const row of scan) for (const k of Object.keys(row)) keys.add(k);
+
+	for (const key of keys) {
+		const value = firstNonNull(key);
+		if (value === undefined) continue;
 		if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
 			if (looksLikeWKB(value)) return key;
 		}

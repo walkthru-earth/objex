@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Archive, ChevronRight, Download, File, Folder, Loader } from '@lucide/svelte';
-import { formatFileSize } from '@walkthru-earth/objex-utils';
+import { formatFileSize, handleLoadError, isAbortError } from '@walkthru-earth/objex-utils';
 import type { Entry } from '@zip.js/zip.js';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -30,8 +30,11 @@ import {
 	streamZipEntriesFromUrl
 } from '$lib/utils/archive';
 import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
+import { useIsWide } from '../../utils/media-query.svelte.js';
 
 let { tab }: { tab: Tab } = $props();
+
+const isWide = useIsWide();
 
 const MAX_ITEMS = 500;
 
@@ -165,8 +168,8 @@ async function loadArchive() {
 			error = t('archive.unsupported');
 		}
 	} catch (err) {
-		if ((err as DOMException)?.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 	} finally {
 		scanning = false;
 		if (initializing) initializing = false;
@@ -187,7 +190,7 @@ async function loadZip() {
 			loadMethod = 'range';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			entryList = [];
 			scanCount = 0;
 			zipEntryMap.clear();
@@ -218,7 +221,7 @@ async function loadTar() {
 			loadMethod = 'range';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			entryList = [];
 			scanCount = 0;
 			remoteUrl = '';
@@ -260,7 +263,7 @@ async function loadTarGz() {
 			loadMethod = 'full';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			// Fall through to full-buffer approach
 			entryList = [];
 			scanCount = 0;
@@ -312,7 +315,7 @@ const totalFiles = $derived(contents.files.length);
 	{#if selectedFile}
 		{@const fileName = selectedFile.filename.split('/').pop()}
 		<div
-			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+			class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 		>
 			{t('archive.fileDetails')}
 		</div>
@@ -367,10 +370,10 @@ const totalFiles = $derived(contents.files.length);
 
 <div class="flex h-full flex-col">
 	<!-- Header bar -->
-	<div class="shrink-0 border-b border-zinc-200 px-3 py-2 sm:px-4 dark:border-zinc-800">
+	<div class="shrink-0 border-b border-border px-3 py-2 sm:px-4">
 		<div class="flex items-center gap-1.5 sm:gap-2">
 			<Archive class="h-4 w-4 shrink-0 text-amber-500" />
-			<span class="max-w-[140px] truncate text-sm font-medium text-zinc-700 sm:max-w-none dark:text-zinc-300">
+			<span class="max-w-[140px] truncate text-sm font-medium text-foreground sm:max-w-none">
 				{tab.name}
 			</span>
 			<Badge variant="outline" class="text-[10px]">{formatLabel}</Badge>
@@ -434,60 +437,118 @@ const totalFiles = $derived(contents.files.length);
 	<!-- Content area -->
 	{#if initializing}
 		<div class="flex flex-1 items-center justify-center gap-2">
-			<Loader class="h-5 w-5 animate-spin text-zinc-400" />
-			<span class="text-sm text-zinc-400">{t('archive.loading')}</span>
+			<Loader class="h-5 w-5 animate-spin text-muted-foreground" />
+			<span class="text-sm text-muted-foreground">{t('archive.loading')}</span>
 		</div>
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center px-4">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<!-- Column browser (resizable) -->
-		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
-			<!-- Column 1: Current path entries -->
-			<ResizablePane defaultSize={35} minSize={20}>
-				<div class="flex h-full flex-col">
+		{#snippet archiveContents()}
+			<div class="flex h-full flex-col">
+				<div
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+				>
+					{t('archive.contents')}
+					<span class="ms-1 normal-case tracking-normal">({(totalDirs + totalFiles).toLocaleString()})</span>
+				</div>
+				<div class="flex-1 overflow-auto">
+					{#if contents.directories.length === 0 && contents.files.length === 0 && !scanning}
+						<div class="p-4 text-center text-xs text-muted-foreground">
+							{t('archive.empty')}
+						</div>
+					{/if}
+
+					{#each contents.directories as dir, i}
+						{#if i < MAX_ITEMS}
+							{@const dirName = dir.split('/').pop()}
+							<button
+								class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+								class:bg-muted={selectedDir === dir}
+								onclick={() => selectDirectory(dir)}
+								ondblclick={() => navigateIntoDir(dir)}
+							>
+								<Folder class="size-3.5 shrink-0 text-amber-500/70" />
+								<span class="truncate font-medium">{dirName}</span>
+								<ChevronRight class="ms-auto size-3 shrink-0 text-muted-foreground" />
+							</button>
+						{:else if i === MAX_ITEMS}
+							<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
+								+{contents.directories.length - MAX_ITEMS} more
+							</div>
+						{/if}
+					{/each}
+
+					{#each contents.files as file, i}
+						{#if i < MAX_ITEMS}
+							{@const fileName = file.filename.split('/').pop()}
+							<button
+								class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+								class:bg-muted={selectedFile?.filename === file.filename}
+								onclick={() => selectFile(file)}
+							>
+								<File class="size-3.5 shrink-0 text-muted-foreground/70" />
+								<span class="truncate">{fileName}</span>
+								<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
+									{formatFileSize(file.uncompressedSize)}
+								</span>
+							</button>
+						{:else if i === MAX_ITEMS}
+							<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
+								+{contents.files.length - MAX_ITEMS} more
+							</div>
+						{/if}
+					{/each}
+
+					{#if scanning}
+						<div class="flex items-center gap-2 px-3 py-2 text-[10px] text-muted-foreground">
+							<Loader class="h-3 w-3 animate-spin" />
+							<span>{t('archive.scanningProgress', { count: scanCount.toLocaleString() })}</span>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/snippet}
+
+		{#snippet archiveSelectedDir()}
+			<div class="flex h-full flex-col">
+				{#if selectedDir}
+					{@const dirName = selectedDir.split('/').pop()}
 					<div
-						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+						class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 					>
-						{t('archive.contents')}
-						<span class="ms-1 normal-case tracking-normal">({(totalDirs + totalFiles).toLocaleString()})</span>
+						{dirName}
+						<span class="ms-1 normal-case tracking-normal">({(selectedDirContents.directories.length + selectedDirContents.files.length).toLocaleString()})</span>
 					</div>
 					<div class="flex-1 overflow-auto">
-						{#if contents.directories.length === 0 && contents.files.length === 0 && !scanning}
+						{#if selectedDirContents.directories.length === 0 && selectedDirContents.files.length === 0}
 							<div class="p-4 text-center text-xs text-muted-foreground">
 								{t('archive.empty')}
 							</div>
 						{/if}
 
-						{#each contents.directories as dir, i}
+						{#each selectedDirContents.directories as subDir, i}
 							{#if i < MAX_ITEMS}
-								{@const dirName = dir.split('/').pop()}
+								{@const subDirName = subDir.split('/').pop()}
 								<button
-									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-zinc-100={selectedDir === dir}
-									class:dark:bg-zinc-800={selectedDir === dir}
-									onclick={() => selectDirectory(dir)}
-									ondblclick={() => navigateIntoDir(dir)}
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+									onclick={() => navigateIntoDir(subDir)}
 								>
 									<Folder class="size-3.5 shrink-0 text-amber-500/70" />
-									<span class="truncate font-medium">{dirName}</span>
+									<span class="truncate font-medium">{subDirName}</span>
 									<ChevronRight class="ms-auto size-3 shrink-0 text-muted-foreground" />
 								</button>
-							{:else if i === MAX_ITEMS}
-								<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
-									+{contents.directories.length - MAX_ITEMS} more
-								</div>
 							{/if}
 						{/each}
 
-						{#each contents.files as file, i}
+						{#each selectedDirContents.files as file, i}
 							{#if i < MAX_ITEMS}
 								{@const fileName = file.filename.split('/').pop()}
 								<button
-									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-zinc-100={selectedFile?.filename === file.filename}
-									class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
+									class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+									class:bg-muted={selectedFile?.filename === file.filename}
 									onclick={() => selectFile(file)}
 								>
 									<File class="size-3.5 shrink-0 text-muted-foreground/70" />
@@ -496,91 +557,57 @@ const totalFiles = $derived(contents.files.length);
 										{formatFileSize(file.uncompressedSize)}
 									</span>
 								</button>
-							{:else if i === MAX_ITEMS}
-								<div class="px-3 py-1.5 text-[10px] text-muted-foreground">
-									+{contents.files.length - MAX_ITEMS} more
-								</div>
 							{/if}
 						{/each}
-
-						{#if scanning}
-							<div class="flex items-center gap-2 px-3 py-2 text-[10px] text-muted-foreground">
-								<Loader class="h-3 w-3 animate-spin" />
-								<span>{t('archive.scanningProgress', { count: scanCount.toLocaleString() })}</span>
-							</div>
-						{/if}
 					</div>
+				{:else}
+					<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+						{t('archive.selectFolder')}
+					</div>
+				{/if}
+			</div>
+		{/snippet}
+
+		{#if isWide.value}
+			<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+				<!-- Column 1: Current path entries -->
+				<ResizablePane defaultSize={35} minSize={20}>
+					{@render archiveContents()}
+				</ResizablePane>
+
+				<ResizableHandle />
+
+				<!-- Column 2: Selected directory contents -->
+				<ResizablePane defaultSize={35} minSize={20}>
+					{@render archiveSelectedDir()}
+				</ResizablePane>
+
+				<ResizableHandle />
+
+				<!-- Column 3: File details -->
+				<ResizablePane defaultSize={30} minSize={15}>
+					<div class="flex h-full flex-col">
+						{@render fileDetails()}
+					</div>
+				</ResizablePane>
+			</ResizablePaneGroup>
+		{:else}
+			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<!-- Contents: fixed height list -->
+				<div class="max-h-52 shrink-0 border-b border-border">
+					{@render archiveContents()}
 				</div>
-			</ResizablePane>
-
-			<ResizableHandle />
-
-			<!-- Column 2: Selected directory contents -->
-			<ResizablePane defaultSize={35} minSize={20}>
-				<div class="flex h-full flex-col">
-					{#if selectedDir}
-						{@const dirName = selectedDir.split('/').pop()}
-						<div
-							class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
-						>
-							{dirName}
-							<span class="ms-1 normal-case tracking-normal">({(selectedDirContents.directories.length + selectedDirContents.files.length).toLocaleString()})</span>
-						</div>
-						<div class="flex-1 overflow-auto">
-							{#if selectedDirContents.directories.length === 0 && selectedDirContents.files.length === 0}
-								<div class="p-4 text-center text-xs text-muted-foreground">
-									{t('archive.empty')}
-								</div>
-							{/if}
-
-							{#each selectedDirContents.directories as subDir, i}
-								{#if i < MAX_ITEMS}
-									{@const subDirName = subDir.split('/').pop()}
-									<button
-										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-										onclick={() => navigateIntoDir(subDir)}
-									>
-										<Folder class="size-3.5 shrink-0 text-amber-500/70" />
-										<span class="truncate font-medium">{subDirName}</span>
-										<ChevronRight class="ms-auto size-3 shrink-0 text-muted-foreground" />
-									</button>
-								{/if}
-							{/each}
-
-							{#each selectedDirContents.files as file, i}
-								{#if i < MAX_ITEMS}
-									{@const fileName = file.filename.split('/').pop()}
-									<button
-										class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-										class:bg-zinc-100={selectedFile?.filename === file.filename}
-										class:dark:bg-zinc-800={selectedFile?.filename === file.filename}
-										onclick={() => selectFile(file)}
-									>
-										<File class="size-3.5 shrink-0 text-muted-foreground/70" />
-										<span class="truncate">{fileName}</span>
-										<span class="ms-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
-											{formatFileSize(file.uncompressedSize)}
-										</span>
-									</button>
-								{/if}
-							{/each}
-						</div>
-					{:else}
-						<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-							{t('archive.selectFolder')}
-						</div>
-					{/if}
-				</div>
-			</ResizablePane>
-
-			<ResizableHandle />
-
-			<!-- Column 3: File details -->
-			<ResizablePane defaultSize={30} minSize={15}>
-				<div class="flex h-full flex-col">
+				<!-- Selected dir: fixed height list (hidden when empty) -->
+				{#if selectedDir}
+					<div class="max-h-52 shrink-0 border-b border-border">
+						{@render archiveSelectedDir()}
+					</div>
+				{/if}
+				<!-- File details: grows to fill remaining space -->
+				<div class="flex flex-1 flex-col">
 					{@render fileDetails()}
 				</div>
-			</ResizablePane>
-		</ResizablePaneGroup>
+			</div>
+		{/if}
 	{/if}
 </div>

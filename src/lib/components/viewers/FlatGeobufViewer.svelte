@@ -1,5 +1,6 @@
 <script lang="ts">
 import LocateIcon from '@lucide/svelte/icons/locate';
+import { FIRST_FEATURE_FLY_ZOOM, handleLoadError, isAbortError } from '@walkthru-earth/objex-utils';
 import { geojson as fgbGeojson } from 'flatgeobuf';
 import { magicbytes } from 'flatgeobuf/lib/mjs/constants.js';
 import { buildHeader as fgbBuildHeader } from 'flatgeobuf/lib/mjs/generic/featurecollection.js';
@@ -16,6 +17,7 @@ import {
 	buildSelectionLayer,
 	geojsonFillColor,
 	geojsonLineColor,
+	HIGHLIGHT_COLOR,
 	hoverCursor,
 	loadDeckModules
 } from '$lib/utils/deck.js';
@@ -71,6 +73,10 @@ let headerInfo = $state<{
 	hasIndex: boolean;
 } | null>(null);
 
+// NOTE: intentionally broader than the canonical WGS84_CODES in constants.ts.
+// 4267 (NAD27) / 4269 (NAD83) are treated as lon/lat here because FGB files
+// commonly ship NAD-coded data that needs no reprojection for display.
+// Do not narrow to [4326, 4979] without a NAD-coded FGB test file.
 const WGS84_CODES = new Set([4326, 4979, 4267, 4269]);
 const CRS84_NAMES = ['CRS84', 'CRS 84', 'OGC:CRS84'];
 
@@ -190,7 +196,7 @@ function extractFirstCoord(coords: any): [number, number] | null {
 
 function flyToFirstFeature() {
 	if (!mapRef || !firstFeatureCoord) return;
-	mapRef.flyTo({ center: firstFeatureCoord, zoom: 14 });
+	mapRef.flyTo({ center: firstFeatureCoord, zoom: FIRST_FEATURE_FLY_ZOOM });
 }
 
 function cleanup() {
@@ -238,7 +244,6 @@ $effect(() => {
 onDestroy(cleanup);
 
 async function loadFlatGeobuf() {
-	console.log('[FGB]', 'loadFlatGeobuf() start');
 	cleanup();
 
 	loading = true;
@@ -280,13 +285,11 @@ async function loadFlatGeobuf() {
 				storedHeader.crs.org && code
 					? `${storedHeader.crs.org}:${code}`
 					: (storedHeader.crs.name ?? 'unknown');
-			console.log('[FGB]', 'Projected CRS detected:', crsLabel, '→ fetching proj4 definition');
 
 			try {
 				const proj4Def = await fetchProj4Def(code);
 				const converter = proj4(proj4Def, 'EPSG:4326') as any;
 				proj4Forward = (coord) => converter.forward(coord);
-				console.log('[FGB]', 'Reprojection ready:', crsLabel, '→ WGS84');
 
 				// Reproject envelope bounds so fitBounds works
 				if (storedHeader.envelope && storedHeader.envelope.length >= 4) {
@@ -298,7 +301,7 @@ async function loadFlatGeobuf() {
 				}
 			} catch (err) {
 				console.error('[FGB]', 'Failed to set up reprojection:', err);
-				error = `Cannot reproject CRS ${crsLabel} → WGS84: ${err instanceof Error ? err.message : err}`;
+				error = `Cannot reproject CRS ${crsLabel} → WGS84: ${handleLoadError(err) ?? String(err)}`;
 				streaming = false;
 				return;
 			}
@@ -308,11 +311,10 @@ async function loadFlatGeobuf() {
 		await streamFeatures(url, settings.featureLimit);
 	} catch (err) {
 		console.error('[FGB]', 'loadFlatGeobuf error:', err);
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		loading = false;
 	} finally {
-		console.log('[FGB]', 'done, features:', features.length);
 		streaming = false;
 	}
 }
@@ -331,25 +333,10 @@ async function readHeaderWithRangeRequests(url: string): Promise<boolean> {
 	}
 
 	const header = reader.header;
-	console.log('[FGB]', 'header:', {
-		geometryType: header.geometryType,
-		featuresCount: header.featuresCount,
-		indexNodeSize: header.indexNodeSize,
-		envelope: header.envelope ? Array.from(header.envelope) : null,
-		columns: header.columns?.length
-	});
 	populateHeaderInfo(header);
 
 	storedHeader = header;
 	storedFeatureOffset = reader.lengthBeforeFeatures();
-	console.log(
-		'[FGB]',
-		'featureOffset:',
-		storedFeatureOffset,
-		'(index ~',
-		((storedFeatureOffset - 12) / 1024 / 1024).toFixed(1),
-		'MB skipped)'
-	);
 	return true;
 }
 
@@ -367,10 +354,9 @@ async function loadAllFeatures() {
 		await streamFeatures(url);
 	} catch (err) {
 		console.error('[FGB]', 'loadAllFeatures error:', err);
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 	} finally {
-		console.log('[FGB]', 'loadAllFeatures done, features:', features.length);
 		streaming = false;
 	}
 }
@@ -382,7 +368,6 @@ async function loadAllFeatures() {
 async function streamFeatures(url: string, limit?: number) {
 	const ac = new AbortController();
 	abortController = ac;
-	const t0 = performance.now();
 
 	let iter: AsyncGenerator;
 	activeStreamCancel = null;
@@ -398,12 +383,6 @@ async function streamFeatures(url: string, limit?: number) {
 			headers: { Range: `bytes=${storedFeatureOffset}-` },
 			signal: ac.signal
 		});
-		console.log(
-			'[FGB]',
-			'Range fetch:',
-			featureResp.status,
-			featureResp.headers.get('content-range')
-		);
 		if (!featureResp.ok && featureResp.status !== 206)
 			throw new Error(`HTTP ${featureResp.status}: ${featureResp.statusText}`);
 		if (!featureResp.body) throw new Error('No response body');
@@ -475,7 +454,6 @@ async function streamFeatures(url: string, limit?: number) {
 			activeStreamCancel?.();
 			activeStreamCancel = null;
 			ac.abort();
-			console.log('[FGB]', 'force-closed connection after', features.length, 'features');
 		}
 	}
 
@@ -487,14 +465,6 @@ async function streamFeatures(url: string, limit?: number) {
 	featureCount = features.length;
 	updateLayer();
 	if (!flewToFeatures) flyToFeaturesBounds();
-	console.log(
-		'[FGB]',
-		'stream done:',
-		features.length,
-		'features in',
-		(performance.now() - t0).toFixed(0),
-		'ms'
-	);
 
 	if (hitLimit) {
 		hasMore = totalFeatures != null && totalFeatures > features.length;
@@ -601,7 +571,7 @@ function updateLayer() {
 				pointRadiusMinPixels: 4,
 				pointRadiusMaxPixels: 12,
 				autoHighlight: true,
-				highlightColor: [255, 255, 255, 100],
+				highlightColor: HIGHLIGHT_COLOR,
 				onHover: mapRef ? hoverCursor(mapRef) : undefined,
 				onClick: (info: any) => {
 					if (info.object?.properties) {
@@ -638,11 +608,11 @@ function onMapReady(map: maplibregl.Map) {
 <div class="relative flex h-full overflow-hidden">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-zinc-400">{t('map.loadingFgb')}</p>
+			<p class="text-sm text-muted-foreground">{t('map.loadingFgb')}</p>
 		</div>
 	{:else if error && featureCount === 0}
 		<div class="flex flex-1 items-center justify-center">
-			<p class="text-sm text-red-400">{error}</p>
+			<p class="text-sm text-destructive">{error}</p>
 		</div>
 	{:else}
 		<div class="flex-1">

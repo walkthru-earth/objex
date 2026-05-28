@@ -32,29 +32,32 @@ let activeFileInfo = $derived(activeTab ? getFileTypeInfo(activeTab.extension) :
 			{browser.activeConnection.name}
 		</span>
 		{#if displayPath}
-			<span class="text-muted-foreground/50">/</span>
-			<span class="max-w-[200px] truncate" title={displayPath}>{displayPath}</span>
+			<span class="hidden text-muted-foreground/50 sm:inline">/</span>
+			<span class="hidden max-w-[200px] truncate sm:inline" title={displayPath}>{displayPath}</span>
 		{/if}
 		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
 	{:else if displayPath}
-		<FolderIcon class="size-3 shrink-0" />
-		<span class="max-w-[300px] truncate" title={displayPath}>{displayPath}</span>
-		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
+		<FolderIcon class="hidden size-3 shrink-0 sm:block" />
+		<span class="hidden max-w-[300px] truncate sm:inline" title={displayPath}>{displayPath}</span>
+		<Separator orientation="vertical" class="mx-1.5 hidden h-3.5 sm:block" />
 	{/if}
 
-	<!-- Entry count -->
+	<!-- Entry count — hidden on mobile -->
 	{#if displayCount > 0}
-		<FileTextIcon class="size-3 shrink-0" />
-		<span>{displayCount} {displayCount === 1 ? t('statusBar.item') : t('statusBar.items')}</span>
-		<Separator orientation="vertical" class="mx-1.5 h-3.5" />
+		<FileTextIcon class="hidden size-3 shrink-0 sm:block" />
+		<span class="hidden sm:inline"
+			>{displayCount}
+			{displayCount === 1 ? t('statusBar.item') : t('statusBar.items')}</span
+		>
+		<Separator orientation="vertical" class="mx-1.5 hidden h-3.5 sm:block" />
 	{/if}
 
-	<!-- Active file info -->
+	<!-- Active file info: type label hidden on mobile, size kept -->
 	{#if activeTab && activeFileInfo}
-		<InfoIcon class="size-3 shrink-0" />
-		<span>{activeFileInfo.label}</span>
+		<InfoIcon class="hidden size-3 shrink-0 sm:block" />
+		<span class="hidden sm:inline">{activeFileInfo.label}</span>
 		{#if activeTab.size}
-			<span class="text-muted-foreground/50">·</span>
+			<span class="hidden text-muted-foreground/50 sm:inline">·</span>
 			<span>{formatFileSize(activeTab.size)}</span>
 		{/if}
 		<Separator orientation="vertical" class="mx-1.5 h-3.5" />

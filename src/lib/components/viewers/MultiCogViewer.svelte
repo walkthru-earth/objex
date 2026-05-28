@@ -10,8 +10,11 @@ import {
 	compositeFromUrl,
 	compositeToUrl,
 	extractCogAssets,
+	handleLoadError,
+	isAbortError,
 	isSingleAssetComposite,
 	isStacItem,
+	LruCache,
 	PRESETS,
 	pickNaturalColorComposite,
 	presetMatchesComposite,
@@ -91,7 +94,7 @@ let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let hasFittedOnce = false;
-let presignCache = new Map<string, Promise<string>>();
+const presignCache = new LruCache<string, Promise<string>>({ max: 64 });
 
 // Pixel inspection: same UX as CogViewer / StacMosaicViewer. Click → read one
 // pixel from each active composite channel's GeoTIFF and show channel/asset/value.
@@ -114,7 +117,7 @@ let detachInspector: (() => void) | null = null;
 // custom getTileData/renderTile pair that honors per-channel bandIndex picks.
 // Without this, the single-asset multi-band path (e.g. Sentinel-2 `visual`,
 // NAIP `image`) silently falls back to bands 0/1/2 regardless of the picker.
-let geotiffCache = new Map<string, Promise<GeoTIFF>>();
+const geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: 64 });
 let loadGen = 0;
 let layerVersion = 0;
 let rebuildTimer: number | null = null;
@@ -160,8 +163,8 @@ function resetViewer(): void {
 	overlayRef = null;
 	assets = [];
 	composite = null;
-	presignCache = new Map();
-	geotiffCache = new Map();
+	presignCache.clear();
+	geotiffCache.clear();
 	loading = true;
 	error = null;
 	bounds = undefined;
@@ -395,9 +398,9 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 						if (gen !== loadGen || signal.aborted) return;
 						if (!result.ok) smokeWarning = result.reason;
 					} catch (err) {
-						if (err instanceof DOMException && err.name === 'AbortError') return;
+						if (isAbortError(err)) return;
 						if (gen !== loadGen) return;
-						smokeWarning = err instanceof Error ? err.message : String(err);
+						smokeWarning = handleLoadError(err);
 					}
 				})();
 			}
@@ -421,8 +424,8 @@ async function loadItem(map: maplibregl.Map): Promise<void> {
 	} catch (err) {
 		if (gen !== loadGen) return;
 		if (signal.aborted) return;
-		if (err instanceof DOMException && err.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 		loading = false;
 	}
 }

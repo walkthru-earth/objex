@@ -5,6 +5,7 @@
  * Provider-aware native scheme lookup.
  */
 
+import { DEFAULT_AWS_REGION } from '../../../src/lib/constants.js';
 import {
 	buildProviderBaseUrl,
 	PROVIDERS,
@@ -54,7 +55,7 @@ export function resolveCloudUrl(url: string): string {
 		const [, bucket, key] = s3Match;
 		// Detect region from bucket name (e.g. "us-west-2.opendata.source.coop")
 		const regionMatch = bucket.match(AWS_REGION_RE);
-		const region = regionMatch ? regionMatch[0] : 'us-east-1';
+		const region = regionMatch ? regionMatch[0] : DEFAULT_AWS_REGION;
 		const base = buildProviderBaseUrl('s3', '', bucket, region);
 		return key ? `${base}/${key}` : base;
 	}

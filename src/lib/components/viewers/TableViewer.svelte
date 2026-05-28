@@ -7,6 +7,8 @@ import {
 	extractGeometryTypes,
 	findGeoColumn,
 	findGeoColumnFromRows,
+	handleLoadError,
+	isWgs84,
 	parseWKB,
 	readParquetMetadata,
 	toBinary,
@@ -166,6 +168,9 @@ function buildDefaultSql(
 }
 
 function extractMapData(queryRows: Record<string, any>[]): MapQueryResult | null {
+	// The map attribute table is only consumed by the map view. Skip the
+	// O(rows x cols) walk entirely when the table/info/stac view is showing.
+	if (viewMode !== 'map') return null;
 	if (!geoCol || queryRows.length === 0 || !columns.includes('__wkb')) return null;
 
 	const wkbArrays: Uint8Array[] = [];
@@ -243,6 +248,14 @@ $effect(() => {
 			console.warn('[TableViewer] $effect re-fired but tab unchanged, skipping loadTable', tabId);
 		}
 	});
+});
+
+// When the user switches into map view and mapData is null (because extraction was
+// skipped by the viewMode gate while in table/info/stac view), compute it now.
+$effect(() => {
+	if (viewMode === 'map' && mapData === null && rows.length > 0) {
+		mapData = extractMapData(rows);
+	}
 });
 
 function cancelLoad() {
@@ -502,11 +515,7 @@ async function loadTable() {
 					const crsMatch = duckGeoField.type.match(/^GEOMETRY\('([^']+)'\)/i);
 					if (crsMatch) {
 						const crsVal = crsMatch[1];
-						const isWgs84 =
-							crsVal === 'EPSG:4326' ||
-							crsVal === 'OGC:CRS84' ||
-							(crsVal.startsWith('EPSG:') && [4326, 4979].includes(Number(crsVal.split(':')[1])));
-						sourceCrs = isWgs84 ? null : crsVal;
+						sourceCrs = isWgs84(crsVal) ? null : crsVal;
 						needsDuckDbCrs = false;
 					} else if (typeStr.startsWith('GEOMETRY')) {
 						// GEOMETRY without CRS param — still need CRS from metadata
@@ -720,7 +729,7 @@ async function loadTable() {
 	} catch (err) {
 		if (thisGen !== loadGeneration) return;
 		console.error('[TableViewer] Error:', err);
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 		loadStage = '';
 	}
@@ -763,7 +772,7 @@ async function executeQuery(sql: string) {
 			error = t('table.queryCancelled');
 			return null;
 		}
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		return null;
 	}
 }
@@ -809,7 +818,7 @@ async function runCustomSql() {
 		});
 	} catch (err) {
 		executionTimeMs = Math.round(performance.now() - start);
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 
 		queryHistory.add({
 			sql: customSql,
@@ -930,7 +939,7 @@ function setStacView() {
 
 	{#if viewMode === 'table'}
 		<!-- SQL Query Bar — hidden during schema/CRS detection, shown once query starts running -->
-		<div class="border-b border-zinc-200 px-2 py-1.5 sm:px-4 dark:border-zinc-800" class:hidden={loading && loadStage !== t('table.runningQuery')}>
+		<div class="border-b border-border px-2 py-1.5 sm:px-4" class:hidden={loading && loadStage !== t('table.runningQuery')}>
 			<div class="flex items-start gap-1.5 sm:gap-2">
 				<div class="min-w-0 flex-1">
 					<CodeMirrorEditor
@@ -950,7 +959,7 @@ function setStacView() {
 						{queryRunning ? t('table.running') : t('table.run')}
 					</button>
 					<button
-						class="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-100 sm:px-3 dark:hover:bg-zinc-800"
+						class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted sm:px-3"
 						onclick={handleFormatSql}
 					>
 						{t('table.format')}
@@ -963,9 +972,9 @@ function setStacView() {
 			<div
 				class="border-b border-red-200 bg-red-50 px-4 py-2 dark:border-red-800 dark:bg-red-950"
 			>
-				<p class="text-xs text-red-600 dark:text-red-400">{error}</p>
+				<p class="text-xs text-destructive">{error}</p>
 				{#if tab.source === 'remote'}
-					<p class="mt-1 text-[10px] text-zinc-400 break-all">{buildStorageUrl(tab)}</p>
+					<p class="mt-1 text-[10px] text-muted-foreground break-all">{buildStorageUrl(tab)}</p>
 				{/if}
 			</div>
 		{/if}
@@ -985,7 +994,7 @@ function setStacView() {
 					<div
 						class="max-w-lg rounded-lg border border-red-300 bg-red-50 px-6 py-4 text-center dark:border-red-800 dark:bg-red-950"
 					>
-						<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
+						<p class="text-sm text-destructive">{error}</p>
 					</div>
 				</div>
 			{:else}
