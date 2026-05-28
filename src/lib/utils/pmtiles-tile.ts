@@ -50,12 +50,12 @@ export async function decodeMvtTile(
 	const rawSize = bytes.length;
 
 	// Lazy-load @mapbox/vector-tile + pbf (only when inspector is opened)
-	const [{ VectorTile }, { default: Pbf }] = await Promise.all([
+	const [{ VectorTile }, { PbfReader }] = await Promise.all([
 		import('@mapbox/vector-tile'),
 		import('pbf')
 	]);
 
-	const tile = new VectorTile(new Pbf(bytes));
+	const tile = new VectorTile(new PbfReader(bytes));
 	const layers: DecodedLayer[] = [];
 
 	for (const [name, vtLayer] of Object.entries(tile.layers)) {

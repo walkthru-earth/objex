@@ -19,5 +19,4 @@ overrides:
   'picomatch@4': ^4.0.4
 
 patchedDependencies:
-  '@carbonplan/zarr-layer@0.4.3': patches/@carbonplan__zarr-layer@0.4.3.patch
   '@developmentseed/deck.gl-geotiff@0.7.0': patches/@developmentseed__deck.gl-geotiff@0.7.0.patch
