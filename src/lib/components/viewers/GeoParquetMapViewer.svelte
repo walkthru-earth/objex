@@ -5,6 +5,7 @@ import {
 	FIRST_FEATURE_FLY_ZOOM,
 	type GeoArrowGeomType,
 	type GeoArrowResult,
+	handleLoadError,
 	parseWKB
 } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
@@ -174,7 +175,7 @@ async function loadGeoData() {
 		loading = false;
 	} catch (err) {
 		if (gen !== loadGen) return;
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
