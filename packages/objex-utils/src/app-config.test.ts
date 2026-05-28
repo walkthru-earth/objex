@@ -129,7 +129,9 @@ describe('resolveBasemap', () => {
 	const osm = { id: 'osm', label: 'OSM', type: 'raster' as const, url: 'o' };
 
 	it('returns undefined when no basemaps are configured', () => {
-		expect(resolveBasemap(DEFAULT_APP_CONFIG, 'light', undefined)).toBeUndefined();
+		expect(
+			resolveBasemap(cfgWith({ basemaps: [], defaultBasemap: {} }), 'light', undefined)
+		).toBeUndefined();
 	});
 
 	it('honours an explicit user pick regardless of theme', () => {
@@ -166,5 +168,12 @@ describe('resolveBasemap', () => {
 	it('falls back to the first basemap when nothing matches the variant', () => {
 		const cfg = cfgWith({ basemaps: [osm], defaultBasemap: {} });
 		expect(resolveBasemap(cfg, 'light', undefined)).toEqual(osm);
+	});
+});
+
+describe('DEFAULT_APP_CONFIG', () => {
+	it('ships CartoDN basemap defaults', () => {
+		expect(DEFAULT_APP_CONFIG.basemaps.map((b) => b.id)).toEqual(['positron', 'dark-matter']);
+		expect(DEFAULT_APP_CONFIG.defaultBasemap).toEqual({ light: 'positron', dark: 'dark-matter' });
 	});
 });

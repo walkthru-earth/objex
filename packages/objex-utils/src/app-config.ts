@@ -46,8 +46,23 @@ export interface AppConfig {
 export const DEFAULT_APP_CONFIG: AppConfig = {
 	defaults: { theme: 'system', locale: 'en', featureLimit: 1000, mosaicItemLimit: 2000 },
 	ui: { showConnectionRail: true, showFileTree: true, showSettings: true },
-	basemaps: [],
-	defaultBasemap: {},
+	basemaps: [
+		{
+			id: 'positron',
+			label: 'Positron',
+			type: 'vector',
+			url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+			variant: 'light'
+		},
+		{
+			id: 'dark-matter',
+			label: 'Dark Matter',
+			type: 'vector',
+			url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+			variant: 'dark'
+		}
+	],
+	defaultBasemap: { light: 'positron', dark: 'dark-matter' },
 	connections: []
 };
 
