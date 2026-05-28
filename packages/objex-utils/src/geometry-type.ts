@@ -28,7 +28,19 @@ export interface GeometryTypeInfo {
 	nonWgs84Crs: string | null;
 }
 
-const GEOMETRY_PREFIX = /^GEOMETRY(\s*\(\s*'?([^')]+)'?\s*\))?/i;
+// Inner content is a single `[^)]*` class terminated by the literal `)`, with
+// no overlapping quantifiers, so matching stays linear (avoids js/polynomial-redos).
+// Quotes and surrounding whitespace are stripped in code below.
+const GEOMETRY_PREFIX = /^GEOMETRY(?:\s*\(([^)]*)\))?/i;
+
+/** Trim a captured CRS parameter and drop a single pair of surrounding quotes. */
+function stripCrsQuotes(inner: string): string | null {
+	let crs = inner.trim();
+	if (crs.length >= 2 && crs.startsWith("'") && crs.endsWith("'")) {
+		crs = crs.slice(1, -1).trim();
+	}
+	return crs || null;
+}
 
 /**
  * Parse a DuckDB type string and report whether it is a GEOMETRY type, and
@@ -38,7 +50,7 @@ export function parseGeometryTypeCrs(typeStr: string | null | undefined): Geomet
 	if (!typeStr) return { isGeometry: false, hasCrs: false, rawCrs: null, nonWgs84Crs: null };
 	const match = typeStr.match(GEOMETRY_PREFIX);
 	if (!match) return { isGeometry: false, hasCrs: false, rawCrs: null, nonWgs84Crs: null };
-	const rawCrs = match[2]?.trim() ?? null;
+	const rawCrs = match[1] != null ? stripCrsQuotes(match[1]) : null;
 	if (!rawCrs) return { isGeometry: true, hasCrs: false, rawCrs: null, nonWgs84Crs: null };
 	return {
 		isGeometry: true,
