@@ -154,15 +154,15 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
 	},
 
 	minio: {
-		label: 'MinIO',
-		description: 'Self-hosted MinIO or S3-compatible',
+		label: 'MinIO / RustFS / Custom',
+		description: 'MinIO, RustFS, or any custom S3-compatible endpoint',
 		authMethod: 'sigv4',
 		needsRegion: false,
 		needsEndpoint: true,
 		defaultRegion: 'us-east-1',
 		endpointTemplate: null,
 		regions: [],
-		endpointPlaceholder: 'https://minio.example.com or http://localhost:9000',
+		endpointPlaceholder: 'https://s3.example.com or http://localhost:9000',
 		schemes: []
 	},
 
@@ -389,7 +389,7 @@ export const CORS_HELP: Record<ProviderId, CorsHelp> = {
 	minio: {
 		defaultEnabled: true,
 		docsUrl: 'https://docs.min.io/enterprise/aistor-object-store/reference/cli/mc-cors/',
-		note: 'MinIO allows all origins by default. For custom rules, use mc cors set.'
+		note: 'MinIO allows all origins by default (for custom rules use mc cors set). For RustFS or any other custom S3 service, set a CORS policy on the server that allows this origin.'
 	},
 	storj: {
 		defaultEnabled: true,
@@ -497,7 +497,7 @@ export const READ_ONLY_HELP: Partial<Record<ProviderId, ReadOnlyHelp>> = {
 		]
 	},
 	minio: {
-		note: 'Create a read-only policy with mc admin policy, or use the built-in readonly canned policy.',
+		note: 'For MinIO, create a read-only policy with mc admin policy or use the built-in readonly canned policy. For RustFS or any other custom S3 service, attach a read-only bucket policy on the server.',
 		docsUrl: 'https://docs.min.io/enterprise/aistor-object-store/administration/iam/access/'
 	},
 	digitalocean: {

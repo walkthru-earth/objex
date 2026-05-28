@@ -1,5 +1,11 @@
 <script lang="ts">
 import LocateIcon from '@lucide/svelte/icons/locate';
+import {
+	buildGeoArrowTables,
+	type GeoArrowGeomType,
+	type GeoArrowResult,
+	parseWKB
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -14,12 +20,6 @@ import {
 	hoverCursor,
 	loadGeoArrowModules
 } from '$lib/utils/deck.js';
-import {
-	buildGeoArrowTables,
-	type GeoArrowGeomType,
-	type GeoArrowResult
-} from '$lib/utils/geoarrow.js';
-import { parseWKB } from '$lib/utils/wkb.js';
 import LoadProgress, { type ProgressEntry } from './LoadProgress.svelte';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';

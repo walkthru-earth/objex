@@ -11,6 +11,7 @@ graph LR
     TABS[tabs.svelte.ts] --> TR[tab-resources.svelte.ts]
     FILES[files.svelte.ts] --> CONN
     BR[browser.svelte.ts] --> FILES
+    CFG2[config.svelte.ts] --> SET
     SET[settings.svelte.ts]
     QH[query-history.svelte.ts]
     SL[safelock.svelte.ts]
@@ -28,7 +29,8 @@ Stores use shared utilities from `../utils/`:
 | `tab-resources.svelte.ts` | `tabResources` | CogViewer, TableViewer, FlatGeobufViewer, ArchiveViewer, ModelViewer, GeoParquetMapViewer, DatabaseViewer, MediaViewer, PdfViewer, RawViewer, MarkdownViewer, ZarrMapViewer, NotebookViewer, MapViewer, CodeViewer, ImageViewer, PmtilesViewer |
 | `files.svelte.ts` | `files` | StatusBar |
 | `browser.svelte.ts` | `browser` | StatusBar, Sidebar, FileTreeSidebar, +page.svelte |
-| `settings.svelte.ts` | `settings` (theme, locale, featureLimit, mosaicItemLimit) | LocaleToggle, ThemeToggle, scroll-area, TableViewer, FlatGeobufViewer, GeoParquetMapViewer, MapContainer, CodeMirrorEditor, StacMosaicViewer (mosaicItemLimit), +layout.svelte |
+| `config.svelte.ts` | `appConfig` (`.value`, `.status`), `loadConfig(basePath)`, `ConfigStatus` | +layout.ts, settings.svelte.ts, Sidebar, SettingsSheet, +page.svelte |
+| `settings.svelte.ts` | `settings` (theme, resolved, locale, featureLimit, mosaicItemLimit, showConnectionRail, showFileTree, railLockedByParam, treeLockedByParam, basemapId, setters incl. setBasemap + reset), `resolveTheme()` | LocaleToggle, ThemeToggle, SettingsSheet, scroll-area, TableViewer, FlatGeobufViewer, GeoParquetMapViewer, MapContainer, CodeMirrorEditor, StacMosaicViewer, +layout.svelte, +page.svelte |
 | `query-history.svelte.ts` | `queryHistory` | TableViewer, QueryHistoryPanel, SqlEditor |
 | `safelock.svelte.ts` | `safeLock` | SafeLockToggle |
 

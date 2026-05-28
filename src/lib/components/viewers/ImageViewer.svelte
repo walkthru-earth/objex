@@ -5,6 +5,7 @@ import MinusIcon from '@lucide/svelte/icons/minus';
 import PlusIcon from '@lucide/svelte/icons/plus';
 import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 import ScanIcon from '@lucide/svelte/icons/scan';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
@@ -14,8 +15,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { handleLoadError } from '$lib/utils/error.js';
-import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 

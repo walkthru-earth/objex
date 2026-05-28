@@ -2,7 +2,7 @@
  * Pure file entry sorting — framework-agnostic, works in Node.js.
  */
 
-import type { FileEntry } from '../types.js';
+import type { FileEntry } from '../../../src/lib/types.js';
 
 export type SortField = 'name' | 'size' | 'modified' | 'extension';
 export type SortDirection = 'asc' | 'desc';

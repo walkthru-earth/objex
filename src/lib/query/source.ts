@@ -11,7 +11,7 @@
 
 import { buildDuckDbSource } from '../file-icons/index.js';
 import type { Tab } from '../types.js';
-import { buildDuckDbUrl, buildDuckDbUrlAsync } from '../utils/url.js';
+import { buildDuckDbUrl, buildDuckDbUrlAsync } from '../utils/signed-url.js';
 import type { QuerySource } from './engine.js';
 
 /**

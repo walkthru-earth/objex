@@ -4,7 +4,9 @@ import DatabaseIcon from '@lucide/svelte/icons/database';
 import GlobeIcon from '@lucide/svelte/icons/globe';
 import PencilIcon from '@lucide/svelte/icons/pencil';
 import PlusIcon from '@lucide/svelte/icons/plus';
+import SettingsIcon from '@lucide/svelte/icons/settings';
 import TrashIcon from '@lucide/svelte/icons/trash-2';
+import { type DetectedHost, detectHostBucket, parseStorageUrl } from '@walkthru-earth/objex-utils';
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -21,17 +23,20 @@ import {
 } from '$lib/components/ui/tooltip/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
+import { appConfig } from '$lib/stores/config.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection } from '$lib/types.js';
-import { type DetectedHost, detectHostBucket } from '$lib/utils/host-detection.js';
-import { parseStorageUrl } from '$lib/utils/storage-url.js';
 import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
 import AboutSheet from './AboutSheet.svelte';
 import ConnectionDialog from './ConnectionDialog.svelte';
 import LocaleToggle from './LocaleToggle.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
+
+// Settings panel is owned by +page.svelte so it stays reachable even when the
+// connection rail is hidden; the gear button just requests it be opened.
+let { onOpenSettings }: { onOpenSettings?: () => void } = $props();
 
 let aboutOpen = $state(false);
 let dialogOpen = $state(false);
@@ -42,9 +47,9 @@ let autoConnecting = $state(false);
 $effect(() => {
 	connections.load().then(async () => {
 		await handleAutoDetection();
-		// On first visit (no connections, no URL params), load the demo bucket
+		// On first visit (no connections, no URL params), seed connections from config
 		if (connections.items.length === 0 && !new URL(window.location.href).searchParams.has('url')) {
-			await loadDemoConnection();
+			await loadConfigConnections();
 		}
 	});
 });
@@ -180,6 +185,38 @@ async function handleAutoDetection() {
 		// Show indicator for hostname-detected bucket
 		detectedHost = detected;
 		if (isMigrating) tabs.endMigration();
+	}
+}
+
+async function loadConfigConnections() {
+	const seeds = appConfig.value.connections;
+	if (seeds.length === 0) {
+		// No configured connections (e.g. config failed to load): preserve the
+		// historic first-run demo bucket so the empty app is never a dead end.
+		await loadDemoConnection();
+		return;
+	}
+	let firstAnon: Connection | null = null;
+	for (const seed of seeds) {
+		const { id } = await connections.save({
+			name: seed.name,
+			provider: seed.provider,
+			endpoint: seed.endpoint ?? '',
+			bucket: seed.bucket,
+			region: seed.region ?? '',
+			anonymous: seed.anonymous ?? false,
+			...(seed.authMethod ? { authMethod: seed.authMethod } : {}),
+			...(seed.rootPrefix ? { rootPrefix: seed.rootPrefix } : {})
+		});
+		const conn = connections.getById(id);
+		if (conn?.anonymous && !firstAnon) firstAnon = conn;
+	}
+	// Auto-open the first public bucket so the demo flow stays zero-click.
+	// Private seeds remain as un-browsed rows; clicking one runs the normal
+	// ensureCredentials prompt via handleBrowseConnection.
+	if (firstAnon) {
+		browser.browse(firstAnon);
+		syncUrlParam(firstAnon);
 	}
 }
 
@@ -360,6 +397,20 @@ async function handleBrowseConnection(connection: Connection) {
 
 		<!-- Bottom actions -->
 		<div class="mt-auto flex flex-col items-center gap-1 pt-2">
+			{#if appConfig.value.ui.showSettings}
+				<Tooltip>
+					<TooltipTrigger>
+						<button
+							class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+							onclick={() => onOpenSettings?.()}
+							aria-label={t('settings.tooltip')}
+						>
+							<SettingsIcon class="size-4" />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="right">{t('settings.tooltip')}</TooltipContent>
+				</Tooltip>
+			{/if}
 			<LocaleToggle />
 			<ThemeToggle />
 		</div>

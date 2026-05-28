@@ -10,10 +10,10 @@
  * Uses SvelteKit's replaceState to avoid conflicts with the router.
  */
 
+import { parseStorageUrl } from '@walkthru-earth/objex-utils';
 import { replaceState } from '$app/navigation';
 import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
 import type { Connection } from '$lib/types.js';
-import { parseStorageUrl } from './storage-url.js';
 
 /**
  * Build the base HTTPS URL for a connection (endpoint + bucket).
@@ -166,6 +166,17 @@ export function hasUrlParam(): boolean {
 		return new URL(window.location.href).searchParams.has('url');
 	} catch {
 		return false;
+	}
+}
+
+/**
+ * Read the `?panel=` param (e.g. `?panel=settings`) to auto-open a panel on load.
+ */
+export function getPanelParam(): string | null {
+	try {
+		return new URL(window.location.href).searchParams.get('panel');
+	} catch {
+		return null;
 	}
 }
 

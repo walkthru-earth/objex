@@ -68,37 +68,24 @@ export type {
 	Theme,
 	WriteResult
 } from '../../../src/lib/types.js';
+
+// ====================================================================
+// Utilities physically located in packages/objex-utils/src/
+// (alphabetical by file basename)
+// ====================================================================
+
+// App runtime config (pure types + merge + precedence resolver)
+export * from './app-config.js';
 // Channel composite presets + URL round-trip (unified RGB picker)
-export type { PresetDef } from '../../../src/lib/utils/channel-composite.js';
-export {
-	applyPreset,
-	availablePresets,
-	compositeFromUrl,
-	compositeToUrl,
-	PRESETS,
-	presetMatchesComposite
-} from '../../../src/lib/utils/channel-composite.js';
+export * from './channel-composite.js';
+// Clipboard helper (navigator.clipboard + feedback timeout)
+export * from './clipboard.js';
 // Cloud URL resolution
-export {
-	getNativeScheme,
-	resolveCloudUrl,
-	safeDecodeURIComponent
-} from '../../../src/lib/utils/cloud-url.js';
+export * from './cloud-url.js';
 // COG asset enumeration (unified RGB picker)
-export type {
-	ChannelComposite,
-	ChannelRef,
-	CogAsset
-} from '../../../src/lib/utils/cog-asset.js';
-export {
-	allChannelsBand0,
-	extractCogAssets,
-	isSingleAssetComposite,
-	pickNaturalColorComposite,
-	syntheticSelfAsset
-} from '../../../src/lib/utils/cog-asset.js';
+export * from './cog-asset.js';
 // COG utilities (pure helpers only, no maplibre/geotiff/epsg/proj dependency).
-// MUST import from `cog-pure.ts` and NOT `cog.ts`. `cog.ts` has top-level
+// MUST import from `cog-info.ts` and NOT `cog.ts`. `cog.ts` has top-level
 // imports for `@developmentseed/epsg/all`, `@developmentseed/geotiff`,
 // `@developmentseed/proj`, `maplibre-gl`, and `proj4`, which tsup preserves
 // as bare side-effect imports in the bundled output even when all named
@@ -106,137 +93,62 @@ export {
 // `@developmentseed/epsg/all.csv.gz?url` (Vite loader query) and would force
 // every downstream project to install the full COG stack just to use the
 // pure TS utilities. See walkthru-earth/objex#11.
-export type { CogInfo, GeoBounds } from '../../../src/lib/utils/cog-pure.js';
-export {
-	buildDataTypeLabel,
-	clampBounds,
-	SF_LABELS,
-	safeClamp
-} from '../../../src/lib/utils/cog-pure.js';
+export * from './cog-info.js';
 // Column type classification
-export type { TypeCategory } from '../../../src/lib/utils/column-types.js';
-export {
-	classifyType,
-	typeBadgeClass,
-	typeColor,
-	typeLabel
-} from '../../../src/lib/utils/column-types.js';
+export * from './column-types.js';
+// Connection identity (canonical key for dedup across auto-detect/manual add/edit)
+export * from './connection-identity.js';
 // Error handling
-export { handleLoadError } from '../../../src/lib/utils/error.js';
-// Data export / serialization
-export {
-	escapeCsvField,
-	exportToCsv,
-	exportToJson,
-	serializeToCsv,
-	serializeToJson
-} from '../../../src/lib/utils/export.js';
+export * from './error.js';
+// Data export / serialization (browser-only download triggers + pure serialisers)
+export * from './export.js';
 // File sorting
-export type { SortConfig, SortDirection, SortField } from '../../../src/lib/utils/file-sort.js';
-export { sortFileEntries, toggleSortField } from '../../../src/lib/utils/file-sort.js';
+export * from './file-sort.js';
 // Formatting
-export {
-	formatDate,
-	formatFileSize,
-	formatValue,
-	getFileExtension,
-	jsonReplacerBigInt
-} from '../../../src/lib/utils/format.js';
+export * from './format.js';
 // GeoArrow
-export type { GeoArrowGeomType, GeoArrowResult } from '../../../src/lib/utils/geoarrow.js';
-export { buildGeoArrowTables, normalizeGeomType } from '../../../src/lib/utils/geoarrow.js';
+export * from './geoarrow.js';
+// Geometry type (DuckDB v1.5 parameterized GEOMETRY parsing)
+export * from './geometry-type.js';
 // Hex dump
-export type { HexRow } from '../../../src/lib/utils/hex.js';
-export { generateHexDump } from '../../../src/lib/utils/hex.js';
-// localStorage helpers
-export { loadFromStorage, persistToStorage } from '../../../src/lib/utils/local-storage.js';
-// Markdown / SQL parsing
-export type {
-	ParsedMarkdownDocument,
-	SqlBlock
-} from '../../../src/lib/utils/markdown-sql.js';
-export {
-	interpolateTemplates,
-	markSqlBlocks,
-	parseMarkdownDocument
-} from '../../../src/lib/utils/markdown-sql.js';
+export * from './hex.js';
+// Host detection (auto-detect provider/region from URL)
+export * from './host-detection.js';
+// localStorage helpers (SSR-safe)
+export * from './local-storage.js';
+// LRU cache
+export * from './lru.js';
+// Map pixel inspector (click→probe coordination types)
+export * from './map-pixel-inspect.js';
+// Markdown / SQL parsing (yaml is loaded lazily inside parseMarkdownDocument)
+export * from './markdown-sql.js';
+// Markdown SQL execution context (engine injected by host)
+export * from './markdown-sql-context.js';
+// Notebook (Jupyter .ipynb) renderer
+export * from './notebook.js';
 // Parquet metadata
-export type {
-	GeoColumnMeta,
-	GeoParquetMeta,
-	ParquetFileMetadata
-} from '../../../src/lib/utils/parquet-metadata.js';
-export {
-	extractBounds,
-	extractEpsgFromGeoMeta,
-	extractGeometryTypes,
-	readParquetMetadata
-} from '../../../src/lib/utils/parquet-metadata.js';
+export * from './parquet-metadata.js';
+// STAC types and helpers
+export * from './stac.js';
 // STAC facets (auto-detected filters, sorts, slim views)
-export type {
-	DatetimeFacet,
-	EnumFacet,
-	EnumFacetField,
-	Facet,
-	FacetSet,
-	FacetSort,
-	FacetState,
-	NumericFacet,
-	NumericFacetField,
-	StacItemView
-} from '../../../src/lib/utils/stac-facets.js';
-export {
-	applyFacets,
-	buildFacets,
-	DATETIME_HISTOGRAM_BINS,
-	emptyFacetState,
-	extractItemView,
-	hasActiveFilters,
-	sortViews
-} from '../../../src/lib/utils/stac-facets.js';
+export * from './stac-facets.js';
 // stac-geoparquet (detection + row → Item transform)
-export type {
-	StacBboxStruct,
-	StacGeoparquetRow,
-	StacGeoparquetSchemaColumn,
-	StacRowToItemOptions
-} from '../../../src/lib/utils/stac-geoparquet.js';
-export {
-	flattenStacBbox,
-	isStacGeoparquetSchema,
-	pickStacPrimaryAsset,
-	resolveStacAssetHref,
-	STAC_GEOPARQUET_REQUIRED_COLUMNS,
-	stacRowToItem
-} from '../../../src/lib/utils/stac-geoparquet.js';
+export * from './stac-geoparquet.js';
+// STAC link-following hydrator (Catalog / Collection / FeatureCollection)
+export * from './stac-hydrate.js';
 // STAC API filter push-down (CQL2 + native query params)
-export type {
-	StacApiCapabilities,
-	StacNativeQuery,
-	ToNativeQueryOptions
-} from '../../../src/lib/utils/stac-pushdown.js';
-export {
-	residualState,
-	sniffApiCapabilities,
-	toCql2Filter,
-	toNativeQuery
-} from '../../../src/lib/utils/stac-pushdown.js';
+export * from './stac-pushdown.js';
+// STAC source contract
+export * from './stac-source.js';
+// STAC source - API implementation
+export * from './stac-source-api.js';
+// STAC source - static catalog implementation
+export * from './stac-source-static.js';
+// STAC Storage Extension (region / endpoint hints from STAC Items)
+export * from './stac-storage-extension.js';
+// Storage open-time smoke test (ranged GET probe)
+export * from './storage-smoketest.js';
 // Storage URL parsing
-export type {
-	Defaults,
-	ParsedStorageUrl,
-	StorageProvider
-} from '../../../src/lib/utils/storage-url.js';
-export {
-	describeParseResult,
-	looksLikeUrl,
-	parseStorageUrl
-} from '../../../src/lib/utils/storage-url.js';
+export * from './storage-url.js';
 // WKB parsing
-export type { GeoType, ParsedGeometry } from '../../../src/lib/utils/wkb.js';
-export {
-	findGeoColumn,
-	findGeoColumnFromRows,
-	parseWKB,
-	toBinary
-} from '../../../src/lib/utils/wkb.js';
+export * from './wkb.js';

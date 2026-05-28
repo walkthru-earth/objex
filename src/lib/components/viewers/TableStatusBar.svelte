@@ -1,8 +1,8 @@
 <script lang="ts">
 import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 import DownloadIcon from '@lucide/svelte/icons/download';
+import { exportToCsv, exportToJson } from '@walkthru-earth/objex-utils';
 import { t } from '$lib/i18n/index.svelte.js';
-import { exportToCsv, exportToJson } from '$lib/utils/export.js';
 
 let {
 	rowCount = 0,

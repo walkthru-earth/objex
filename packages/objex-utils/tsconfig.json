@@ -7,11 +7,13 @@
 		"declarationMap": true,
 		"sourceMap": true,
 		"strict": true,
+		"ignoreDeprecations": "6.0",
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"rootDir": "../..",
 		"outDir": "dist"
 	},
-	"include": ["src", "../../src/lib"]
+	"include": ["src", "../../src/lib"],
+	"exclude": []
 }

@@ -1,6 +1,24 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
+import {
+	applyPreset,
+	attachPixelInspector,
+	availablePresets,
+	type ChannelComposite,
+	type CogAsset,
+	compositeFromUrl,
+	compositeToUrl,
+	extractCogAssets,
+	isSingleAssetComposite,
+	isStacItem,
+	PRESETS,
+	pickNaturalColorComposite,
+	presetMatchesComposite,
+	type StacItem,
+	type StacRoutableKind,
+	smokeTestHref
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '../../i18n/index.svelte.js';
@@ -9,14 +27,6 @@ import { buildProviderBaseUrl, type ProviderId } from '../../storage/providers.j
 import { connectionStore } from '../../stores/connections.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
-import {
-	applyPreset,
-	availablePresets,
-	compositeFromUrl,
-	compositeToUrl,
-	PRESETS,
-	presetMatchesComposite
-} from '../../utils/channel-composite.js';
 import {
 	buildHistogramFromGeotiff,
 	clampBounds,
@@ -38,17 +48,7 @@ import {
 	resolveProj4Def,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
-import {
-	type ChannelComposite,
-	type CogAsset,
-	extractCogAssets,
-	isSingleAssetComposite,
-	pickNaturalColorComposite
-} from '../../utils/cog-asset.js';
-import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
-import { isStacItem, type StacItem, type StacRoutableKind } from '../../utils/stac.js';
-import { smokeTestHref } from '../../utils/storage-smoketest.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import { buildRgbLayer } from './cog/buildRgbLayer.js';

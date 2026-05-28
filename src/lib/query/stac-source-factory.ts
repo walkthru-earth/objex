@@ -9,14 +9,15 @@
  * pull DuckDB into its bundle (slice 6 promotion).
  */
 
+import type { StacRoutableKind, StacSource } from '@walkthru-earth/objex-utils';
+import {
+	createApiSource,
+	createStaticSource,
+	hasStacItemsEndpoint,
+	STAC_API_PATH_RE
+} from '@walkthru-earth/objex-utils';
 import type { StorageAdapter } from '../storage/adapter.js';
 import type { Tab } from '../types.js';
-import type { StacRoutableKind } from '../utils/stac.js';
-import { hasStacItemsEndpoint } from '../utils/stac-hydrate.js';
-import type { StacSource } from '../utils/stac-source.js';
-import { createApiSource } from '../utils/stac-source-api.js';
-import { createStaticSource } from '../utils/stac-source-static.js';
-import { STAC_API_PATH_RE } from '../utils/storage-url.js';
 import { createParquetSource } from './stac-source-parquet.js';
 
 export interface CreateStacSourceDeps {

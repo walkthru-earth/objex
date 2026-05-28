@@ -1,4 +1,12 @@
 <script lang="ts">
+import {
+	handleLoadError,
+	interpolateTemplates,
+	MarkdownSqlContext,
+	markSqlBlocks,
+	parseMarkdownDocument,
+	wireCodeCopyButtons
+} from '@walkthru-earth/objex-utils';
 import { onDestroy, tick } from 'svelte';
 import SqlResultBlock from '$lib/components/editor/SqlResultBlock.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -7,15 +15,8 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { wireCodeCopyButtons } from '$lib/utils/clipboard.js';
-import { handleLoadError } from '$lib/utils/error.js';
-import { EvidenceContext } from '$lib/utils/evidence-context';
 import { detectRTL, processDirection, renderMarkdown } from '$lib/utils/markdown';
-import {
-	interpolateTemplates,
-	markSqlBlocks,
-	parseMarkdownDocument
-} from '$lib/utils/markdown-sql';
+import { getQueryEngine } from '../../query/index.js';
 
 let mermaidInitialized = false;
 const CAIRO_FONT = '"Cairo", sans-serif';
@@ -78,7 +79,9 @@ async function loadMarkdown() {
 
 		if (parsed.sqlBlocks.length > 0) {
 			// Execute SQL blocks in parallel
-			const ctx = new EvidenceContext(
+			const engine = await getQueryEngine();
+			const ctx = new MarkdownSqlContext(
+				engine,
 				tab.connectionId ?? '',
 				tab.path.split('/').slice(0, -1).join('/')
 			);

@@ -1,5 +1,6 @@
 <script lang="ts">
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+import { formatFileSize } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { tileIdToZxy } from 'pmtiles';
 import {
@@ -8,7 +9,6 @@ import {
 	ResizablePaneGroup
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
-import { formatFileSize } from '$lib/utils/format.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import { highlightCode } from '$lib/utils/shiki';
 

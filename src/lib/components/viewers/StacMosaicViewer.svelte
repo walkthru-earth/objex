@@ -3,6 +3,41 @@ import { GeoJsonLayer } from '@deck.gl/layers';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { COGLayer, MosaicLayer, MultiCOGLayer } from '@developmentseed/deck.gl-geotiff';
 import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
+import type { StacSource } from '@walkthru-earth/objex-utils';
+import {
+	applyFacets,
+	applyPreset,
+	attachPixelInspector,
+	availablePresets,
+	buildFacets,
+	buildMosaicSourceMeta,
+	type ChannelComposite,
+	type CogAsset,
+	classifyStac,
+	compositeFromUrl,
+	compositeToUrl,
+	emptyFacetState,
+	extractCogAssets,
+	extractItemView,
+	extractMosaicAssets,
+	type FacetState,
+	formatFileSize,
+	hasActiveFilters,
+	isAbortError,
+	isSingleAssetComposite,
+	LruCache,
+	type MosaicSourceMeta,
+	PRESETS,
+	pickCogAssetHref,
+	pickNaturalColorComposite,
+	presetMatchesComposite,
+	type RasterBandAsset,
+	resolveCloudUrl,
+	type StacItemView,
+	type StacRoutableKind,
+	smokeTestHref,
+	spatialCellKey
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '../../i18n/index.svelte.js';
@@ -13,15 +48,6 @@ import { connectionStore } from '../../stores/connections.svelte.js';
 import { settings } from '../../stores/settings.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
-import {
-	applyPreset,
-	availablePresets,
-	compositeFromUrl,
-	compositeToUrl,
-	PRESETS,
-	presetMatchesComposite
-} from '../../utils/channel-composite.js';
-import { resolveCloudUrl } from '../../utils/cloud-url.js';
 import {
 	type BandConfig,
 	buildBandRenderPipeline,
@@ -50,39 +76,7 @@ import {
 	selectCogPipeline,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
-import {
-	type ChannelComposite,
-	type CogAsset,
-	extractCogAssets,
-	isSingleAssetComposite,
-	pickNaturalColorComposite
-} from '../../utils/cog-asset.js';
-import { isAbortError } from '../../utils/error.js';
-import { formatFileSize } from '../../utils/format.js';
-import { LruCache } from '../../utils/lru.js';
-import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
-import {
-	buildMosaicSourceMeta,
-	classifyStac,
-	extractMosaicAssets,
-	type MosaicSourceMeta,
-	pickCogAssetHref,
-	type RasterBandAsset,
-	type StacRoutableKind,
-	spatialCellKey
-} from '../../utils/stac.js';
-import {
-	applyFacets,
-	buildFacets,
-	emptyFacetState,
-	extractItemView,
-	type FacetState,
-	hasActiveFilters,
-	type StacItemView
-} from '../../utils/stac-facets.js';
-import type { StacSource } from '../../utils/stac-source.js';
-import { smokeTestHref } from '../../utils/storage-smoketest.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import { getUrlViewParams, updateUrlViewParams } from '../../utils/url-state.js';
 import CogControls from './CogControls.svelte';
 import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
@@ -454,9 +448,10 @@ const mosaicLayer = $derived.by(() => {
 	const rs = { ...rescale };
 	const signal = abortController.signal;
 	const gen = pipelineGen;
-	// `onTileUnload` is forwarded by our pnpm patch to the inner TileLayer
-	// but is not in MosaicLayerProps. `any` widens at the boundary so we
-	// can drive Svelte-side cache eviction off deck.gl's tile-unload signal.
+	// 0.7.0 MosaicLayer exposes `onSourceUnload(source, { data })` natively
+	// (was forwarded by our pnpm patch in 0.6.1). `source` is the resolved
+	// MosaicSourceMeta, so `source.id` is our source id. `any` widens at the
+	// boundary so we can drive Svelte-side cache eviction off the unload signal.
 	const mosaicProps: any = {
 		id: mosaicId,
 		sources,
@@ -465,14 +460,13 @@ const mosaicLayer = $derived.by(() => {
 		// dense mosaic on a single S3 host (e.g. source.coop) Chrome's per-renderer
 		// URL request budget exhausts as `net::ERR_INSUFFICIENT_RESOURCES` once
 		// hundreds of sources go in-flight together. 6 matches Chrome's HTTP/1.1
-		// per-host concurrency cap; deck.gl forwards `maxRequests` natively (see
-		// `dist/mosaic-layer/mosaic-layer.js:15`).
+		// per-host concurrency cap; MosaicLayer forwards `maxRequests` natively.
 		maxRequests: 6,
 		// Coalesce pan/zoom-jitter so we don't fire range fetches that get aborted
 		// half a frame later. deck.gl forwards `debounceTime` natively to TileLayer.
 		debounceTime: 200,
-		onTileUnload: (tile: { index?: { id?: string } } | undefined) => {
-			const sid = tile?.index?.id;
+		onSourceUnload: (source: { id?: string } | undefined) => {
+			const sid = source?.id;
 			if (typeof sid !== 'string') return;
 			// Keep `geotiffCache` / `presignCache` / `sourceHrefById` populated
 			// past the tile unload — they are bounded by `SOURCE_CACHE_MAX`
@@ -590,8 +584,9 @@ const mosaicLayer = $derived.by(() => {
 		renderSource: (source: MosaicSourceMeta, { data }: { data: GeoTIFF | undefined }) => {
 			if (!data) return null;
 			const customProps = selectCogPipeline(data, { bandConfig: bc, rescale: rs });
-			// `onViewportLoad` / `onTileError` are forwarded by our pnpm patch
-			// but COGLayer's generated .d.ts does not expose them yet.
+			// `onViewportLoad` / `onTileError` are forwarded natively by COGLayer's
+			// RasterTileLayer base in 0.7.0 (deck.gl-raster PR #546). The `any` cast
+			// remains because COGLayer's generated .d.ts still does not surface them.
 			const cogProps: any = {
 				id: `cog-${source.id}-p${gen}`,
 				geotiff: data,
@@ -657,8 +652,9 @@ const multiCogLayers = $derived.by(() => {
 		}
 		// Skip items whose 3 channels don't all have resolved URLs yet.
 		if (!sources[c.r.assetKey] || !sources[c.g.assetKey] || !sources[c.b.assetKey]) continue;
-		// `onTileError` is forwarded by our pnpm patch but is not in the
-		// generated MultiCOGLayer .d.ts. Widen at the boundary.
+		// `onTileError` is forwarded natively by MultiCOGLayer's RasterTileLayer
+		// base in 0.7.0 (deck.gl-raster PR #546), but the generated .d.ts does
+		// not surface it. Widen at the boundary.
 		const layerProps: any = {
 			id: `mosaic-multicog-${view.id}-c${compositeKey}-p${gen}`,
 			sources,
@@ -1178,9 +1174,9 @@ function extendBounds(
 }
 
 function applyFacetsToItems(
-	items: import('../../utils/stac.js').StacItem[],
+	items: import('@walkthru-earth/objex-utils').StacItem[],
 	residual: FacetState
-): import('../../utils/stac.js').StacItem[] {
+): import('@walkthru-earth/objex-utils').StacItem[] {
 	if (!hasActiveFilters(residual)) return items;
 	const views = items.map(extractItemView);
 	const allowed = new Set(applyFacets(views, residual).map((v) => v.id));

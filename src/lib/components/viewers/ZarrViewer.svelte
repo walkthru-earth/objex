@@ -9,7 +9,7 @@ import {
 } from '$lib/components/ui/resizable/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import type { Tab } from '$lib/types';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import {
 	computeChunkCount,

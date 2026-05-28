@@ -1,21 +1,32 @@
+import {
+	loadFromStorage,
+	parseVisibilityParam,
+	persistToStorage,
+	resolveSetting
+} from '@walkthru-earth/objex-utils';
 import { STORAGE_KEYS } from '../constants.js';
-import { type Locale, setLocale } from '../i18n/index.svelte.js';
+import type { Locale } from '../i18n/index.svelte.js';
 import type { Theme } from '../types.js';
-import { loadFromStorage, persistToStorage } from '../utils/local-storage.js';
+import { appConfig } from './config.svelte.js';
 
-interface PersistedSettings {
-	theme: Theme;
-	locale: Locale;
-	featureLimit: number;
-	mosaicItemLimit: number;
+/** Only keys the user explicitly changed are stored, so config edits still reach untouched keys. */
+interface UserSettings {
+	theme?: Theme;
+	locale?: Locale;
+	featureLimit?: number;
+	mosaicItemLimit?: number;
+	showConnectionRail?: boolean;
+	showFileTree?: boolean;
+	basemapId?: string;
 }
 
 /**
  * Heuristic mobile detection. iOS Safari caps the WASM heap at ~1.8 GiB and
  * Safari < 17.6 has no `credentialless` COEP, so OPFS spill rarely engages.
  * A 2000-item stac-geoparquet scan with deep STRUCT `assets`/`links` columns
- * blows the heap before the streaming engine can pace it. Default the cap
- * lower so first-run mosaic loads succeed; users can raise it in settings.
+ * blows the heap before the streaming engine can pace it. Clamp the default
+ * mosaic item limit lower on mobile so first-run mosaic loads succeed; users
+ * can still raise it explicitly in settings.
  */
 function isMobileLikeAtLoad(): boolean {
 	if (typeof navigator === 'undefined') return false;
@@ -24,25 +35,10 @@ function isMobileLikeAtLoad(): boolean {
 	return Math.min(window.innerWidth, window.innerHeight) <= 820;
 }
 
-const SETTINGS_DEFAULTS: PersistedSettings = {
-	theme: 'system',
-	locale: 'en',
-	featureLimit: 1000,
-	// Mobile is also clamped at the parquet source layer (see
-	// `stac-source-parquet.ts::lowMemoryMode`) which caps at 200 and skips
-	// ORDER BY. We mirror that here so the API/static paths (which don't
-	// have the source-side clamp) also see a small default.
-	mosaicItemLimit: isMobileLikeAtLoad() ? 200 : 2000
-};
+const MOBILE_MOSAIC_LIMIT = 200;
 
-function loadSettings(): PersistedSettings {
-	const stored = loadFromStorage<Partial<PersistedSettings>>(STORAGE_KEYS.SETTINGS, {});
-	return {
-		theme: stored.theme ?? SETTINGS_DEFAULTS.theme,
-		locale: stored.locale ?? SETTINGS_DEFAULTS.locale,
-		featureLimit: stored.featureLimit ?? SETTINGS_DEFAULTS.featureLimit,
-		mosaicItemLimit: stored.mosaicItemLimit ?? SETTINGS_DEFAULTS.mosaicItemLimit
-	};
+function loadUser(): UserSettings {
+	return loadFromStorage<UserSettings>(STORAGE_KEYS.SETTINGS, {});
 }
 
 export function resolveTheme(theme: Theme): 'light' | 'dark' {
@@ -51,79 +47,114 @@ export function resolveTheme(theme: Theme): 'light' | 'dark' {
 	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function createSettingsStore() {
-	const initial = loadSettings();
-	let theme = $state<Theme>(initial.theme);
-	let locale = $state<Locale>(initial.locale);
-	let featureLimit = $state<number>(initial.featureLimit);
-	let mosaicItemLimit = $state<number>(initial.mosaicItemLimit);
-	let resolved = $state<'light' | 'dark'>(resolveTheme(initial.theme));
-
-	// Sync i18n module and document dir with persisted locale
-	setLocale(initial.locale);
-	if (typeof document !== 'undefined') {
-		const dir = initial.locale === 'ar' ? 'rtl' : 'ltr';
-		document.documentElement.dir = dir;
-		document.documentElement.lang = initial.locale;
+function readVisibilityParam(name: string): boolean | undefined {
+	if (typeof window === 'undefined') return undefined;
+	try {
+		return parseVisibilityParam(new URL(window.location.href).searchParams.get(name));
+	} catch {
+		return undefined;
 	}
+}
+
+function createSettingsStore() {
+	let user = $state<UserSettings>(loadUser());
+
+	// Query params and mobile detection are static for the session, read once.
+	const railParam = readVisibilityParam('sidebar');
+	const treeParam = readVisibilityParam('tree');
+	const mobileLikeAtLoad = isMobileLikeAtLoad();
 
 	function persist() {
-		persistToStorage(STORAGE_KEYS.SETTINGS, { theme, locale, featureLimit, mosaicItemLimit });
+		persistToStorage(STORAGE_KEYS.SETTINGS, user);
 	}
 
-	function applyTheme(t: Theme) {
-		theme = t;
-		resolved = resolveTheme(t);
-		persist();
-
-		if (typeof document !== 'undefined') {
-			document.documentElement.classList.toggle('dark', resolved === 'dark');
-		}
+	function cfg() {
+		return appConfig.value;
 	}
 
-	function applyLocale(l: Locale) {
-		locale = l;
-		setLocale(l);
-		persist();
-
-		if (typeof document !== 'undefined') {
-			const dir = l === 'ar' ? 'rtl' : 'ltr';
-			document.documentElement.dir = dir;
-			document.documentElement.lang = l;
-		}
+	function effTheme(): Theme {
+		return resolveSetting(user.theme, cfg().defaults.theme, 'system') as Theme;
 	}
-
-	// System theme changes are handled by the $effect in +layout.svelte
-	// which properly cleans up the listener. No module-level listener needed.
 
 	return {
-		get theme() {
-			return theme;
+		get theme(): Theme {
+			return effTheme();
 		},
-		get resolved() {
-			return resolved;
+		get resolved(): 'light' | 'dark' {
+			return resolveTheme(effTheme());
 		},
-		get locale() {
-			return locale;
+		get locale(): Locale {
+			return resolveSetting(user.locale, cfg().defaults.locale as Locale, 'en') as Locale;
 		},
-		get featureLimit() {
-			return featureLimit;
+		get featureLimit(): number {
+			return resolveSetting(user.featureLimit, cfg().defaults.featureLimit, 1000) as number;
 		},
-		get mosaicItemLimit() {
-			return mosaicItemLimit;
+		get mosaicItemLimit(): number {
+			// Explicit user/query choice always wins, at any value.
+			if (user.mosaicItemLimit !== undefined) return user.mosaicItemLimit;
+			const configured = resolveSetting(cfg().defaults.mosaicItemLimit, 2000) as number;
+			// Mobile heap safety: clamp the default so API/static mosaic loads don't OOM.
+			return mobileLikeAtLoad ? Math.min(configured, MOBILE_MOSAIC_LIMIT) : configured;
+		},
+		get showConnectionRail(): boolean {
+			return resolveSetting(
+				railParam,
+				user.showConnectionRail,
+				cfg().ui.showConnectionRail,
+				true
+			) as boolean;
+		},
+		get showFileTree(): boolean {
+			return resolveSetting(treeParam, user.showFileTree, cfg().ui.showFileTree, true) as boolean;
+		},
+		/** True when a link param is forcing the connection-rail visibility. */
+		get railLockedByParam(): boolean {
+			return railParam !== undefined;
+		},
+		/** True when a link param is forcing the file-tree visibility. */
+		get treeLockedByParam(): boolean {
+			return treeParam !== undefined;
+		},
+		/** The user-picked basemap id, or undefined to follow config/theme defaults. */
+		get basemapId(): string | undefined {
+			return user.basemapId;
 		},
 		setTheme(t: Theme) {
-			applyTheme(t);
+			user = { ...user, theme: t };
+			persist();
 		},
 		setLocale(l: Locale) {
-			applyLocale(l);
+			user = { ...user, locale: l };
+			persist();
 		},
 		setFeatureLimit(n: number) {
-			featureLimit = n;
+			user = { ...user, featureLimit: Math.max(1, Math.floor(n)) };
 			persist();
 		},
 		setMosaicItemLimit(n: number) {
-			mosaicItemLimit = Math.max(1, Math.floor(n));
+			user = { ...user, mosaicItemLimit: Math.max(1, Math.floor(n)) };
+			persist();
+		},
+		setShowConnectionRail(v: boolean) {
+			user = { ...user, showConnectionRail: v };
+			persist();
+		},
+		setShowFileTree(v: boolean) {
+			user = { ...user, showFileTree: v };
+			persist();
+		},
+		setBasemap(id: string | undefined) {
+			if (id === undefined) {
+				const { basemapId: _omit, ...rest } = user;
+				user = rest;
+			} else {
+				user = { ...user, basemapId: id };
+			}
+			persist();
+		},
+		/** Clear all user overrides, reverting every value to config or hardcoded fallback. */
+		reset() {
+			user = {};
 			persist();
 		}
 	};

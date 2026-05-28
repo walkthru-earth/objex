@@ -1,17 +1,17 @@
 <script lang="ts">
-import { getViewerKind } from '../../file-icons/index.js';
-import { getAdapter } from '../../storage/index.js';
-import type { Tab } from '../../types.js';
-import { readParquetMetadata } from '../../utils/parquet-metadata.js';
 import {
 	classifyStac,
 	detectMosaicCapable,
 	detectMultiCogCapable,
+	isStacGeoparquetSchema,
+	readParquetMetadata,
+	STAC_API_PATH_RE,
 	type StacRoutableKind
-} from '../../utils/stac.js';
-import { isStacGeoparquetSchema } from '../../utils/stac-geoparquet.js';
-import { STAC_API_PATH_RE } from '../../utils/storage-url.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+} from '@walkthru-earth/objex-utils';
+import { getViewerKind } from '../../file-icons/index.js';
+import { getAdapter } from '../../storage/index.js';
+import type { Tab } from '../../types.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import CodeViewer from './CodeViewer.svelte';
 import ImageViewer from './ImageViewer.svelte';
 import MediaViewer from './MediaViewer.svelte';

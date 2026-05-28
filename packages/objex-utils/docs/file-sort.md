@@ -2,7 +2,7 @@
 
 Sort a `FileEntry[]` with directories pinned on top. Pure — no mutation of the input.
 
-Source: `src/lib/utils/file-sort.ts`.
+Source: `packages/objex-utils/src/file-sort.ts`.
 
 ## Types
 

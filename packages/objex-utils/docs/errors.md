@@ -2,7 +2,7 @@
 
 One function. Normalizes thrown values into a displayable string, with special-casing for `AbortError`.
 
-Source: `src/lib/utils/error.ts`.
+Source: `packages/objex-utils/src/error.ts`.
 
 ## `handleLoadError(err)`
 

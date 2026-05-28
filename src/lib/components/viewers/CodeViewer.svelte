@@ -1,5 +1,12 @@
 <script lang="ts">
 import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
+import {
+	copyToClipboard,
+	handleLoadError,
+	isStacCatalog,
+	isStacCollection,
+	isStacItem
+} from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { Button } from '$lib/components/ui/button/index.js';
@@ -8,13 +15,10 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { copyToClipboard } from '$lib/utils/clipboard.js';
-import { handleLoadError } from '$lib/utils/error.js';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
-import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/signed-url.js';
 import { getUrlView, pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
-import { isStacCatalog, isStacCollection, isStacItem } from '../../utils/stac.js';
 
 interface CodeActions {
 	toggleFormat: () => Promise<void>;

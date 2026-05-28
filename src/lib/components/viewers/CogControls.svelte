@@ -1,6 +1,11 @@
 <script lang="ts">
+import type {
+	ChannelComposite,
+	ChannelRef,
+	CogAsset,
+	PresetDef
+} from '@walkthru-earth/objex-utils';
 import { t } from '../../i18n/index.svelte.js';
-import type { PresetDef } from '../../utils/channel-composite.js';
 import {
 	type BandConfig,
 	type ColorRampId,
@@ -10,7 +15,6 @@ import {
 	type NodataMode,
 	type RescaleConfig
 } from '../../utils/cog.js';
-import type { ChannelComposite, ChannelRef, CogAsset } from '../../utils/cog-asset.js';
 import {
 	COLORMAP_INDEX,
 	COLORMAP_NAMES,

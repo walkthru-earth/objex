@@ -19,7 +19,7 @@ import {
 	hoverCursor,
 	loadDeckModules
 } from '$lib/utils/deck.js';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 import AttributeTable from './map/AttributeTable.svelte';
 import MapContainer from './map/MapContainer.svelte';
 

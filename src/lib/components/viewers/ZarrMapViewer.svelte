@@ -7,7 +7,7 @@ import { t } from '../../i18n/index.svelte.js';
 import { tabResources } from '../../stores/tab-resources.svelte.js';
 import type { Tab } from '../../types.js';
 import { createEpsgResolver } from '../../utils/cog.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import {
 	detectGeoZarr,
 	ensureCodecsRegistered,

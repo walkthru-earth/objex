@@ -1,10 +1,10 @@
 <script lang="ts">
 import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 import XIcon from '@lucide/svelte/icons/x';
+import { formatFileSize } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
-import { formatFileSize } from '$lib/utils/format.js';
 import type { PmtilesMetadata } from '$lib/utils/pmtiles';
 import {
 	type DecodedTile,

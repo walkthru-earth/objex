@@ -1,9 +1,15 @@
 import { SourceCache, SourceChunk } from '@chunkd/middleware';
 import { SourceView } from '@chunkd/source';
 import { SourceHttp } from '@chunkd/source-http';
-import type { GetTileDataOptions, MinimalTileData } from '@developmentseed/deck.gl-geotiff';
+import type { GetTileDataOptions } from '@developmentseed/deck.gl-geotiff';
 import { inferRenderPipeline } from '@developmentseed/deck.gl-geotiff';
-import type { RasterModule, RenderTileResult } from '@developmentseed/deck.gl-raster';
+// MinimalTileData moved from deck.gl-geotiff to deck.gl-raster in 0.7.0
+// (deck.gl-geotiff only re-exports GetTileDataOptions now).
+import type {
+	MinimalTileData,
+	RasterModule,
+	RenderTileResult
+} from '@developmentseed/deck.gl-raster';
 import {
 	Colormap,
 	FilterNoDataVal,
@@ -16,6 +22,14 @@ import { GeoTIFF } from '@developmentseed/geotiff';
 import type { EpsgResolver, ProjectionDefinition } from '@developmentseed/proj';
 import { parseWkt } from '@developmentseed/proj';
 import type { Device } from '@luma.gl/core';
+import {
+	buildDataTypeLabel,
+	type CogInfo,
+	clampBounds,
+	type GeoBounds,
+	SF_LABELS,
+	safeClamp
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import proj4Lib from 'proj4';
 import {
@@ -27,14 +41,6 @@ import {
 	type StreamHistogramOptions,
 	streamHistogram
 } from './cog-histogram.js';
-import {
-	buildDataTypeLabel,
-	type CogInfo,
-	clampBounds,
-	type GeoBounds,
-	SF_LABELS,
-	safeClamp
-} from './cog-pure.js';
 import { COLORMAP_INDEX, type ColormapName, getColormapTexture } from './colormap-sprite.js';
 
 /**
@@ -106,7 +112,7 @@ export {
 
 // ─── Constants ───────────────────────────────────────────────────
 
-// `SF_LABELS` moved to `./cog-pure.ts` (re-exported above) so that
+// `SF_LABELS` moved to `cog-info.ts` in @walkthru-earth/objex-utils (re-exported above) so that
 // `objex-utils` can consume it without pulling in heavy COG deps.
 
 // ─── Color ramps ─────────────────────────────────────────────────
@@ -673,7 +679,7 @@ const BITMAP_LAYER = 'geotiff-bitmap-layer';
 
 // ─── Types & pure helpers ────────────────────────────────────────
 // `GeoBounds`, `CogInfo`, `safeClamp`, `clampBounds`, `buildDataTypeLabel`
-// live in `./cog-pure.ts` and are re-exported at the top of this file.
+// live in `cog-info.ts` in @walkthru-earth/objex-utils and are re-exported at the top of this file.
 
 // ─── Map helpers (depend on maplibre-gl) ─────────────────────────
 

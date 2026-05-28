@@ -5,7 +5,7 @@
  * (Zarr v2 .zmetadata, v3 zarr.json), with zarrita fallback for non-consolidated stores.
  */
 
-import { formatFileSize } from './format.js';
+import { formatFileSize } from '@walkthru-earth/objex-utils';
 
 // ---------------------------------------------------------------------------
 // Register numcodecs-wrapped codecs with zarrita's codec registry.

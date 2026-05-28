@@ -28,6 +28,12 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # objex-utils resolves to its built dist/ via the workspace symlink, so it
+      # must be built before the app bundle, otherwise every
+      # '@walkthru-earth/objex-utils' import fails to resolve on a fresh install.
+      - run: pnpm --filter @walkthru-earth/objex-utils run build
+
       - run: pnpm run build
         env:
           BASE_PATH: /objex

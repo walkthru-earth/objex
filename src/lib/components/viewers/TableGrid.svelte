@@ -7,15 +7,15 @@ import ColumnsIcon from '@lucide/svelte/icons/columns-3';
 import CopyIcon from '@lucide/svelte/icons/copy';
 import RowsIcon from '@lucide/svelte/icons/rows-3';
 import XIcon from '@lucide/svelte/icons/x';
-import { onDestroy } from 'svelte';
-import { t } from '$lib/i18n/index.svelte.js';
 import {
 	classifyType,
+	jsonReplacerBigInt,
 	type TypeCategory,
 	typeBadgeClass,
 	typeLabel
-} from '$lib/utils/column-types.js';
-import { jsonReplacerBigInt } from '$lib/utils/format.js';
+} from '@walkthru-earth/objex-utils';
+import { onDestroy } from 'svelte';
+import { t } from '$lib/i18n/index.svelte.js';
 
 const INITIAL_ROWS = 100;
 const BATCH_SIZE = 100;

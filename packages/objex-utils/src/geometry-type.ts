@@ -12,7 +12,7 @@
  * instead of ad-hoc regex so behaviour stays consistent.
  */
 
-import { WGS84_CODES } from '../constants.js';
+import { WGS84_CODES } from '../../../src/lib/constants.js';
 
 export interface GeometryTypeInfo {
 	/** True if the type is some form of GEOMETRY (with or without CRS). */

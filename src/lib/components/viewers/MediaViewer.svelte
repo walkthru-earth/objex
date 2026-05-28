@@ -1,11 +1,11 @@
 <script lang="ts">
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { getMimeType } from '$lib/file-icons/index.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { handleLoadError } from '$lib/utils/error.js';
-import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 

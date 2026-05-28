@@ -31,7 +31,9 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsup"
+		"build": "tsup && node ../../scripts/verify-objex-utils-bundle.mjs",
+		"verify-bundle": "node ../../scripts/verify-objex-utils-bundle.mjs",
+		"test": "vitest run"
 	},
 	"peerDependencies": {
 		"apache-arrow": ">=14",
@@ -54,7 +56,12 @@
 		}
 	},
 	"devDependencies": {
+		"apache-arrow": "^21.1.0",
+		"hyparquet": "^1.26.0",
+		"hyparquet-compressors": "^1.1.1",
 		"tsup": "^8.5.0",
-		"typescript": "^5.9.3"
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.7",
+		"yaml": "^2.9.0"
 	}
 }

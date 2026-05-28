@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Tab } from '$lib/types';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 

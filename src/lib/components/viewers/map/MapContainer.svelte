@@ -1,8 +1,10 @@
 <script lang="ts">
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { resolveBasemap } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
+import { appConfig } from '$lib/stores/config.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 
 const MAP_STYLES = {
@@ -37,11 +39,34 @@ let {
 	bounds?: [number, number, number, number];
 } = $props();
 
-const resolvedStyle = $derived(style ?? MAP_STYLES[settings.resolved]);
+function toMapStyle(variant: 'light' | 'dark'): string | maplibregl.StyleSpecification {
+	const bm = resolveBasemap(appConfig.value, variant, settings.basemapId);
+	if (!bm) return MAP_STYLES[variant];
+	if (bm.type === 'raster') {
+		return {
+			version: 8,
+			sources: {
+				'objex-basemap': { type: 'raster', tiles: [bm.url], tileSize: 256 }
+			},
+			layers: [{ id: 'objex-basemap', type: 'raster', source: 'objex-basemap' }]
+		};
+	}
+	return bm.url;
+}
+
+const resolvedBasemap = $derived(
+	style ? undefined : resolveBasemap(appConfig.value, settings.resolved, settings.basemapId)
+);
+const resolvedStyle = $derived(style ?? toMapStyle(settings.resolved));
+// Stable identity for style-swap comparison: a raster StyleSpecification is a
+// fresh object on every derive, so compare by basemap id + variant instead.
+const styleKey = $derived(
+	style ? 'custom' : `${resolvedBasemap?.id ?? 'fallback'}:${settings.resolved}`
+);
 
 let containerEl: HTMLDivElement | undefined = $state();
 let map: maplibregl.Map | null = null;
-let currentStyleUrl: string | maplibregl.StyleSpecification | null = null;
+let currentStyleKey: string | null = null;
 let currentZoom = $state(2);
 let webglLost = $state(false);
 
@@ -56,7 +81,7 @@ function initMap() {
 		zoom
 	});
 
-	currentStyleUrl = resolvedStyle;
+	currentStyleKey = styleKey;
 
 	map.addControl(
 		new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
@@ -117,12 +142,13 @@ $effect(() => {
 	}
 });
 
-// React to theme changes — swap basemap style
+// React to theme / basemap changes — swap basemap style
 $effect(() => {
-	const newStyle = resolvedStyle;
-	if (map && currentStyleUrl !== newStyle && !style) {
-		currentStyleUrl = newStyle;
-		map.setStyle(newStyle);
+	const nextKey = styleKey;
+	const nextStyle = resolvedStyle;
+	if (map && currentStyleKey !== nextKey && !style) {
+		currentStyleKey = nextKey;
+		map.setStyle(nextStyle);
 	}
 });
 

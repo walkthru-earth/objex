@@ -4,8 +4,8 @@
  * Reuses:
  *   - `getQueryEngine()` + `queryCancellable`/`query` for the single worker
  *   - `resolveTableSourceAsync(tab)` for presigned `signed-s3` URL handling
- *   - `stacRowToItem` from `utils/stac-geoparquet.js` for the pure transform
- *   - `parseWKB` from `utils/wkb.js` for geometry decoding
+ *   - `stacRowToItem` from `@walkthru-earth/objex-utils` for the pure transform
+ *   - `parseWKB` from `@walkthru-earth/objex-utils` for geometry decoding
  *
  * Push-down: `bbox` (`ST_Intersects` + `ST_MakeEnvelope`) and `datetime`
  * (`datetime BETWEEN TIMESTAMPTZ ...`). Without the datetime push-down,
@@ -28,19 +28,18 @@
  * stream via `conn.send()` so large catalogs can render progressively.
  */
 
-import type { StorageAdapter } from '../storage/adapter.js';
-import type { Tab } from '../types.js';
-import type { StacItem } from '../utils/stac.js';
-import type { FacetState } from '../utils/stac-facets.js';
-import { stacRowToItem } from '../utils/stac-geoparquet.js';
+import type { FacetState, StacItem } from '@walkthru-earth/objex-utils';
 import {
 	emptyPushdown,
+	parseWKB,
 	type StacSource,
 	type StacSourceBatch,
 	type StacSourceCapabilities,
-	type StacSourceRequest
-} from '../utils/stac-source.js';
-import { parseWKB } from '../utils/wkb.js';
+	type StacSourceRequest,
+	stacRowToItem
+} from '@walkthru-earth/objex-utils';
+import type { StorageAdapter } from '../storage/adapter.js';
+import type { Tab } from '../types.js';
 import { QueryCancelledError } from './engine.js';
 import { getQueryEngine } from './index.js';
 import { type ResolvedTableSource, resolveTableSourceAsync } from './source.js';

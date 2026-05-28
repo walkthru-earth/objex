@@ -63,6 +63,27 @@ export const en: Record<string, string> = {
 	'theme.system': 'System',
 	'theme.tooltip': '{mode} mode',
 
+	// Settings
+	'settings.title': 'Settings',
+	'settings.tooltip': 'Settings',
+	'settings.appearance': 'Appearance',
+	'settings.language': 'Language',
+	'settings.data': 'Data',
+	'settings.interface': 'Interface',
+	'settings.map': 'Map',
+	'settings.basemapAuto': 'Auto (match theme)',
+	'settings.rowLimit': 'Default row limit',
+	'settings.rowLimitHelp': 'Rows loaded per page in the table viewer.',
+	'settings.mosaicLimit': 'STAC item limit',
+	'settings.mosaicLimitHelp': 'Maximum STAC items loaded into a mosaic.',
+	'settings.showConnectionRail': 'Connection sidebar',
+	'settings.showFileTree': 'File tree',
+	'settings.lockedByLink': 'Controlled by a link parameter',
+	'settings.copyConfig': 'Copy config JSON',
+	'settings.copied': 'Copied',
+	'settings.reset': 'Reset to defaults',
+	'settings.customConfig': 'Custom config loaded',
+
 	// Safe Lock
 	'safeLock.enabledAria': 'Safe lock enabled (read-only)',
 	'safeLock.disabledAria': 'Safe lock disabled (writes allowed)',
@@ -86,6 +107,12 @@ export const en: Record<string, string> = {
 	'fileTree.filterPlaceholder': 'Filter files...',
 	'fileTree.noMatch': 'No matching files',
 	'fileTree.emptyBucket': 'Empty bucket',
+	'fileTree.corsError': "Can't list this bucket",
+	'fileTree.corsHint':
+		'The server replied but sent no CORS headers, so the browser blocked the response. This is set by the bucket owner and cannot be changed here. The bucket needs a CORS policy that allows this origin, or access through a proxy.',
+	'fileTree.loadError': "Couldn't load this bucket",
+	'fileTree.loadErrorHint':
+		'Check the connection settings and your network, and confirm the bucket name and region are correct.',
 	'fileTree.expandDir': 'Expand directory',
 	'fileTree.copyHttpUrl': 'Copy HTTPS URL',
 	'fileTree.copyNativeUri': 'Copy {scheme} URI',

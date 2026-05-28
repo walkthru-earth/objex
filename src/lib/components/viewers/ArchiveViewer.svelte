@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Archive, ChevronRight, Download, File, Folder, Loader } from '@lucide/svelte';
+import { formatFileSize } from '@walkthru-earth/objex-utils';
 import type { Entry } from '@zip.js/zip.js';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -28,8 +29,7 @@ import {
 	streamTarGzEntriesFromUrl,
 	streamZipEntriesFromUrl
 } from '$lib/utils/archive';
-import { formatFileSize } from '$lib/utils/format';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 
 let { tab }: { tab: Tab } = $props();
 

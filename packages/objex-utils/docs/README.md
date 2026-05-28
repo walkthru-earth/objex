@@ -31,20 +31,29 @@ As of v1.2, `yaml` is loaded via dynamic `import()` inside `parseMarkdownDocumen
 
 | Page | Covers |
 |------|--------|
-| [`geometry.md`](./geometry.md) | WKB parser, GeoArrow table builder, geometry-column detection |
-| [`cog.md`](./cog.md) | Cloud-Optimized GeoTIFF helpers (pipeline selection, band configs, color ramps, bounds clamping) |
+| [`geometry.md`](./geometry.md) | WKB parser, GeoArrow table builder, geometry-column detection, parameterized GEOMETRY type parser (`parseGeometryTypeCrs`, `buildTransformExpr`, `wrapWkbWithCrs`) |
+| [`cog.md`](./cog.md) | Cloud-Optimized GeoTIFF pure helpers (bounds clamping, sample format labels, type guards). The render-pipeline surface stays in the Svelte components package and is NOT re-exported here. |
 | [`parquet-metadata.md`](./parquet-metadata.md) | `readParquetMetadata` + CRS / bounds / geometry-types extractors |
 | [`stac-geoparquet.md`](./stac-geoparquet.md) | stac-geoparquet detection (`isStacGeoparquetSchema`) and row-to-Item transforms (`stacRowToItem`, `flattenStacBbox`, `pickStacPrimaryAsset`, `resolveStacAssetHref`) |
 | [`stac-facets.md`](./stac-facets.md) | Auto-faceted state for STAC viewers, `extractItemView` / `buildFacets` / `applyFacets` / `sortViews` / `hasActiveFilters` / `emptyFacetState` + `StacItemView` / `Facet*` / `FacetState` types |
 | [`stac-pushdown.md`](./stac-pushdown.md) | `FacetState` → STAC API native query + CQL2-JSON translation. `sniffApiCapabilities`, `toNativeQuery`, `toCql2Filter`, `residualState` gated by what `conformsTo` advertises |
-| [`storage.md`](./storage.md) | URL parsing (`parseStorageUrl`, `resolveCloudUrl`), provider registry, `StorageAdapter` interface, `UrlAdapter` |
+| [`stac.md`](./stac.md) | Core STAC types and classifiers (`classifyStac`, `isStacItem`, `extractRasterBandAssets`, `extractMosaicAssets`, `buildMosaicSourceMeta`, `spatialCellKey`, `resolvePresetComposite`, `hasCompositableBands`, full type surface) |
+| [`stac-source.md`](./stac-source.md) | `StacSource` contract + `createApiSource` / `createStaticSource` implementations (parquet implementation lives in the Svelte components package because it requires DuckDB-WASM) |
+| [`stac-hydrate.md`](./stac-hydrate.md) | `hydrateStacItems` link-walker (Catalog / Collection / FeatureCollection / STAC API), `hasStacItemsEndpoint`, `absolutizeHref` |
+| [`stac-storage-extension.md`](./stac-storage-extension.md) | STAC Storage Extension v1.0.0 / v2.0.0 hints (`extractStorageHints`, `applyStorageHintsToConnection`) |
+| [`storage.md`](./storage.md) | URL parsing (`parseStorageUrl`, `resolveCloudUrl`, `classifyUrl`, `isKnownBucketHost`, `STAC_API_PATH_RE`), provider registry, `StorageAdapter` interface, `UrlAdapter`, `smokeTestHref`, `detectHostBucket`, `applyStacItemStorageHints`, `connectionIdentityKey` |
+| [`cog-asset.md`](./cog-asset.md) | Vendor-neutral COG asset enumeration (`extractCogAssets`, `syntheticSelfAsset`, `pickNaturalColorComposite`, `isSingleAssetComposite`, `allChannelsBand0`) |
+| [`channel-composite.md`](./channel-composite.md) | RGB composite presets and URL round-trip (`PRESETS`, `applyPreset`, `compositeFromUrl`, `compositeToUrl`, `presetMatchesComposite`) |
 | [`query-engine.md`](./query-engine.md) | `QueryEngine` interface and associated result/handle types |
 | [`file-types.md`](./file-types.md) | File-type registry (`getFileTypeInfo`, `getViewerKind`, `getDuckDbReadFn`, ...) |
-| [`formatting.md`](./formatting.md) | Display formatters, column-type classification, hex dump, CSV/JSON export |
+| [`formatting.md`](./formatting.md) | Display formatters, column-type classification, hex dump, CSV/JSON export, clipboard helper, notebook renderer |
 | [`file-sort.md`](./file-sort.md) | `sortFileEntries`, `toggleSortField` |
 | [`markdown-sql.md`](./markdown-sql.md) | Markdown + SQL block parsing (Evidence-compatible syntax) |
 | [`local-storage.md`](./local-storage.md) | SSR-safe `loadFromStorage` / `persistToStorage` |
-| [`errors.md`](./errors.md) | `handleLoadError` |
+| [`app-config.md`](./app-config.md) | Runtime config schema + precedence resolver (`AppConfig`, `mergeAppConfig`, `resolveSetting`, `resolveBasemap`, `parseVisibilityParam`, `coerce*`) |
+| [`map-pixel-inspect.md`](./map-pixel-inspect.md) | Framework-agnostic click-to-inspect helper (`attachPixelInspector`), minimal `MapLike` shape, per-click abort coordination |
+| [`lru.md`](./lru.md) | `LruCache<K,V>` move-to-end on `get`, optional `onEvict` |
+| [`errors.md`](./errors.md) | `handleLoadError`, `isAbortError` |
 | [`types-constants.md`](./types-constants.md) | `Connection`, `Tab`, `FileEntry`, `WriteResult`, `Theme`, shared constants |
 
 ## Quick recipes
@@ -94,7 +103,7 @@ const rows = generateHexDump(bytes);
 
 ## Upstream source
 
-All modules re-export from `src/lib/` in the [objex](https://github.com/walkthru-earth/objex) monorepo. The re-export list lives at [`packages/objex-utils/src/index.ts`](../src/index.ts).
+Most modules now live physically inside `packages/objex-utils/src/` (each re-exported via `export *` from `index.ts`). A handful of host-side types are still re-exported from `src/lib/` so both `@walkthru-earth/objex` and `@walkthru-earth/objex-utils` share the same shapes (Connection, StorageAdapter, QueryEngine, file-icons, constants). See [`packages/objex-utils/src/index.ts`](../src/index.ts) in the [objex](https://github.com/walkthru-earth/objex) monorepo.
 
 ## Versioning & releases
 

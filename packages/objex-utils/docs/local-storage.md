@@ -2,7 +2,7 @@
 
 SSR-safe JSON persistence on top of `window.localStorage`.
 
-Source: `src/lib/utils/local-storage.ts`.
+Source: `packages/objex-utils/src/local-storage.ts`.
 
 ## Functions
 

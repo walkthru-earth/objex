@@ -2,7 +2,7 @@
 
 Lightweight GeoParquet-aware metadata reader for remote Parquet files. Uses [`hyparquet`](https://github.com/hyparam/hyparquet) via HTTP range requests (~512 KB) so you can inspect schemas and geo metadata **before** DuckDB-WASM finishes booting.
 
-Source: `src/lib/utils/parquet-metadata.ts`.
+Source: `packages/objex-utils/src/parquet-metadata.ts`.
 
 ## Peer dependencies
 

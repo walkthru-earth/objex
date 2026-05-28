@@ -2,6 +2,13 @@
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { COGLayer } from '@developmentseed/deck.gl-geotiff';
 import { DecoderPool, GeoTIFF } from '@developmentseed/geotiff';
+import {
+	attachPixelInspector,
+	type ChannelComposite,
+	type CogAsset,
+	smokeTestHref,
+	syntheticSelfAsset
+} from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
 import { t } from '../../i18n/index.svelte.js';
@@ -38,11 +45,8 @@ import {
 	selectCogPipeline,
 	selectOverviewForResolution
 } from '../../utils/cog.js';
-import { type ChannelComposite, type CogAsset, syntheticSelfAsset } from '../../utils/cog-asset.js';
 import { seedRescaleFromGeotiff } from '../../utils/cog-histogram.js';
-import { attachPixelInspector } from '../../utils/map-pixel-inspect.js';
-import { smokeTestHref } from '../../utils/storage-smoketest.js';
-import { buildHttpsUrlAsync } from '../../utils/url.js';
+import { buildHttpsUrlAsync } from '../../utils/signed-url.js';
 import CogControls from './CogControls.svelte';
 import PixelInspectorPanel, { type PixelInspectorRow } from './cog/PixelInspectorPanel.svelte';
 import MapContainer from './map/MapContainer.svelte';
@@ -404,9 +408,9 @@ function buildCogLayer(
 
 	const cogInput = preflightGeotiff ?? resolvedHttpsUrl ?? '';
 
-	// Cast: `onViewportLoad` is forwarded by our pnpm patch to the inner
-	// TileLayer, but COGLayer's generated .d.ts does not expose it.
-	// biome-ignore lint/suspicious/noExplicitAny: upstream prop not yet in types
+	// Cast: `onViewportLoad` is forwarded natively by COGLayer's RasterTileLayer
+	// base in 0.7.0 (deck.gl-raster PR #546), but COGLayer's generated .d.ts does
+	// not surface it.
 	const cogProps: any = {
 		// Stable id per tab so rebuilds on band/style change don't force deck.gl
 		// to treat this as a brand-new layer and drop cached tile state.

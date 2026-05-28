@@ -1,13 +1,16 @@
 <script lang="ts">
+import {
+	formatFileSize,
+	generateHexDump,
+	type HexRow,
+	handleLoadError
+} from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
-import { handleLoadError } from '$lib/utils/error.js';
-import { formatFileSize } from '$lib/utils/format';
-import { generateHexDump, type HexRow } from '$lib/utils/hex';
 
 let { tab }: { tab: Tab } = $props();
 

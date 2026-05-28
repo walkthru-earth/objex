@@ -69,8 +69,14 @@ const JSON_TYPES = ['JSON', 'JSONB'];
 export function classifyType(duckdbType: string): TypeCategory {
 	const upper = duckdbType.toUpperCase().trim();
 
-	// Handle parameterized types like DECIMAL(18,3), VARCHAR(100)
-	const base = upper.replace(/\(.*\)/, '').trim();
+	// Handle parameterized types like DECIMAL(18,3), VARCHAR(100). Strip the
+	// parenthesized span (first '(' to last ')') via index math instead of a
+	// regex to avoid polynomial backtracking on '('-heavy input.
+	const openIdx = upper.indexOf('(');
+	const closeIdx = upper.lastIndexOf(')');
+	const base = (
+		openIdx >= 0 && closeIdx > openIdx ? upper.slice(0, openIdx) + upper.slice(closeIdx + 1) : upper
+	).trim();
 
 	if (NUMBER_TYPES.includes(base)) return 'number';
 	if (STRING_TYPES.includes(base)) return 'string';

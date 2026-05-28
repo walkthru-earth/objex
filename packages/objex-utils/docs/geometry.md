@@ -2,7 +2,7 @@
 
 WKB parsing, geometry-column detection, and GeoArrow table construction. Zero-copy where possible.
 
-Source: `src/lib/utils/wkb.ts`, `src/lib/utils/geoarrow.ts`.
+Source: `packages/objex-utils/src/wkb.ts`, `packages/objex-utils/src/geoarrow.ts`.
 
 ## Types
 
@@ -51,7 +51,7 @@ type GeoArrowGeomType =
   | 'multipolygon';
 ```
 
-Lowercase normalized form used by the GeoArrow builder and `@geoarrow/deck.gl-layers`.
+Lowercase normalized form used by the GeoArrow builder and `@geoarrow/deck.gl-geoarrow`.
 
 ### `GeoArrowResult`
 
@@ -152,7 +152,7 @@ function buildGeoArrowTables(
 ): GeoArrowResult[]
 ```
 
-Build one or more Arrow `Table` objects keyed by geometry type, ready for `@geoarrow/deck.gl-layers`.
+Build one or more Arrow `Table` objects keyed by geometry type, ready for `@geoarrow/deck.gl-geoarrow`.
 
 **Parameters**
 

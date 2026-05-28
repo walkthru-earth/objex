@@ -36,7 +36,7 @@
  * Also handles plain bucket names (no protocol).
  */
 
-import { PROVIDERS } from '../storage/providers.js';
+import { PROVIDERS } from '../../../src/lib/storage/providers.js';
 
 export type StorageProvider = string;
 
@@ -68,6 +68,24 @@ function buildSchemeMap(): Record<string, { provider: StorageProvider; strip: nu
 
 /** All recognized URI scheme prefixes (lowercase), derived from provider registry */
 const SCHEME_MAP = buildSchemeMap();
+
+const SLASH = 47; // '/'.charCodeAt(0)
+
+/** Strip trailing '/' linearly (avoids the polynomial backtracking of `/\/+$/`). */
+function stripTrailingSlashes(s: string): string {
+	let end = s.length;
+	while (end > 0 && s.charCodeAt(end - 1) === SLASH) end--;
+	return s.slice(0, end);
+}
+
+/** Strip leading and trailing '/' linearly (avoids `/^\/+|\/+$/g` backtracking). */
+function stripEdgeSlashes(s: string): string {
+	let start = 0;
+	let end = s.length;
+	while (start < end && s.charCodeAt(start) === SLASH) start++;
+	while (end > start && s.charCodeAt(end - 1) === SLASH) end--;
+	return s.slice(start, end);
+}
 
 /**
  * Shared host matchers. Used by both `parseStorageUrl` and `isKnownBucketHost`
@@ -162,7 +180,7 @@ function splitBucketPrefix(rest: string): { bucket: string; prefix: string } {
 	if (slashIdx >= 0) {
 		return {
 			bucket: rest.slice(0, slashIdx),
-			prefix: rest.slice(slashIdx + 1).replace(/\/+$/, '')
+			prefix: stripTrailingSlashes(rest.slice(slashIdx + 1))
 		};
 	}
 	return { bucket: rest, prefix: '' };
@@ -519,7 +537,7 @@ export function parseStorageUrl(input: string, defaults: Defaults = {}): ParsedS
 	}
 
 	// ── Plain bucket name (no protocol) ─────────────────────────────
-	const cleaned = trimmed.replace(/^\/+|\/+$/g, '');
+	const cleaned = stripEdgeSlashes(trimmed);
 	return {
 		bucket: cleaned,
 		region: defaults.region || 'us-east-1',

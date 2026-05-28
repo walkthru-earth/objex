@@ -1,3 +1,4 @@
+import { getNativeScheme, safeDecodeURIComponent } from '@walkthru-earth/objex-utils';
 import { presignHttpsUrl } from '../storage/presign.js';
 import {
 	buildProviderBaseUrl,
@@ -6,8 +7,45 @@ import {
 } from '../storage/providers.js';
 import { connections } from '../stores/connections.svelte.js';
 import { credentialStore } from '../stores/credentials.svelte.js';
-import type { Tab } from '../types.js';
-import { getNativeScheme, safeDecodeURIComponent } from './cloud-url.js';
+import type { Connection, Tab } from '../types.js';
+
+/** Percent-encode each path segment, preserving the slashes between them. */
+function encodeKeyPath(key: string): string {
+	return key
+		.split('/')
+		.map((s) => encodeURIComponent(s))
+		.join('/');
+}
+
+/**
+ * Build an HTTPS URL for a file in a given connection. Provider-aware via
+ * `buildProviderBaseUrl` (AWS, GCS, R2, Wasabi, B2, DO, Storj, Contabo, Hetzner,
+ * Linode, OVH, MinIO), with the Azure container/blob + SAS special case. This is
+ * the single source of truth shared by `buildHttpsUrl` (tab-based) and the
+ * FileTreeSidebar "Copy HTTP URL" action, so neither can drift back to a
+ * hardcoded AWS fallback for non-AWS providers.
+ *
+ * @param opts.encode percent-encode each path segment (for copy-to-clipboard).
+ *   Off by default to preserve the raw streaming-URL behavior viewers rely on.
+ */
+export function buildHttpsUrlForConnection(
+	conn: Connection,
+	path: string,
+	opts?: { encode?: boolean }
+): string {
+	const cleanPath = path.replace(/^\//, '');
+	const finalPath = opts?.encode ? encodeKeyPath(cleanPath) : cleanPath;
+
+	// Azure: <endpoint>/<container>/<blob>, append SAS if available
+	if (conn.provider === 'azure') {
+		const base = conn.endpoint
+			? `${conn.endpoint.replace(/\/$/, '')}/${conn.bucket}/${finalPath}`
+			: `https://${conn.bucket}.blob.core.windows.net/${finalPath}`;
+		return appendAzureSas(base, conn.id);
+	}
+
+	return `${buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region)}/${finalPath}`;
+}
 
 /**
  * Build an HTTPS URL for a tab's file.
@@ -16,18 +54,7 @@ import { getNativeScheme, safeDecodeURIComponent } from './cloud-url.js';
 export function buildHttpsUrl(tab: Tab): string {
 	const conn = tab.connectionId ? connections.getById(tab.connectionId) : null;
 	if (!conn) return tab.path;
-
-	const cleanPath = tab.path.replace(/^\//, '');
-
-	// Azure: <endpoint>/<container>/<blob>, append SAS if available
-	if (conn.provider === 'azure') {
-		const base = conn.endpoint
-			? `${conn.endpoint.replace(/\/$/, '')}/${conn.bucket}/${cleanPath}`
-			: `https://${conn.bucket}.blob.core.windows.net/${cleanPath}`;
-		return appendAzureSas(base, conn.id);
-	}
-
-	return `${buildProviderBaseUrl(conn.provider as ProviderId, conn.endpoint, conn.bucket, conn.region)}/${cleanPath}`;
+	return buildHttpsUrlForConnection(conn, tab.path);
 }
 
 /**

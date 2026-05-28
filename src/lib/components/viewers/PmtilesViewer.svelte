@@ -11,7 +11,7 @@ import { t } from '$lib/i18n/index.svelte.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { loadPmtiles, type PmtilesMetadata } from '$lib/utils/pmtiles';
-import { buildHttpsUrlAsync } from '$lib/utils/url.js';
+import { buildHttpsUrlAsync } from '$lib/utils/signed-url.js';
 import { pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 
 let { tab }: { tab: Tab } = $props();

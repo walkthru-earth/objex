@@ -8,11 +8,10 @@
  * Also extracts `rootPrefix` when the app is hosted inside a subfolder.
  */
 
-import { buildProviderBaseUrl, type ProviderId } from '$lib/storage/providers.js';
+import { buildProviderBaseUrl, type ProviderId } from '../../../src/lib/storage/providers.js';
 import type { StacItem } from './stac.js';
 import { applyStorageHintsToConnection, extractStorageHints } from './stac-storage-extension.js';
-import type { StorageProvider } from './storage-url.js';
-import { isKnownBucketHost, parseStorageUrl } from './storage-url.js';
+import { isKnownBucketHost, parseStorageUrl, type StorageProvider } from './storage-url.js';
 
 export interface DetectedHost {
 	provider: StorageProvider;
