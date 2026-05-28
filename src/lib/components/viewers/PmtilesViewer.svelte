@@ -2,6 +2,7 @@
 import ArchiveIcon from '@lucide/svelte/icons/archive';
 import GridIcon from '@lucide/svelte/icons/grid-3x3';
 import MapIcon from '@lucide/svelte/icons/map';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -75,7 +76,7 @@ async function load() {
 		pmtilesInstance = result.pmtiles;
 		metadata = result.metadata;
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 	}
