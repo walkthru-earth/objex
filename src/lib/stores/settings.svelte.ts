@@ -17,6 +17,7 @@ interface UserSettings {
 	mosaicItemLimit?: number;
 	showConnectionRail?: boolean;
 	showFileTree?: boolean;
+	basemapId?: string;
 }
 
 /**
@@ -114,6 +115,10 @@ function createSettingsStore() {
 		get treeLockedByParam(): boolean {
 			return treeParam !== undefined;
 		},
+		/** The user-picked basemap id, or undefined to follow config/theme defaults. */
+		get basemapId(): string | undefined {
+			return user.basemapId;
+		},
 		setTheme(t: Theme) {
 			user = { ...user, theme: t };
 			persist();
@@ -136,6 +141,15 @@ function createSettingsStore() {
 		},
 		setShowFileTree(v: boolean) {
 			user = { ...user, showFileTree: v };
+			persist();
+		},
+		setBasemap(id: string | undefined) {
+			if (id === undefined) {
+				const { basemapId: _omit, ...rest } = user;
+				user = rest;
+			} else {
+				user = { ...user, basemapId: id };
+			}
 			persist();
 		},
 		/** Clear all user overrides, reverting every value to config or hardcoded fallback. */
