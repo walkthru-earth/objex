@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Archive, ChevronRight, Download, File, Folder, Loader } from '@lucide/svelte';
-import { formatFileSize } from '@walkthru-earth/objex-utils';
+import { formatFileSize, handleLoadError, isAbortError } from '@walkthru-earth/objex-utils';
 import type { Entry } from '@zip.js/zip.js';
 import { onDestroy, untrack } from 'svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -165,8 +165,8 @@ async function loadArchive() {
 			error = t('archive.unsupported');
 		}
 	} catch (err) {
-		if ((err as DOMException)?.name === 'AbortError') return;
-		error = err instanceof Error ? err.message : String(err);
+		if (isAbortError(err)) return;
+		error = handleLoadError(err);
 	} finally {
 		scanning = false;
 		if (initializing) initializing = false;
@@ -187,7 +187,7 @@ async function loadZip() {
 			loadMethod = 'range';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			entryList = [];
 			scanCount = 0;
 			zipEntryMap.clear();
@@ -218,7 +218,7 @@ async function loadTar() {
 			loadMethod = 'range';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			entryList = [];
 			scanCount = 0;
 			remoteUrl = '';
@@ -260,7 +260,7 @@ async function loadTarGz() {
 			loadMethod = 'full';
 			return;
 		} catch (err) {
-			if ((err as DOMException)?.name === 'AbortError') throw err;
+			if (isAbortError(err)) throw err;
 			// Fall through to full-buffer approach
 			entryList = [];
 			scanCount = 0;
