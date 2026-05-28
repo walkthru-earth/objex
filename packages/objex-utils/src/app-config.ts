@@ -135,6 +135,32 @@ function coerceConnections(v: unknown): ConnectionSeed[] | undefined {
 }
 
 /**
+ * Pick the basemap a map should render. Precedence: explicit user pick (when it
+ * still exists in the configured list) > the configured default for the theme
+ * variant > the first basemap matching the variant > the first basemap of any
+ * variant. Returns undefined when no basemaps are configured, signalling the
+ * caller to fall back to its hardcoded default.
+ */
+export function resolveBasemap(
+	config: AppConfig,
+	variant: 'light' | 'dark',
+	userId: string | undefined
+): BasemapConfig | undefined {
+	const list = config.basemaps;
+	if (list.length === 0) return undefined;
+	if (userId) {
+		const picked = list.find((b) => b.id === userId);
+		if (picked) return picked;
+	}
+	const defaultId = config.defaultBasemap[variant];
+	if (defaultId) {
+		const byDefault = list.find((b) => b.id === defaultId);
+		if (byDefault) return byDefault;
+	}
+	return list.find((b) => b.variant === variant) ?? list[0];
+}
+
+/**
  * Merge an untrusted JSON value over a base config, field by field.
  * Unknown fields are ignored. Malformed values fall back to the base.
  * Never reads secrets.

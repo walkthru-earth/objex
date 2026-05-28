@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AppConfig } from './app-config.js';
 import {
 	coerceBool,
 	coercePositiveInt,
@@ -7,6 +8,7 @@ import {
 	DEFAULT_APP_CONFIG,
 	mergeAppConfig,
 	parseVisibilityParam,
+	resolveBasemap,
 	resolveSetting
 } from './app-config.js';
 
@@ -102,5 +104,67 @@ describe('mergeAppConfig', () => {
 		expect(merged.connections).toHaveLength(2);
 		expect(merged.connections[0].name).toBe('Pub');
 		expect(merged.connections[1].anonymous).toBe(false);
+	});
+});
+
+function cfgWith(over: Partial<AppConfig>): AppConfig {
+	return { ...DEFAULT_APP_CONFIG, ...over };
+}
+
+describe('resolveBasemap', () => {
+	const positron = {
+		id: 'positron',
+		label: 'Positron',
+		type: 'vector' as const,
+		url: 'p',
+		variant: 'light' as const
+	};
+	const dark = {
+		id: 'dark-matter',
+		label: 'Dark Matter',
+		type: 'vector' as const,
+		url: 'd',
+		variant: 'dark' as const
+	};
+	const osm = { id: 'osm', label: 'OSM', type: 'raster' as const, url: 'o' };
+
+	it('returns undefined when no basemaps are configured', () => {
+		expect(resolveBasemap(DEFAULT_APP_CONFIG, 'light', undefined)).toBeUndefined();
+	});
+
+	it('honours an explicit user pick regardless of theme', () => {
+		const cfg = cfgWith({
+			basemaps: [positron, dark, osm],
+			defaultBasemap: { light: 'positron', dark: 'dark-matter' }
+		});
+		expect(resolveBasemap(cfg, 'dark', 'osm')).toEqual(osm);
+		expect(resolveBasemap(cfg, 'light', 'osm')).toEqual(osm);
+	});
+
+	it('ignores a user pick that no longer exists and falls through', () => {
+		const cfg = cfgWith({
+			basemaps: [positron, dark],
+			defaultBasemap: { light: 'positron', dark: 'dark-matter' }
+		});
+		expect(resolveBasemap(cfg, 'dark', 'gone')).toEqual(dark);
+	});
+
+	it('falls back to defaultBasemap for the variant', () => {
+		const cfg = cfgWith({
+			basemaps: [positron, dark],
+			defaultBasemap: { light: 'positron', dark: 'dark-matter' }
+		});
+		expect(resolveBasemap(cfg, 'light', undefined)).toEqual(positron);
+		expect(resolveBasemap(cfg, 'dark', undefined)).toEqual(dark);
+	});
+
+	it('falls back to first basemap matching the variant when no default set', () => {
+		const cfg = cfgWith({ basemaps: [positron, dark], defaultBasemap: {} });
+		expect(resolveBasemap(cfg, 'dark', undefined)).toEqual(dark);
+	});
+
+	it('falls back to the first basemap when nothing matches the variant', () => {
+		const cfg = cfgWith({ basemaps: [osm], defaultBasemap: {} });
+		expect(resolveBasemap(cfg, 'light', undefined)).toEqual(osm);
 	});
 });
