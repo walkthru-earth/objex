@@ -253,7 +253,7 @@ function formatValue(v: unknown): string {
 	</div>
 
 	<!-- Main content -->
-	<div class="flex min-h-0 flex-1 overflow-hidden">
+	<div class="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
 		{#if loading}
 			<div class="flex flex-1 items-center justify-center text-xs text-muted-foreground">
 				Loading tile...
@@ -312,7 +312,7 @@ function formatValue(v: unknown): string {
 
 			<!-- Feature properties panel -->
 			<div
-				class="flex w-56 shrink-0 flex-col border-s border-border lg:w-64"
+				class="flex w-full flex-col border-t border-border sm:w-56 sm:shrink-0 sm:border-s sm:border-t-0 lg:w-64"
 			>
 				<div
 					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
@@ -402,7 +402,7 @@ function formatValue(v: unknown): string {
 
 			<!-- Raster tile info panel -->
 			<div
-				class="flex w-56 shrink-0 flex-col border-s border-border lg:w-64"
+				class="flex w-full flex-col border-t border-border sm:w-56 sm:shrink-0 sm:border-s sm:border-t-0 lg:w-64"
 			>
 				<div
 					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
