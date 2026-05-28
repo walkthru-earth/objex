@@ -9,6 +9,10 @@ onlyBuiltDependencies:
   - lefthook
   - protobufjs
 
+overrides:
+  zarrita: '^0.7.1'
+
 patchedDependencies:
-  '@developmentseed/deck.gl-geotiff@0.6.0-alpha.1': patches/@developmentseed__deck.gl-geotiff@0.6.0-alpha.1.patch
+  '@developmentseed/deck.gl-geotiff@0.6.1': patches/@developmentseed__deck.gl-geotiff@0.6.1.patch
+  '@developmentseed/deck.gl-raster@0.6.1': patches/@developmentseed__deck.gl-raster@0.6.1.patch
   '@carbonplan/zarr-layer@0.4.3': patches/@carbonplan__zarr-layer@0.4.3.patch

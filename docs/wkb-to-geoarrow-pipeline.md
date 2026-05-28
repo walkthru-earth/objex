@@ -9,8 +9,8 @@ public Slack reply to Kyle Barron defensible line by line.
 
 Objex reads geospatial tables (GeoParquet, native Parquet `GEOMETRY`,
 GeoJSON, etc.) through DuckDB-WASM, then renders them on a deck.gl map
-via `@geoarrow/deck.gl-layers`. The bridge between DuckDB's Arrow output
-and the GeoArrow-typed Arrow tables that deck.gl-layers expects is
+via `@geoarrow/deck.gl-geoarrow`. The bridge between DuckDB's Arrow output
+and the GeoArrow-typed Arrow tables that deck.gl-geoarrow expects is
 `buildGeoArrowTables` in `packages/objex-utils/src/geoarrow.ts` (re-exported through `src/lib/index.ts` and the `@walkthru-earth/objex-utils` entry point). It walks raw WKB
 bytes directly into pre-allocated `Float64Array` and `Int32Array`
 buffers and wraps them with the correct nested Arrow type and
@@ -64,7 +64,7 @@ The exact npm version exporting this is `@walkthru-earth/objex-utils@1.3.1`
 `packages/objex-utils/src/geoarrow.ts:42-51`. Maps DuckDB `ST_GeometryType()`
 output (`POLYGON`, `ST_MULTIPOLYGON`, etc., case-insensitive) to the
 `GeoArrowGeomType` enum. Unknown input falls back to `'polygon'`. The
-fallback is load-bearing because deck.gl-layers will throw if the
+fallback is load-bearing because deck.gl-geoarrow will throw if the
 declared type does not match the Arrow extension name on the column.
 
 ## 3. End-to-end data cycle
@@ -501,7 +501,7 @@ is re-attached via `ST_SetCRS(ST_GeomFromWKB(...))` in
 The single consumer of `buildGeoArrowTables` in the repo is
 `GeoParquetMapViewer.svelte`. It mounts deck.gl via
 `MapboxOverlay` (`utils/deck.ts:67-74, :161-169`) and dispatches to one of
-three `@geoarrow/deck.gl-layers` classes via
+three `@geoarrow/deck.gl-geoarrow` classes via
 `createLayerForResult` at `utils/deck.ts:86-151`:
 
 - `point` / `multipoint` → `GeoArrowScatterplotLayer`.

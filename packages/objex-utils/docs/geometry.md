@@ -51,7 +51,7 @@ type GeoArrowGeomType =
   | 'multipolygon';
 ```
 
-Lowercase normalized form used by the GeoArrow builder and `@geoarrow/deck.gl-layers`.
+Lowercase normalized form used by the GeoArrow builder and `@geoarrow/deck.gl-geoarrow`.
 
 ### `GeoArrowResult`
 
@@ -152,7 +152,7 @@ function buildGeoArrowTables(
 ): GeoArrowResult[]
 ```
 
-Build one or more Arrow `Table` objects keyed by geometry type, ready for `@geoarrow/deck.gl-layers`.
+Build one or more Arrow `Table` objects keyed by geometry type, ready for `@geoarrow/deck.gl-geoarrow`.
 
 **Parameters**
 

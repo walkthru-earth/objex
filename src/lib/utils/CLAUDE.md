@@ -14,7 +14,7 @@ graph TD
         COG[cog.ts<br/>@developmentseed/* + proj4 + maplibre-gl]
         COGH[cog-histogram.ts<br/>@developmentseed/geotiff]
         CSP[colormap-sprite.ts<br/>@developmentseed + @luma.gl]
-        DECK[deck.ts<br/>lazy @deck.gl/* + @geoarrow/deck.gl-layers]
+        DECK[deck.ts<br/>lazy @deck.gl/* + @geoarrow/deck.gl-geoarrow]
         ZARR[zarr.ts<br/>lazy zarrita + numcodecs]
         ZTAB[zarr-tab.ts<br/>Svelte stores]
         PMT[pmtiles.ts<br/>pmtiles + maplibre-gl]
@@ -40,7 +40,7 @@ graph TD
 | `cog.ts` | `selectCogPipeline()`, `createConfigurableGetTileData()`, `buildCustomRenderTile()`, `readPixelAtLngLat()`, `inspectCogTags()`, `normalizeCogGeotiff()`, `defaultBandConfig()`, `defaultRescaleForGeotiff()`, `buildHistogramFromGeotiff()`, `percentileFromHistogram()`, `mapResolutionMetersPerPixel()`, `selectOverviewForResolution()`, `createEpsgResolver()`, full render-pipeline surface. Re-exports `SF_LABELS`, `safeClamp`, `clampBounds`, `buildDataTypeLabel`, `CogInfo`, `GeoBounds` from `objex-utils` so in-repo callers keep working | `@developmentseed/*` (geotiff, deck.gl-geotiff, deck.gl-raster, epsg, proj), `@chunkd/*`, `@luma.gl/core`, `proj4`, `wkt-parser`, `maplibre-gl` | CogViewer, MultiCogViewer, StacMosaicViewer, CogControls |
 | `cog-histogram.ts` | `HISTOGRAM_BINS`, `readGdalStats()`, `streamHistogram()` | `@developmentseed/geotiff` | cog.ts, CogViewer, MultiCogViewer |
 | `colormap-sprite.ts` | `loadColormapSprite()`, `getColormapTexture()`, `COLORMAP_NAMES`, `COLORMAP_SPRITE_URL`, re-exports `COLORMAP_INDEX` / `ColormapName` | `@developmentseed/deck.gl-raster/gpu-modules`, `@luma.gl/core` | cog.ts |
-| `deck.ts` | `hoverCursor()`, `geojsonFillColor()`, `geojsonLineColor()`, `loadDeckModules()`, `loadGeoArrowModules()`, `createGeoArrowOverlay()`, `createGeoArrowLayers()`, `buildSelectionLayer()`, `GEOMETRY_COLORS`. `GeoArrowResult` type imported from `@walkthru-earth/objex-utils` | lazy `await import('@deck.gl/mapbox' | '@deck.gl/layers' | '@geoarrow/deck.gl-layers')` , kept lazy via svelte-package per-file output | FlatGeobufViewer, GeoParquetMapViewer |
+| `deck.ts` | `hoverCursor()`, `geojsonFillColor()`, `geojsonLineColor()`, `loadDeckModules()`, `loadGeoArrowModules()`, `createGeoArrowOverlay()`, `createGeoArrowLayers()`, `buildSelectionLayer()`, `GEOMETRY_COLORS`. `GeoArrowResult` type imported from `@walkthru-earth/objex-utils` | lazy `await import('@deck.gl/mapbox' | '@deck.gl/layers' | '@geoarrow/deck.gl-geoarrow')` , kept lazy via svelte-package per-file output | FlatGeobufViewer, GeoParquetMapViewer |
 | `zarr.ts` | `ZARR_MARKER_FILES`, `detectZarrMarkers()`, `extractZarrStoreUrl()`, `fetchHierarchy()`, `probeHierarchy()`, `buildV3Tree()`, `buildV2Tree()`, `discoverV3Children()`, `listS3Children()`, `ensureCodecsRegistered()`, `detectGeoZarr()`, `inferDims()`, `formatCodecs()`, `formatChunkKeys()`, `computeChunkCount()`, `computeChunkSize()`, `computeUncompressed()`, `dtypeByteSize()`, `formatShape()`, `DIM_LIKE_NAMES`, `ZarrNode`, `ZarrHierarchy`, `GeoZarrInfo`. `formatFileSize` imported from `@walkthru-earth/objex-utils` | lazy `await import('zarrita')` , kept lazy via svelte-package per-file output | ZarrViewer, ZarrMapViewer, +page.svelte |
 | `zarr-tab.ts` | `openZarrTab()` | `stores/tabs.svelte.js` | FileTreeSidebar, +page.svelte |
 | `pmtiles.ts` | `getPmtilesProtocol()`, `loadPmtiles()`, `buildPmtilesLayers()`, `TILE_TYPE_LABELS`, `COMPRESSION_LABELS`, `VectorLayerInfo`, `PmtilesMetadata` | `pmtiles`, `maplibre-gl` | PmtilesMapView, PmtilesArchiveView, PmtilesViewer |

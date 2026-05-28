@@ -67,7 +67,7 @@ export async function loadDeckModules() {
 export async function loadGeoArrowModules() {
 	const [{ MapboxOverlay }, geoarrowLayers, { GeoJsonLayer }] = await Promise.all([
 		import('@deck.gl/mapbox'),
-		import('@geoarrow/deck.gl-layers'),
+		import('@geoarrow/deck.gl-geoarrow'),
 		import('@deck.gl/layers')
 	]);
 	return { MapboxOverlay, GeoJsonLayer, ...geoarrowLayers };
@@ -92,6 +92,11 @@ function createLayerForResult(
 ): any {
 	const { GeoArrowScatterplotLayer, GeoArrowPathLayer, GeoArrowPolygonLayer } = modules;
 	const { table, geometryType, sourceIndices } = result;
+	// @geoarrow/deck.gl-geoarrow 0.4+ takes a single Arrow RecordBatch as `data`,
+	// not a Table. buildSingleTable() always assembles one batch per table, so the
+	// row index stays 0..N-1 and the sourceIndices click mapping is unaffected.
+	const batch = table.batches[0];
+	if (!batch) return null;
 	const { fill, line } = colorsForType(geometryType);
 
 	const handleClick = (info: any) => {
@@ -104,7 +109,7 @@ function createLayerForResult(
 	if (geometryType === 'point' || geometryType === 'multipoint') {
 		return new GeoArrowScatterplotLayer({
 			id: layerId,
-			data: table,
+			data: batch,
 			getFillColor: fill,
 			getRadius: 6,
 			radiusUnits: 'pixels',
@@ -120,7 +125,7 @@ function createLayerForResult(
 	} else if (geometryType === 'linestring' || geometryType === 'multilinestring') {
 		return new GeoArrowPathLayer({
 			id: layerId,
-			data: table,
+			data: batch,
 			getColor: line,
 			getWidth: 2.5,
 			widthUnits: 'pixels',
@@ -135,7 +140,7 @@ function createLayerForResult(
 	} else {
 		return new GeoArrowPolygonLayer({
 			id: layerId,
-			data: table,
+			data: batch,
 			getFillColor: fill,
 			getLineColor: line,
 			getLineWidth: 2,
