@@ -165,7 +165,7 @@ const dedupRatio = $derived(
 {#snippet entryDetails()}
 	{#if selectedEntry}
 		<div
-			class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+			class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 		>
 			{t('pmtiles.entryDetails')}
 		</div>
@@ -212,7 +212,7 @@ const dedupRatio = $derived(
 <div class="flex h-full flex-col overflow-hidden">
 	<!-- Stats grid -->
 	<div
-		class="shrink-0 border-b border-zinc-200 px-3 py-3 sm:px-4 dark:border-zinc-800"
+		class="shrink-0 border-b border-border px-3 py-3 sm:px-4"
 	>
 		<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
 			<div>
@@ -284,7 +284,7 @@ const dedupRatio = $derived(
 		<ResizablePane defaultSize={28} minSize={15}>
 			<div class="flex h-full flex-col">
 				<div
-					class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 				>
 					{t('pmtiles.zoomLevels')}
 				</div>
@@ -292,8 +292,7 @@ const dedupRatio = $derived(
 					{#each zoomSummaries as s}
 						<button
 							class="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-							class:bg-zinc-100={selectedZoom === s.zoom}
-							class:dark:bg-zinc-800={selectedZoom === s.zoom}
+							class:bg-muted={selectedZoom === s.zoom}
 							onclick={() => selectZoom(s.zoom)}
 						>
 							<span class="w-7 shrink-0 font-mono text-muted-foreground">z{s.zoom}</span>
@@ -320,7 +319,7 @@ const dedupRatio = $derived(
 			<div class="flex h-full flex-col">
 				{#if selectedZoom !== null}
 					<div
-						class="shrink-0 border-b border-zinc-200 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground dark:border-zinc-800"
+						class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
 					>
 						{t('pmtiles.tilesAtZoom').replace('{zoom}', String(selectedZoom))}
 						<span class="ms-1 normal-case tracking-normal">({zoomEntries.length.toLocaleString()})</span>
@@ -329,15 +328,14 @@ const dedupRatio = $derived(
 						{#if loadingEntries}
 							<div class="p-4 text-center text-xs text-muted-foreground">Loading...</div>
 						{:else if errorMsg}
-							<div class="p-4 text-center text-xs text-red-400">{errorMsg}</div>
+							<div class="p-4 text-center text-xs text-destructive">{errorMsg}</div>
 						{:else if zoomEntries.length === 0}
 							<div class="p-4 text-center text-xs text-muted-foreground">{t('pmtiles.noEntries')}</div>
 						{:else}
 							{#each zoomEntries as entry}
 								<button
 									class="flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-									class:bg-zinc-100={selectedEntry?.tileId === entry.tileId}
-									class:dark:bg-zinc-800={selectedEntry?.tileId === entry.tileId}
+									class:bg-muted={selectedEntry?.tileId === entry.tileId}
 									onclick={() => (selectedEntry = entry)}
 								>
 									<span class="shrink-0 truncate font-mono text-[11px]">
