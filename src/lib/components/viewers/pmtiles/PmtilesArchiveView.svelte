@@ -1,6 +1,6 @@
 <script lang="ts">
 import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-import { formatFileSize } from '@walkthru-earth/objex-utils';
+import { formatFileSize, handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { tileIdToZxy } from 'pmtiles';
 import {
@@ -126,7 +126,7 @@ async function selectZoom(zoom: number) {
 						if (result.length > 5000) break;
 					}
 				} catch (err) {
-					errorMsg = err instanceof Error ? err.message : String(err);
+					errorMsg = handleLoadError(err) ?? '';
 				}
 			}
 		} else {
