@@ -27,8 +27,11 @@ import {
 	type ZarrHierarchy,
 	type ZarrNode
 } from '$lib/utils/zarr.js';
+import { useIsWide } from '../../utils/media-query.svelte.js';
 
 let { tab }: { tab: Tab } = $props();
+
+const isWide = useIsWide();
 
 let loading = $state(true);
 let error = $state<string | null>(null);
@@ -493,56 +496,73 @@ function selectStoreAttrs() {
 		{/key}
 	{:else if hierarchy}
 		<!-- Inspect mode (tree + detail panel) -->
-		<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
-			<!-- Left: Tree view -->
-			<ResizablePane defaultSize={40} minSize={20}>
-				<div class="flex h-full flex-col">
-					<div
-						class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+		{#snippet zarrTree()}
+			<div class="flex h-full flex-col">
+				<div
+					class="shrink-0 border-b border-border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+				>
+					{t('zarr.contents')}
+					<span class="ms-1 normal-case tracking-normal"
+						>({hierarchy!.totalNodes})</span
 					>
-						{t('zarr.contents')}
-						<span class="ms-1 normal-case tracking-normal"
-							>({hierarchy.totalNodes})</span
-						>
-					</div>
-					<div class="flex-1 overflow-auto">
-						{#if hasStoreAttrs}
-							<button
-								class="flex w-full items-center gap-2 border-b border-zinc-100 px-3 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800/50 dark:hover:bg-zinc-800/50"
-								class:bg-blue-50={showingStoreAttrs}
-								class:dark:bg-blue-950={showingStoreAttrs}
-								onclick={selectStoreAttrs}
-							>
-								<span class="size-4 shrink-0"></span>
-								<svg
-									class="size-3.5 shrink-0 text-muted-foreground"
-									viewBox="0 0 16 16"
-									fill="currentColor"
-								>
-									<path
-										fill-rule="evenodd"
-										d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H3a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
-										clip-rule="evenodd"
-									/>
-								</svg>
-								<span class="truncate font-medium text-muted-foreground">
-									{t('zarr.storeAttributes')}
-								</span>
-							</button>
-						{/if}
-						{@render treeNode(hierarchy.root, 0)}
-					</div>
 				</div>
-			</ResizablePane>
+				<div class="flex-1 overflow-auto">
+					{#if hasStoreAttrs}
+						<button
+							class="flex w-full items-center gap-2 border-b border-zinc-100 px-3 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800/50 dark:hover:bg-zinc-800/50"
+							class:bg-blue-50={showingStoreAttrs}
+							class:dark:bg-blue-950={showingStoreAttrs}
+							onclick={selectStoreAttrs}
+						>
+							<span class="size-4 shrink-0"></span>
+							<svg
+								class="size-3.5 shrink-0 text-muted-foreground"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H3a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+							<span class="truncate font-medium text-muted-foreground">
+								{t('zarr.storeAttributes')}
+							</span>
+						</button>
+					{/if}
+					{@render treeNode(hierarchy!.root, 0)}
+				</div>
+			</div>
+		{/snippet}
 
-			<ResizableHandle />
+		{#if isWide.value}
+			<ResizablePaneGroup direction="horizontal" class="min-h-0 flex-1">
+				<!-- Left: Tree view -->
+				<ResizablePane defaultSize={40} minSize={20}>
+					{@render zarrTree()}
+				</ResizablePane>
 
-			<!-- Right: Detail panel -->
-			<ResizablePane defaultSize={60} minSize={30}>
-				<div class="flex h-full flex-col">
+				<ResizableHandle />
+
+				<!-- Right: Detail panel -->
+				<ResizablePane defaultSize={60} minSize={30}>
+					<div class="flex h-full flex-col">
+						{@render nodeDetails()}
+					</div>
+				</ResizablePane>
+			</ResizablePaneGroup>
+		{:else}
+			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<!-- Tree pane: fixed height so it doesn't crowd the detail section -->
+				<div class="max-h-64 shrink-0 border-b border-border">
+					{@render zarrTree()}
+				</div>
+				<!-- Detail panel: grows to fill remaining space -->
+				<div class="flex flex-1 flex-col">
 					{@render nodeDetails()}
 				</div>
-			</ResizablePane>
-		</ResizablePaneGroup>
+			</div>
+		{/if}
 	{/if}
 </div>
