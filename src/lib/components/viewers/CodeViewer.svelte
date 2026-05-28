@@ -16,7 +16,8 @@ import { getAdapter } from '$lib/storage/index.js';
 import { tabResources } from '$lib/stores/tab-resources.svelte.js';
 import type { Tab } from '$lib/types';
 import { extensionToShikiLang, highlightCode } from '$lib/utils/shiki';
-import { buildHttpsUrl, buildHttpsUrlAsync, canStreamDirectly } from '$lib/utils/signed-url.js';
+import { buildHttpsUrl, canStreamDirectly } from '$lib/utils/signed-url.js';
+import { resolveSignedTabUrl } from '$lib/utils/signed-url-effect.js';
 import { getUrlView, pickViewMode, updateUrlView } from '$lib/utils/url-state.js';
 import { openZarrTab } from '$lib/utils/zarr-tab.js';
 import ViewerHeader from './ViewerHeader.svelte';
@@ -125,17 +126,10 @@ const stacBadgeKey = $derived<Record<string, string>>({
 // must wait for the presign so the iframe never loads a bare `s3://` href.
 let styleUrl = $state('');
 $effect(() => {
-	const id = tab.id;
 	styleUrl = canStreamDirectly(tab) ? buildHttpsUrl(tab) : '';
-	let cancelled = false;
-	(async () => {
-		const url = await buildHttpsUrlAsync(tab);
-		if (cancelled || id !== tab.id) return;
-		styleUrl = url;
-	})();
-	return () => {
-		cancelled = true;
-	};
+	return resolveSignedTabUrl(tab, (u) => {
+		styleUrl = u;
+	});
 });
 const stacBrowserSrc = $derived(
 	`https://radiantearth.github.io/stac-browser/#/external/${styleUrl}`
