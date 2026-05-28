@@ -1,5 +1,6 @@
 <script lang="ts">
 import ClockIcon from '@lucide/svelte/icons/clock';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import { onDestroy } from 'svelte';
 import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
 import { Badge } from '$lib/components/ui/badge/index.js';
@@ -127,7 +128,7 @@ async function loadDatabase() {
 			tables = (result.rows ?? []).map((row) => row.name).filter((name): name is string => !!name);
 		}
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		loading = false;
 	}
@@ -254,7 +255,7 @@ async function switchSnapshot(id: number) {
 		const connId = tab.connectionId ?? '';
 		await loadDuckLake(engine, connId, id);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	} finally {
 		switchingSnapshot = false;
 	}
@@ -318,7 +319,7 @@ async function switchSchema(schema: string) {
 		const connId = tab.connectionId ?? '';
 		await loadDuckLakeTables(engine, connId);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 
