@@ -4,6 +4,7 @@ import DatabaseIcon from '@lucide/svelte/icons/database';
 import GlobeIcon from '@lucide/svelte/icons/globe';
 import PencilIcon from '@lucide/svelte/icons/pencil';
 import PlusIcon from '@lucide/svelte/icons/plus';
+import SettingsIcon from '@lucide/svelte/icons/settings';
 import TrashIcon from '@lucide/svelte/icons/trash-2';
 import { type DetectedHost, detectHostBucket, parseStorageUrl } from '@walkthru-earth/objex-utils';
 import {
@@ -22,18 +23,28 @@ import {
 } from '$lib/components/ui/tooltip/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
+import { appConfig } from '$lib/stores/config.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
 import { credentialStore, loadFromNative } from '$lib/stores/credentials.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import type { Connection } from '$lib/types.js';
-import { clearUrlState, syncUrlParam } from '$lib/utils/url-state.js';
+import { clearUrlState, getPanelParam, syncUrlParam } from '$lib/utils/url-state.js';
 import AboutSheet from './AboutSheet.svelte';
 import ConnectionDialog from './ConnectionDialog.svelte';
 import LocaleToggle from './LocaleToggle.svelte';
+import SettingsSheet from './SettingsSheet.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
 
 let aboutOpen = $state(false);
+let settingsOpen = $state(false);
 let dialogOpen = $state(false);
+
+// Open the settings panel on load when ?panel=settings is present.
+$effect(() => {
+	if (appConfig.value.ui.showSettings && getPanelParam() === 'settings') {
+		settingsOpen = true;
+	}
+});
 let editingConnection = $state<Connection | null>(null);
 let detectedHost = $state<DetectedHost | null>(null);
 let autoConnecting = $state(false);
@@ -359,6 +370,22 @@ async function handleBrowseConnection(connection: Connection) {
 
 		<!-- Bottom actions -->
 		<div class="mt-auto flex flex-col items-center gap-1 pt-2">
+			{#if appConfig.value.ui.showSettings}
+				<Tooltip>
+					<TooltipTrigger>
+						<button
+							class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+							onclick={() => {
+								settingsOpen = true;
+							}}
+							aria-label={t('settings.tooltip')}
+						>
+							<SettingsIcon class="size-4" />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="right">{t('settings.tooltip')}</TooltipContent>
+				</Tooltip>
+			{/if}
 			<LocaleToggle />
 			<ThemeToggle />
 		</div>
@@ -366,6 +393,8 @@ async function handleBrowseConnection(connection: Connection) {
 </TooltipProvider>
 
 <AboutSheet bind:open={aboutOpen} />
+
+<SettingsSheet bind:open={settingsOpen} />
 
 <ConnectionDialog
 	bind:open={dialogOpen}
