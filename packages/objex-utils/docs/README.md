@@ -50,6 +50,7 @@ As of v1.2, `yaml` is loaded via dynamic `import()` inside `parseMarkdownDocumen
 | [`file-sort.md`](./file-sort.md) | `sortFileEntries`, `toggleSortField` |
 | [`markdown-sql.md`](./markdown-sql.md) | Markdown + SQL block parsing (Evidence-compatible syntax) |
 | [`local-storage.md`](./local-storage.md) | SSR-safe `loadFromStorage` / `persistToStorage` |
+| [`app-config.md`](./app-config.md) | Runtime config schema + precedence resolver (`AppConfig`, `mergeAppConfig`, `resolveSetting`, `resolveBasemap`, `parseVisibilityParam`, `coerce*`) |
 | [`map-pixel-inspect.md`](./map-pixel-inspect.md) | Framework-agnostic click-to-inspect helper (`attachPixelInspector`), minimal `MapLike` shape, per-click abort coordination |
 | [`lru.md`](./lru.md) | `LruCache<K,V>` move-to-end on `get`, optional `onEvict` |
 | [`errors.md`](./errors.md) | `handleLoadError`, `isAbortError` |
