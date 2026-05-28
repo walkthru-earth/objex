@@ -77,25 +77,27 @@ const tableWidth = $derived(
 	ROW_NUM_WIDTH + columns.reduce((sum, col) => sum + (columnWidths[col] || DEFAULT_WIDTH), 0)
 );
 
-function startResize(col: string, e: MouseEvent) {
+function startResize(col: string, e: PointerEvent) {
 	e.preventDefault();
 	e.stopPropagation();
+	(e.target as HTMLElement).setPointerCapture?.(e.pointerId);
 	const startX = e.clientX;
 	const startW = columnWidths[col] || DEFAULT_WIDTH;
 
-	function onMove(ev: MouseEvent) {
+	function onMove(ev: PointerEvent) {
 		columnWidths[col] = Math.max(MIN_WIDTH, startW + (ev.clientX - startX));
 	}
-	function onUp() {
-		document.removeEventListener('mousemove', onMove);
-		document.removeEventListener('mouseup', onUp);
+	function onUp(ev: PointerEvent) {
+		(ev.target as HTMLElement).releasePointerCapture?.(ev.pointerId);
+		document.removeEventListener('pointermove', onMove);
+		document.removeEventListener('pointerup', onUp);
 		resizeCleanup = null;
 	}
-	document.addEventListener('mousemove', onMove);
-	document.addEventListener('mouseup', onUp);
+	document.addEventListener('pointermove', onMove);
+	document.addEventListener('pointerup', onUp);
 	resizeCleanup = () => {
-		document.removeEventListener('mousemove', onMove);
-		document.removeEventListener('mouseup', onUp);
+		document.removeEventListener('pointermove', onMove);
+		document.removeEventListener('pointerup', onUp);
 	};
 }
 
@@ -259,12 +261,14 @@ function isNull(value: any): boolean {
 						{/if}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div
-							class="absolute end-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-blue-400/60"
-							onmousedown={(e) => startResize(col, e)}
+							class="absolute end-0 top-0 h-full w-4 cursor-col-resize touch-none px-1.5"
+							onpointerdown={(e) => startResize(col, e)}
 							ondblclick={(e) => { e.stopPropagation(); resetWidth(col); }}
 							role="separator"
 							aria-orientation="vertical"
-						></div>
+						>
+							<div class="h-full w-full bg-transparent transition-colors hover:bg-blue-400/60"></div>
+						</div>
 					</th>
 				{/each}
 			</tr>
