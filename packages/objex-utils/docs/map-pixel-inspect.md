@@ -54,8 +54,8 @@ interface PixelInspectCallbacks<T> {
 }
 ```
 
-- `onStart()` -- called synchronously when a click is accepted, before the probe is awaited. Use it to set an "inspecting" flag.
-- `onResult(result)` -- called once per accepted click after the probe settles. Receives `null` when the probe returned `null` or threw a non-helper-driven error, including an `AbortError` that did NOT originate from this helper's own controller (for example a viewer-teardown or upstream cancel). It is NOT called when a newer click superseded this one via the helper's own controller.
+- `onStart()` - called synchronously when a click is accepted, before the probe is awaited. Use it to set an "inspecting" flag.
+- `onResult(result)` - called once per accepted click after the probe settles. Receives `null` when the probe returned `null` or threw a non-helper-driven error, including an `AbortError` that did NOT originate from this helper's own controller (for example a viewer-teardown or upstream cancel). It is NOT called when a newer click superseded this one via the helper's own controller.
 
 ### `AttachPixelInspectorOptions<T>`
 

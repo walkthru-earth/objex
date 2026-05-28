@@ -5,7 +5,7 @@
 [![CI](https://github.com/walkthru-earth/objex/actions/workflows/ci.yml/badge.svg)](https://github.com/walkthru-earth/objex/actions/workflows/ci.yml)
 [![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-Cloud storage explorer that runs entirely in the browser. Connect to S3, Azure, GCS, R2, MinIO -- browse files, query data with SQL, and visualize geospatial formats on interactive maps. No backend required.
+Cloud storage explorer that runs entirely in the browser. Connect to S3, Azure, GCS, R2, MinIO - browse files, query data with SQL, and visualize geospatial formats on interactive maps. No backend required.
 
 ```mermaid
 graph LR
@@ -22,10 +22,10 @@ graph LR
 - **Query** Parquet, CSV, JSONL with SQL (DuckDB-WASM, cancellable queries)
 - **Visualize** GeoParquet, GeoJSON, COG, PMTiles, FlatGeobuf, Zarr (incl. GeoZarr), STAC catalogs, and stac-geoparquet on maps (MapLibre + deck.gl)
 - **View** 100+ file formats: code (30+ languages), Jupyter notebooks, PDF, 3D models, archives, media
-- **Share** via URL -- `?url=<storage-url>#<view>` encodes full viewer state
-- **Configure** without a rebuild -- bundled `config.json` (or remote `?config=<url>`) sets defaults, basemaps, and seed connections, with an in-app settings panel
-- **i18n** -- English + Arabic with automatic RTL layout
-- **Zero backend** -- everything runs client-side
+- **Share** via URL - `?url=<storage-url>#<view>` encodes full viewer state
+- **Configure** without a rebuild - bundled `config.json` (or remote `?config=<url>`) sets defaults, basemaps, and seed connections, with an in-app settings panel
+- **i18n** - English + Arabic with automatic RTL layout
+- **Zero backend** - everything runs client-side
 
 ## Supported Formats
 
@@ -48,7 +48,7 @@ graph LR
 
 Two packages are published for downstream use:
 
-### `@walkthru-earth/objex` -- Full Svelte 5 Library
+### `@walkthru-earth/objex` - Full Svelte 5 Library
 
 Components, stores, and utilities for building geospatial storage explorers.
 
@@ -62,9 +62,9 @@ import { UrlAdapter } from '@walkthru-earth/objex/storage';
 import { getFileTypeInfo } from '@walkthru-earth/objex/file-icons';
 ```
 
-Requires `svelte ^5` and `@sveltejs/kit ^2` as peer dependencies. Heavy deps (DuckDB, deck.gl, MapLibre, Arrow, hyparquet, hyparquet-compressors, yaml) are optional peers -- only install what you need.
+Requires `svelte ^5` and `@sveltejs/kit ^2` as peer dependencies. Heavy deps (DuckDB, deck.gl, MapLibre, Arrow, hyparquet, hyparquet-compressors, yaml) are optional peers - only install what you need.
 
-### `@walkthru-earth/objex-utils` -- Pure TypeScript Utilities
+### `@walkthru-earth/objex-utils` - Pure TypeScript Utilities
 
 Zero Svelte dependency. Works with any JS framework or Node.js.
 
@@ -131,4 +131,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture, geos
 
 ## License
 
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) -- hi@walkthru.earth
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) - hi@walkthru.earth

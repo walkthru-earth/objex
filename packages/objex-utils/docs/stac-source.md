@@ -59,11 +59,11 @@ interface StacSourceCapabilities {
 
 Read at construction (synchronous) and by the filter UI to decide which controls to disable or badge as "client-side only".
 
-- `label` -- human-readable HUD label, e.g. `"STAC API"`, `"stac-geoparquet"`, `"Static catalog"`.
-- `countAvailable` -- true when a cheap `count(filter, bbox)` exists, so the UI can surface "Y of X".
-- `streaming` -- true when `query()` yields multiple batches before completing.
-- `hivePartitioned` -- true when the source is a hive-partitioned parquet directory (set by the parquet source). Lets the viewer hint at the discovery model without inspecting `kind === 'parquet'` alone, since the same `kind` also covers single-file stac-geoparquet.
-- `pushdown` -- the *ceiling* of what this source kind can push. Exhaustive: every `FacetState` facet has a flag, so adding a new facet is a compile-time error in every consumer until handled. The actual per-request push-down is reported in each batch's `pushedDown`.
+- `label` - human-readable HUD label, e.g. `"STAC API"`, `"stac-geoparquet"`, `"Static catalog"`.
+- `countAvailable` - true when a cheap `count(filter, bbox)` exists, so the UI can surface "Y of X".
+- `streaming` - true when `query()` yields multiple batches before completing.
+- `hivePartitioned` - true when the source is a hive-partitioned parquet directory (set by the parquet source). Lets the viewer hint at the discovery model without inspecting `kind === 'parquet'` alone, since the same `kind` also covers single-file stac-geoparquet.
+- `pushdown` - the *ceiling* of what this source kind can push. Exhaustive: every `FacetState` facet has a flag, so adding a new facet is a compile-time error in every consumer until handled. The actual per-request push-down is reported in each batch's `pushedDown`.
 
 ### `StacSourceRequest`
 
@@ -79,11 +79,11 @@ interface StacSourceRequest {
 
 Per-query inputs.
 
-- `bbox` -- WGS84 viewport `[west, south, east, north]`, required. Sources that cannot push bbox still receive it, they stream the whole set and rely on the caller's residual filter.
-- `filter` -- the active `FacetState` (from `stac-facets`).
-- `limit` -- hard item cap for the request.
-- `pageSize` -- optional per-page hint for paginating sources, the server may ignore it.
-- `signal` -- required. Sources MUST throw `DOMException("Aborted", "AbortError")` on abort, never silently complete.
+- `bbox` - WGS84 viewport `[west, south, east, north]`, required. Sources that cannot push bbox still receive it, they stream the whole set and rely on the caller's residual filter.
+- `filter` - the active `FacetState` (from `stac-facets`).
+- `limit` - hard item cap for the request.
+- `pageSize` - optional per-page hint for paginating sources, the server may ignore it.
+- `signal` - required. Sources MUST throw `DOMException("Aborted", "AbortError")` on abort, never silently complete.
 
 ### `StacSourceBatch`
 
@@ -99,11 +99,11 @@ interface StacSourceBatch {
 
 One yielded batch.
 
-- `items` -- the items in this batch (empty on the terminal `done` batch).
-- `pushedDown` -- the subset of `filter` the source / engine already applied, reported so the UI can show "pushed".
-- `residual` -- the subset the caller must still apply via `applyFacets(views, residual)`.
-- `done` -- true on the final batch. The iterator's own end-of-iteration also signals completion, this flag lets a caller break the loop the moment a single-yield source finishes.
-- `totalHinted` -- best-effort total matching count, when the source knows it.
+- `items` - the items in this batch (empty on the terminal `done` batch).
+- `pushedDown` - the subset of `filter` the source / engine already applied, reported so the UI can show "pushed".
+- `residual` - the subset the caller must still apply via `applyFacets(views, residual)`.
+- `done` - true on the final batch. The iterator's own end-of-iteration also signals completion, this flag lets a caller break the loop the moment a single-yield source finishes.
+- `totalHinted` - best-effort total matching count, when the source knows it.
 
 ### `StacSource`
 

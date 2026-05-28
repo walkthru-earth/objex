@@ -178,10 +178,10 @@ function resolveBasemap(
 
 Pick the basemap a map should render. Pick order:
 
-1. **Explicit user pick** -- the basemap whose `id` equals `userId`, but only if it still exists in the configured list (a stale `userId` from local storage is ignored).
-2. **Configured default for the variant** -- the basemap whose `id` equals `config.defaultBasemap[variant]`, when present and still in the list.
-3. **First basemap matching the variant** -- the first entry with `variant` equal to the requested variant.
-4. **First basemap of any variant** -- `config.basemaps[0]`.
+1. **Explicit user pick** - the basemap whose `id` equals `userId`, but only if it still exists in the configured list (a stale `userId` from local storage is ignored).
+2. **Configured default for the variant** - the basemap whose `id` equals `config.defaultBasemap[variant]`, when present and still in the list.
+3. **First basemap matching the variant** - the first entry with `variant` equal to the requested variant.
+4. **First basemap of any variant** - `config.basemaps[0]`.
 
 Returns `undefined` only when no basemaps are configured (`config.basemaps` is empty), signalling the caller to fall back to its own hardcoded default.
 

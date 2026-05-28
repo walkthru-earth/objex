@@ -15,8 +15,8 @@ interface LruCacheOptions<K, V> {
 }
 ```
 
-- `max` -- maximum number of entries. Must be `> 0`. The constructor throws `Error('LruCache: max must be > 0')` for any non-positive value.
-- `onEvict` -- optional callback invoked whenever an entry leaves the cache, whether through LRU overflow, an explicit `delete()`, or `clear()`. Use it to release the cached resource (revoke a blob URL, null a GeoTIFF header, etc.).
+- `max` - maximum number of entries. Must be `> 0`. The constructor throws `Error('LruCache: max must be > 0')` for any non-positive value.
+- `onEvict` - optional callback invoked whenever an entry leaves the cache, whether through LRU overflow, an explicit `delete()`, or `clear()`. Use it to release the cached resource (revoke a blob URL, null a GeoTIFF header, etc.).
 
 ## Class
 

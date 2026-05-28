@@ -116,9 +116,9 @@ Pick the most natural and most performant default composite for an item.
 
 **Priority** (first match wins):
 
-1. **`'visual-asset'`** -- a 3-band pre-baked visual asset (`bandCount === 3` and either `roles` contains `visual` or `eoCommon` contains all of `red`/`green`/`blue`). All three channels bind to that one asset, using the `eoCommon` index for each color where present and falling back to bands 0/1/2. Single-layer path, one decoder, fastest.
-2. **`'rgb-bands'`** -- separate single-band assets resolvable by common name, where `eoCommon[0]` is `red`, `green`, and `blue` respectively across three distinct assets. Each channel binds to its asset at band 0.
-3. **`'fallback'`** -- the first three raster assets, band 0 each. When fewer than three assets exist, the single remaining asset is reused for all three channels: R at band 0, G at `min(1, last)`, B at `min(2, last)`, where `last = max(0, bandCount - 1)`.
+1. **`'visual-asset'`** - a 3-band pre-baked visual asset (`bandCount === 3` and either `roles` contains `visual` or `eoCommon` contains all of `red`/`green`/`blue`). All three channels bind to that one asset, using the `eoCommon` index for each color where present and falling back to bands 0/1/2. Single-layer path, one decoder, fastest.
+2. **`'rgb-bands'`** - separate single-band assets resolvable by common name, where `eoCommon[0]` is `red`, `green`, and `blue` respectively across three distinct assets. Each channel binds to its asset at band 0.
+3. **`'fallback'`** - the first three raster assets, band 0 each. When fewer than three assets exist, the single remaining asset is reused for all three channels: R at band 0, G at `min(1, last)`, B at `min(2, last)`, where `last = max(0, bandCount - 1)`.
 
 **Returns** `{ composite, source }`, or `null` when `assets` is empty.
 

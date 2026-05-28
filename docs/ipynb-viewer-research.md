@@ -1,4 +1,4 @@
-# ipynb Viewer Research -- Browser-Only Rendering
+# ipynb Viewer Research - Browser-Only Rendering
 
 ## 1. ipynb File Format
 
@@ -23,7 +23,7 @@ An `.ipynb` file is a JSON document conforming to the **nbformat** specification
 |---|---|---|
 | `nbformat` | integer | Major version (always `4` for current format) |
 | `nbformat_minor` | integer | Minor version (0-5 as of 2026) |
-| `metadata` | object | Notebook-level metadata (kernelspec, language_info, etc.) -- all fields optional |
+| `metadata` | object | Notebook-level metadata (kernelspec, language_info, etc.) - all fields optional |
 | `cells` | array | Ordered list of cell objects |
 
 ### Detection Heuristic
@@ -109,7 +109,7 @@ Renderers pick the richest MIME type they can handle (preference order: widget >
 
 - **npm**: [`notebookjs`](https://www.npmjs.com/package/notebookjs) (v0.8.3)
 - **GitHub**: [jsvine/notebookjs](https://github.com/jsvine/notebookjs)
-- **Framework**: Vanilla JS -- returns DOM elements, no React/Vue dependency
+- **Framework**: Vanilla JS - returns DOM elements, no React/Vue dependency
 - **Size**: Core is ~15KB unminified; BYOB (bring your own) marked + ansi_up + highlight.js
 - **Last updated**: ~2023
 
@@ -157,11 +157,11 @@ container.appendChild(rendered);
 
 **What it does NOT render:**
 - Interactive widgets (`application/vnd.jupyter.widget-view+json`)
-- Full MathJax -- only LaTeX subset via KaTeX if you add it
+- Full MathJax - only LaTeX subset via KaTeX if you add it
 - Plotly/Bokeh interactive plots (static image fallback works if the notebook saved one)
 
 **Pros for objex:**
-- Vanilla JS -- works perfectly with Svelte (just mount the DOM element)
+- Vanilla JS - works perfectly with Svelte (just mount the DOM element)
 - No React dependency
 - Small footprint
 - Pluggable: swap markdown/syntax/ansi renderers
@@ -172,7 +172,7 @@ container.appendChild(rendered);
 - **Demo**: [kokes.github.io/nbviewer.js/viewer.html](https://kokes.github.io/nbviewer.js/viewer.html)
 - **Framework**: Vanilla JS (DOM manipulation)
 - **Dependencies**: marked.js, Prism.js (bundled)
-- **No npm package** -- use directly from GitHub or vendor it
+- **No npm package** - use directly from GitHub or vendor it
 
 **Usage:**
 ```javascript
@@ -186,7 +186,7 @@ nbv.render(ipynbJsonObject, document.getElementById('target'));
 - Markdown + syntax highlighting + images built in
 
 **Cons:**
-- Not published to npm -- harder to integrate into a build system
+- Not published to npm - harder to integrate into a build system
 - Less maintained than notebookjs
 - No math/LaTeX rendering out of the box
 
@@ -208,7 +208,7 @@ container.innerHTML = htmlString;
 ```
 
 **Pros:**
-- Returns HTML string -- easy to use with Svelte `{@html}`
+- Returns HTML string - easy to use with Svelte `{@html}`
 - Full bundle includes KaTeX for math rendering
 - Reference CSS stylesheet included
 
@@ -235,15 +235,15 @@ import "react-ipynb-renderer/dist/styles/monokai.css";
 - MathJax or KaTeX for formulas
 - Handles images, HTML outputs, error tracebacks
 
-**Not recommended for objex** -- requires React. Mentioned for completeness.
+**Not recommended for objex** - requires React. Mentioned for completeness.
 
 ### Option E: @nteract packages (React only, heavy)
 
-- [`@nteract/notebook-render`](https://github.com/nteract/notebook-render) -- React SSR-capable notebook renderer
-- [`@nteract/outputs`](https://www.npmjs.com/package/@nteract/outputs) -- individual output type components
-- [`@nteract/notebook-preview`](https://www.npmjs.com/package/@nteract/notebook-preview) -- static notebook preview
+- [`@nteract/notebook-render`](https://github.com/nteract/notebook-render) - React SSR-capable notebook renderer
+- [`@nteract/outputs`](https://www.npmjs.com/package/@nteract/outputs) - individual output type components
+- [`@nteract/notebook-preview`](https://www.npmjs.com/package/@nteract/notebook-preview) - static notebook preview
 
-**Not recommended for objex** -- heavy React ecosystem, tightly coupled to nteract's Immutable.js data model, last published 3+ years ago.
+**Not recommended for objex** - heavy React ecosystem, tightly coupled to nteract's Immutable.js data model, last published 3+ years ago.
 
 ---
 
@@ -278,7 +278,7 @@ https://nbviewer.jupyter.org/gist/{user}/{gist_id}
 **Cache control:** Append `?flush_cache=true` to force re-render.
 
 **Pros:**
-- Zero code -- just an iframe
+- Zero code - just an iframe
 - Full nbconvert rendering (images, math, HTML outputs)
 - Handles large notebooks
 
@@ -321,23 +321,23 @@ This is interactive (requires Google auth), not suitable for read-only viewing.
 - Solutions: KaTeX (lighter, faster, incomplete coverage) or MathJax (heavier, more complete)
 - notebookjs supports KaTeX via plugin; ipynb2html bundles KaTeX
 
-### Interactive Plots -- Plotly, Bokeh, Altair (Medium)
+### Interactive Plots - Plotly, Bokeh, Altair (Medium)
 - These libraries often save BOTH an interactive HTML representation AND a static PNG fallback
 - `data["text/html"]` contains the interactive version (Plotly.js, Bokeh.js)
 - The HTML output may reference external JS (CDN links to plotly.js etc.)
 - **Static renderers show the HTML if the notebook saved it**, but interactive features may break if CDN scripts aren't loaded
-- Plotly specifically stores data in `application/vnd.plotly.v1+json` -- needs Plotly.js to render
+- Plotly specifically stores data in `application/vnd.plotly.v1+json` - needs Plotly.js to render
 
-### Interactive Widgets -- ipywidgets (Hard / Impossible without kernel)
+### Interactive Widgets - ipywidgets (Hard / Impossible without kernel)
 - Stored as `application/vnd.jupyter.widget-view+json` with a `model_id`
 - **These fundamentally require a live kernel** to function
 - Static renderers typically skip these entirely or show a placeholder
-- The only solution is JupyterLite (Pyodide WASM kernel) -- overkill for a viewer
+- The only solution is JupyterLite (Pyodide WASM kernel) - overkill for a viewer
 
 ### HTML Outputs (Medium)
 - `data["text/html"]` can contain arbitrary HTML including `<script>` tags
 - Security concern: must sanitize with DOMPurify or similar
-- Pandas DataFrames render as styled HTML tables -- works well
+- Pandas DataFrames render as styled HTML tables - works well
 - Complex HTML (D3 visualizations, custom JS) may not work without their dependencies
 
 ### ANSI Escape Codes (Easy)
@@ -349,7 +349,7 @@ This is interactive (requires Google auth), not suitable for read-only viewing.
 - Markdown cells can have `attachments` dict with embedded images
 - Format: `attachments: { "image.png": { "image/png": "base64..." } }`
 - Referenced in markdown as `![alt](attachment:image.png)`
-- Some renderers miss this -- notebookjs handles it
+- Some renderers miss this - notebookjs handles it
 
 ---
 
@@ -358,10 +358,10 @@ This is interactive (requires Google auth), not suitable for read-only viewing.
 ### Best approach: `notebookjs` with Svelte wrapper
 
 **Why:**
-1. Vanilla JS -- no React dependency, integrates cleanly with Svelte
-2. Returns DOM elements -- mount directly into Svelte component
-3. Pluggable renderers -- use marked for Markdown, Prism/Highlight.js for syntax, ansi_up for ANSI
-4. Small core -- only pull in what you need
+1. Vanilla JS - no React dependency, integrates cleanly with Svelte
+2. Returns DOM elements - mount directly into Svelte component
+3. Pluggable renderers - use marked for Markdown, Prism/Highlight.js for syntax, ansi_up for ANSI
+4. Small core - only pull in what you need
 5. Handles the common cases: markdown, code, images, HTML outputs, errors, streams
 
 **Svelte component sketch:**

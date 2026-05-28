@@ -42,14 +42,14 @@ interface HydrateOptions {
 }
 ```
 
-- `signal` -- required abort signal, threaded into every adapter read and `fetch`.
-- `concurrency` -- max parallel fetches for item links and child walks. Default `12`.
-- `limit` -- hard cap on items, catalogs larger than this are truncated. Default `2000`.
-- `followPagination` -- follow `links[rel=next]` in FeatureCollections. Default `true`.
-- `onBatch` -- called with each newly fetched batch for progressive rendering. Items in a batch already have absolutized asset hrefs.
-- `onProgress` -- called after each emit with the running item count, `totalHinted` is always `undefined` in the current implementation.
-- `urlToKey` -- maps an absolute HTTPS URL to a bucket-relative key when it belongs to the caller's connection. When it returns a non-null string, the fetch routes through `adapter.read` (SigV4) instead of cross-origin `fetch`, so private-bucket catalogs can be walked. Return `null` for foreign origins.
-- `itemsQuery` -- optional native STAC API filters appended to the `rel="items"` endpoint and re-stamped on every `rel="next"` page. See `StacItemsQuery`.
+- `signal` - required abort signal, threaded into every adapter read and `fetch`.
+- `concurrency` - max parallel fetches for item links and child walks. Default `12`.
+- `limit` - hard cap on items, catalogs larger than this are truncated. Default `2000`.
+- `followPagination` - follow `links[rel=next]` in FeatureCollections. Default `true`.
+- `onBatch` - called with each newly fetched batch for progressive rendering. Items in a batch already have absolutized asset hrefs.
+- `onProgress` - called after each emit with the running item count, `totalHinted` is always `undefined` in the current implementation.
+- `urlToKey` - maps an absolute HTTPS URL to a bucket-relative key when it belongs to the caller's connection. When it returns a non-null string, the fetch routes through `adapter.read` (SigV4) instead of cross-origin `fetch`, so private-bucket catalogs can be walked. Return `null` for foreign origins.
+- `itemsQuery` - optional native STAC API filters appended to the `rel="items"` endpoint and re-stamped on every `rel="next"` page. See `StacItemsQuery`.
 
 ### `StacItemsQuery`
 
@@ -64,10 +64,10 @@ interface StacItemsQuery {
 
 Native filters supported by OGC API Features / STAC API on `/items`.
 
-- `bbox` -- WGS84 `[west, south, east, north]`, stamped as `?bbox=w,s,e,n`.
-- `datetime` -- RFC 3339 instant or interval `start/end` (use `..` for open ends).
-- `limit` -- per-page item count hint, floored to an integer, the server may cap it.
-- `filter` -- a CQL2-JSON filter expression (STAC API Filter extension). When set it is appended as `?filter=<json>&filter-lang=cql2-json` and re-stamped onto every `rel="next"` page so cursor URLs cannot strip it.
+- `bbox` - WGS84 `[west, south, east, north]`, stamped as `?bbox=w,s,e,n`.
+- `datetime` - RFC 3339 instant or interval `start/end` (use `..` for open ends).
+- `limit` - per-page item count hint, floored to an integer, the server may cap it.
+- `filter` - a CQL2-JSON filter expression (STAC API Filter extension). When set it is appended as `?filter=<json>&filter-lang=cql2-json` and re-stamped onto every `rel="next"` page so cursor URLs cannot strip it.
 
 Each param is only stamped when the URL does not already carry it, so a server that echoes the original filter on its cursor links is not double-stamped (which would corrupt the JSON). `filter` is `JSON.stringify`-ed, a stringify failure (cyclic input) is swallowed and hydration continues without the filter.
 
@@ -98,16 +98,16 @@ function hydrateStacItems(
 
 Walk `root` into a flat `StacItem[]`.
 
-- `root` -- the classified payload from `classifyStac`. A `kind: 'none'` root yields an empty, non-truncated result.
-- `baseHref` -- the URL `root` was fetched from. All relative hrefs (child links, item links, asset hrefs) resolve against this.
-- `adapter` -- the `StorageAdapter` every fetch routes through (see `urlToKey` for the routing rule).
-- `opts` -- see `HydrateOptions`.
+- `root` - the classified payload from `classifyStac`. A `kind: 'none'` root yields an empty, non-truncated result.
+- `baseHref` - the URL `root` was fetched from. All relative hrefs (child links, item links, asset hrefs) resolve against this.
+- `adapter` - the `StorageAdapter` every fetch routes through (see `urlToKey` for the routing rule).
+- `opts` - see `HydrateOptions`.
 
 Behavior by `root.kind`:
 
-- `item` -- emits the single Item (asset hrefs absolutized against `baseHref`) and returns immediately, never truncated.
-- `item-collection` -- accepts every valid feature, then follows `rel="next"` recursively when `followPagination` and the running count is under `limit`. The `itemsQuery` is re-stamped on each next URL.
-- `collection` / `catalog` -- if the payload has static `rel="item"` links it fetches them with the worker pool. Otherwise, when no static item links exist, it tries the single `rel="items"` endpoint (with `itemsQuery` applied) and consumes it as a paginated FeatureCollection. A Catalog (or an item-link-less Collection) then also recurses into `rel="child"` links with up to `concurrency` workers, each child re-entering `hydrateStacItems` with a `limit` reduced by the count already gathered.
+- `item` - emits the single Item (asset hrefs absolutized against `baseHref`) and returns immediately, never truncated.
+- `item-collection` - accepts every valid feature, then follows `rel="next"` recursively when `followPagination` and the running count is under `limit`. The `itemsQuery` is re-stamped on each next URL.
+- `collection` / `catalog` - if the payload has static `rel="item"` links it fetches them with the worker pool. Otherwise, when no static item links exist, it tries the single `rel="items"` endpoint (with `itemsQuery` applied) and consumes it as a paginated FeatureCollection. A Catalog (or an item-link-less Collection) then also recurses into `rel="child"` links with up to `concurrency` workers, each child re-entering `hydrateStacItems` with a `limit` reduced by the count already gathered.
 
 Aborting via `opts.signal` stops the walk, in-flight reads reject with the adapter's abort behavior. Dead links and unreachable children are skipped, not fatal, so a partial catalog still hydrates. The returned `items` is sliced to `limit`.
 

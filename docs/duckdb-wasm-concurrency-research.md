@@ -10,7 +10,7 @@ Research date: 2026-02-26
 
 DuckDB-WASM is **single-threaded by default**. The WASM module runs inside **one Web Worker** (browser) or Worker Thread (Node.js), and that worker processes all queries **sequentially** on a single thread.
 
-The `AsyncDuckDB` class is a thin RPC layer on the main thread that posts messages to the Web Worker and awaits responses. It does **not** enable parallelism -- it merely prevents the main/UI thread from blocking.
+The `AsyncDuckDB` class is a thin RPC layer on the main thread that posts messages to the Web Worker and awaits responses. It does **not** enable parallelism - it merely prevents the main/UI thread from blocking.
 
 ```
 Main Thread (UI)                Web Worker (single thread)
@@ -40,7 +40,7 @@ Cross-Origin-Opener-Policy: same-origin
 
 ### What COI Multi-Threading Actually Does
 
-Even with COI, **query execution is parallelized internally** (morsel-driven parallelism within a single query). It does NOT enable multiple independent queries running in parallel -- the worker still processes one query at a time; it just uses multiple threads for that one query.
+Even with COI, **query execution is parallelized internally** (morsel-driven parallelism within a single query). It does NOT enable multiple independent queries running in parallel - the worker still processes one query at a time; it just uses multiple threads for that one query.
 
 ---
 
@@ -62,7 +62,7 @@ Since our `getDB()` returns a singleton `AsyncDuckDB` instance, both tabs share 
 4. Only then does the second query begin execution
 5. Both Promises on the main thread eventually resolve, but the second one waits for the first
 
-**They serialize -- the second query blocks until the first finishes.** There is no deadlock or error, just queuing delay.
+**They serialize - the second query blocks until the first finishes.** There is no deadlock or error, just queuing delay.
 
 ### The `Promise.all` Pattern (Cosmetic Only)
 
@@ -75,7 +75,7 @@ const results = await Promise.all([
 ]);
 ```
 
-This is purely a JavaScript convenience -- both promises are created immediately, but the worker processes them sequentially. The only benefit is reducing event loop overhead from sequential `await`.
+This is purely a JavaScript convenience - both promises are created immediately, but the worker processes them sequentially. The only benefit is reducing event loop overhead from sequential `await`.
 
 ---
 
@@ -134,8 +134,8 @@ bool WebDB::Connection::CancelPendingQuery() {
 **`cancelSent()` only cancels queries started via `conn.send()` (streaming/pending mode).**
 
 The `send()` method uses a poll-based execution model:
-1. `startPendingQuery()` -- initiates the query
-2. `pollPendingQuery()` -- repeatedly polls for results
+1. `startPendingQuery()` - initiates the query
+2. `pollPendingQuery()` - repeatedly polls for results
 3. Between polls, `cancelPendingQuery()` can set the cancellation flag
 4. On next poll, the flag is checked and the query is aborted
 
@@ -233,10 +233,10 @@ This is the only way to truly stop a synchronous `runQuery()` that is already ex
 
 Our `WasmQueryEngine` has these characteristics:
 
-1. **Singleton DB instance** (`dbPromise`) -- all queries share one worker
-2. **Uses `conn.query()` everywhere** -- queries are non-cancellable
-3. **Creates a new connection per query** (`await db.connect()`) -- good practice, but does not enable parallelism since they share the same worker
-4. **MVP/EH bundles only** -- strictly single-threaded
+1. **Singleton DB instance** (`dbPromise`) - all queries share one worker
+2. **Uses `conn.query()` everywhere** - queries are non-cancellable
+3. **Creates a new connection per query** (`await db.connect()`) - good practice, but does not enable parallelism since they share the same worker
+4. **MVP/EH bundles only** - strictly single-threaded
 
 ### What This Means Practically
 

@@ -161,10 +161,10 @@ Before DuckDB-WASM finishes booting, hyparquet reads the Parquet footer via a si
 | Row count | Sum of `row_groups[].num_rows` | DuckDB `parquet_file_metadata()` |
 | Schema | `mapParquetType()` maps logical/physical types | DuckDB `DESCRIBE SELECT *` |
 | GeoParquet metadata | Parse `"geo"` KV metadata key | DuckDB `parquet_kv_metadata()` |
-| Legacy GeoParquet | Detect `schema_version` without `version` (geopandas <0.12) | -- |
+| Legacy GeoParquet | Detect `schema_version` without `version` (geopandas <0.12) | - |
 | Native Parquet GEOMETRY | `logical_type.type === 'GEOMETRY'` (Format 2.11+) | `findGeoColumn()` heuristic |
 | CRS | PROJJSON from `geo.columns[col].crs` | DuckDB `parquet_schema()` logical_type |
-| Bbox | `geo.columns[col].bbox` → initial map bounds | -- |
+| Bbox | `geo.columns[col].bbox` → initial map bounds | - |
 | Geometry types | `geo.columns[col].geometry_types` → deck.gl layer hint | WKB type byte detection |
 
 ### Stage 2: Geometry Column Detection
@@ -187,7 +187,7 @@ Five-priority heuristic in `findGeoColumn()`:
 | GeoParquet (non-WGS84) | BLOB | `ST_AsWKB(ST_Transform(ST_GeomFromWKB("geometry"), ...))` |
 | Legacy GeoParquet v0.x | BLOB | Same as above |
 | GeoJSON column | VARCHAR | `ST_AsWKB(ST_GeomFromGeoJSON("geometry"))` |
-| Non-geo Parquet / CSV | -- | `SELECT * FROM source` |
+| Non-geo Parquet / CSV | - | `SELECT * FROM source` |
 
 ### Stage 4: CRS Detection & Reprojection
 
@@ -312,4 +312,4 @@ When adding a new viewer component:
 
 ## License
 
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) -- hi@walkthru.earth
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) - hi@walkthru.earth
