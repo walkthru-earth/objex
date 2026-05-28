@@ -24,16 +24,21 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # objex-utils resolves to its built dist/ via the workspace symlink, so it
+      # must be built before any step that type-checks or bundles the app
+      # (check, build, package), otherwise every '@walkthru-earth/objex-utils'
+      # import fails to resolve on a fresh install.
+      - run: pnpm --filter @walkthru-earth/objex-utils run build
+
       - run: pnpm run format:check
       - run: pnpm run lint
       - run: pnpm run check
       - run: pnpm run build
 
-      # Verify both publishable packages build cleanly so tarball regressions
+      # Verify the Svelte library tarball builds cleanly so regressions
       # (stray $lib/ imports, broken .d.ts, missing exports) are caught here,
-      # not at release. Mirrors what ci:publish does before pnpm publish.
+      # not at release.
       - run: pnpm run package
-      - run: pnpm --filter @walkthru-earth/objex-utils run build
 
       - uses: actions/upload-artifact@v4
         with:
