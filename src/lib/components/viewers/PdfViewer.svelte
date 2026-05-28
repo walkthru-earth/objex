@@ -217,7 +217,7 @@ onDestroy(cleanup);
           >
             <MinusIcon class="size-3.5" />
           </Button>
-          <span class="text-xs text-zinc-500 dark:text-zinc-400">
+          <span class="text-xs text-muted-foreground">
             {Math.round(scale * 100)}%
           </span>
           <Button
@@ -235,7 +235,7 @@ onDestroy(cleanup);
         <div class="flex sm:hidden">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
-              class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              class="rounded p-1 text-muted-foreground hover:bg-muted"
             >
               <EllipsisVerticalIcon class="size-4" />
             </DropdownMenu.Trigger>
