@@ -1,7 +1,7 @@
 <script lang="ts">
 import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 import XIcon from '@lucide/svelte/icons/x';
-import { formatFileSize } from '@walkthru-earth/objex-utils';
+import { formatFileSize, handleLoadError } from '@walkthru-earth/objex-utils';
 import type { PMTiles } from 'pmtiles';
 import { onDestroy } from 'svelte';
 import { t } from '$lib/i18n/index.svelte.js';
@@ -121,7 +121,7 @@ async function fetchTile() {
 			}
 		}
 	} catch (e) {
-		error = e instanceof Error ? e.message : String(e);
+		error = handleLoadError(e);
 	} finally {
 		loading = false;
 	}
