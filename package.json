@@ -66,7 +66,7 @@
 		"format": "biome format --write src/ packages/",
 		"format:check": "biome format src/ packages/",
 		"deadcode": "knip",
-		"ci:publish": "pnpm run package && pnpm --filter @walkthru-earth/objex-utils run build && pnpm publish -r --access public --no-git-checks --provenance"
+		"ci:publish": "pnpm --filter @walkthru-earth/objex-utils run build && pnpm run package && pnpm publish -r --access public --no-git-checks --provenance"
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": "^2",
