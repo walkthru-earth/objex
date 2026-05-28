@@ -36,6 +36,7 @@ Sibling modules physically located in `packages/objex-utils/src/` (each re-expor
 - **cog-asset**: `CogAsset` / `ChannelRef` / `ChannelComposite` (types), `extractCogAssets()`, `syntheticSelfAsset()`, `pickNaturalColorComposite()`, `isSingleAssetComposite()`, `allChannelsBand0()`. Reads `raster:bands.length` and `eo:bands` without network.
 - **cloud-url**: `resolveCloudUrl()`, `getNativeScheme()`, `safeDecodeURIComponent()`
 - **clipboard**: `copyToClipboard()`, `wireCodeCopyButtons()`. Uses `navigator.clipboard` and `COPY_FEEDBACK_MS`.
+- **app-config**: `AppConfig`, `AppConfigDefaults`, `AppConfigUi`, `BasemapConfig`, `ConnectionSeed` (types), `DEFAULT_APP_CONFIG`, `mergeAppConfig()`, `resolveSetting()`, `parseVisibilityParam()`, `coerceTheme()`, `coerceString()`, `coercePositiveInt()`, `coerceBool()`. Pure config schema, field-by-field merge of untrusted JSON (unknown fields ignored, malformed values fall back to base, basemaps/connections filtered to well-formed entries), and the first-match-wins precedence resolver. Imports only the `Theme` type from `src/lib/types`.
 - **connection-identity**: `connectionIdentityKey()`, `isSameConnectionIdentity()`, `normalizeEndpoint()`, `normalizeProvider()`, `ConnectionIdentityInput`
 - **error**: `handleLoadError()`, `isAbortError()`
 - **file-sort**: `SortConfig` (type), `SortDirection` (type), `SortField` (type), `sortFileEntries()`, `toggleSortField()`

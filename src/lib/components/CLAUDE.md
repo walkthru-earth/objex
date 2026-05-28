@@ -7,6 +7,7 @@ graph TD
     subgraph layout
         SB[Sidebar] --> FTS[FileTreeSidebar]
         SB --> AS[AboutSheet]
+        SB --> SS[SettingsSheet]
         TB[TabBar]
         CD[ConnectionDialog]
         STB[StatusBar]
@@ -32,7 +33,7 @@ graph TD
 |-----------|-------|------|---------|
 | `viewers/` | 33 | Per-format viewers (19 routed incl. STAC tab + Mosaic + MultiCOG, plus sub-components) | ViewerRouter → +page.svelte |
 | `browser/` | 1 | FileTreeSidebar (read-only object tree) | Sidebar → +page.svelte |
-| `layout/` | 8 | Sidebar, tabs, status bar, toggles, about sheet | +page.svelte, +layout.svelte |
+| `layout/` | 9 | Sidebar, tabs, status bar, toggles, about sheet, settings sheet | +page.svelte, +layout.svelte |
 | `editor/` | 4 | SQL editor, markdown editor, SQL results | TableViewer, MarkdownViewer |
 | `viewers/map/` | 2 | MapContainer, AttributeTable | GeoParquetMapViewer, PmtilesMapView, MapViewer |
 | `viewers/stac/` | 4 | StacItemStrip (bottom-anchored cards with thumbnails + hover-sync), StacItemInspector (right-side slide-over with metadata + assets + raw JSON), StacDatetimeBar (compact datetime histogram + range scrubber, writes back to `filterState.datetime`, now renders an adaptive granularity hint label below the slider via `stac.granularityLabel` + `stac.granularity.{day,week,month,year}` driven by `DatetimeFacet.granularity` from `utils/stac-facets`), StacFilterPanel (auto-faceted filter sheet with footer slot for fetch-options snippet). All numeric/datetime range UI now consumes `ui/slider/RangeSlider` directly | StacMosaicViewer (Phase 2/3 UI) |
