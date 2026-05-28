@@ -2,7 +2,7 @@
 import './layout.css';
 import { afterNavigate, beforeNavigate } from '$app/navigation';
 import { base } from '$app/paths';
-import { getDir } from '$lib/i18n/index.svelte.js';
+import { getDir, setLocale } from '$lib/i18n/index.svelte.js';
 import { settings } from '$lib/stores/settings.svelte.js';
 import { capturePageleave, capturePageview, initAnalytics } from './analytics.js';
 
@@ -29,8 +29,9 @@ $effect(() => {
 	}
 });
 
-// Apply locale dir and lang to html element
+// Sync i18n with the effective (config-aware) locale, then apply dir/lang.
 $effect(() => {
+	setLocale(settings.locale);
 	const root = document.documentElement;
 	root.dir = getDir();
 	root.lang = settings.locale;
