@@ -10,6 +10,7 @@ import InfoIcon from '@lucide/svelte/icons/info';
 import LinkIcon from '@lucide/svelte/icons/link';
 import MapIcon from '@lucide/svelte/icons/map';
 import TableIcon from '@lucide/svelte/icons/table';
+import { COPY_FEEDBACK_MS } from '@walkthru-earth/objex-utils';
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 import { Separator } from '$lib/components/ui/separator/index.js';
@@ -89,7 +90,7 @@ async function handleCopy(type: 'https' | 'provider') {
 	try {
 		await navigator.clipboard.writeText(url);
 		copiedType = type;
-		setTimeout(() => (copiedType = null), 2000);
+		setTimeout(() => (copiedType = null), COPY_FEEDBACK_MS);
 	} catch {
 		// clipboard API may fail in some contexts
 	}

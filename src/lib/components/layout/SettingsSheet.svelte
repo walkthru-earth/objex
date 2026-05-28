@@ -2,6 +2,7 @@
 import CheckIcon from '@lucide/svelte/icons/check';
 import CopyIcon from '@lucide/svelte/icons/copy';
 import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+import { COPY_FEEDBACK_MS } from '@walkthru-earth/objex-utils';
 import {
 	Sheet,
 	SheetContent,
@@ -48,7 +49,7 @@ function buildExportConfig(): string {
 async function copyConfig() {
 	await navigator.clipboard.writeText(buildExportConfig());
 	copied = true;
-	setTimeout(() => (copied = false), 1500);
+	setTimeout(() => (copied = false), COPY_FEEDBACK_MS);
 }
 </script>
 
