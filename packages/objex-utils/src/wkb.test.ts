@@ -32,3 +32,20 @@ describe('findGeoColumnFromRows', () => {
 		expect(findGeoColumnFromRows(rows, schema)).toBeNull();
 	});
 });
+
+describe('looksLikeWKB type range (via findGeoColumnFromRows)', () => {
+	// EWKB GeometryCollection (type 7), little-endian, 0 sub-geometries
+	const gc = new Uint8Array([0x01, 0x07, 0x00, 0x00, 0x00, 0, 0, 0, 0]);
+	const point = new Uint8Array([
+		0x01, 0x01, 0x00, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	]);
+
+	it('prefers a renderable Point column over a GeometryCollection column', () => {
+		const schema = [
+			{ name: 'gc', type: 'BLOB' },
+			{ name: 'pt', type: 'BLOB' }
+		];
+		const rows = [{ gc, pt: point }];
+		expect(findGeoColumnFromRows(rows, schema)).toBe('pt');
+	});
+});

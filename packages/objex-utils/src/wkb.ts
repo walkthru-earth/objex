@@ -326,8 +326,9 @@ function looksLikeWKB(value: unknown): boolean {
 	// Strip EWKB flags
 	typeInt = (typeInt & 0x0000ffff) % 1000;
 
-	// Valid base geometry types are 1–7
-	return typeInt >= 1 && typeInt <= 7;
+	// Valid renderable base geometry types are 1-6 (7 = GeometryCollection,
+	// which parseWKB returns as Unknown/empty - never select it as the geo column)
+	return typeInt >= 1 && typeInt <= 6;
 }
 
 /**
