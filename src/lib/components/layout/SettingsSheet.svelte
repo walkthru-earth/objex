@@ -113,6 +113,37 @@ async function copyConfig() {
 				</div>
 			</section>
 
+			<!-- Map -->
+			{#if appConfig.value.basemaps.length > 0}
+				<section class="flex flex-col gap-2">
+					<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+						{t('settings.map')}
+					</h3>
+					<div class="flex flex-wrap gap-2">
+						<button
+							class="rounded-md border px-3 py-1.5 text-sm transition-colors {settings.basemapId ===
+							undefined
+								? 'border-primary bg-primary/10 text-primary'
+								: 'border-border text-muted-foreground hover:text-foreground'}"
+							onclick={() => settings.setBasemap(undefined)}
+						>
+							{t('settings.basemapAuto')}
+						</button>
+						{#each appConfig.value.basemaps as bm (bm.id)}
+							<button
+								class="rounded-md border px-3 py-1.5 text-sm transition-colors {settings.basemapId ===
+								bm.id
+									? 'border-primary bg-primary/10 text-primary'
+									: 'border-border text-muted-foreground hover:text-foreground'}"
+								onclick={() => settings.setBasemap(bm.id)}
+							>
+								{bm.label}
+							</button>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
 			<!-- Data -->
 			<section class="flex flex-col gap-3">
 				<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

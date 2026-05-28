@@ -70,6 +70,8 @@ export const en: Record<string, string> = {
 	'settings.language': 'Language',
 	'settings.data': 'Data',
 	'settings.interface': 'Interface',
+	'settings.map': 'Map',
+	'settings.basemapAuto': 'Auto (match theme)',
 	'settings.rowLimit': 'Default row limit',
 	'settings.rowLimitHelp': 'Rows loaded per page in the table viewer.',
 	'settings.mosaicLimit': 'STAC item limit',

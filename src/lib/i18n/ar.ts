@@ -70,6 +70,8 @@ export const ar: Record<string, string> = {
 	'settings.language': 'اللغة',
 	'settings.data': 'البيانات',
 	'settings.interface': 'الواجهة',
+	'settings.map': 'الخريطة',
+	'settings.basemapAuto': 'تلقائي (حسب السمة)',
 	'settings.rowLimit': 'حد الصفوف الافتراضي',
 	'settings.rowLimitHelp': 'عدد الصفوف المحملة لكل صفحة في عارض الجدول.',
 	'settings.mosaicLimit': 'حد عناصر STAC',
