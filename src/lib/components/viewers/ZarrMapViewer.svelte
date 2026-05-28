@@ -1,5 +1,6 @@
 <script lang="ts">
 import { MapboxOverlay } from '@deck.gl/mapbox';
+import { handleLoadError } from '@walkthru-earth/objex-utils';
 import type maplibregl from 'maplibre-gl';
 import maplibreModule from 'maplibre-gl';
 import { onDestroy, untrack } from 'svelte';
@@ -491,7 +492,7 @@ async function addZarrLayer(map: maplibregl.Map) {
 		zarrLayer = new ZarrLayer(opts);
 		map.addLayer(zarrLayer);
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 		loading = false;
 	}
 }
@@ -599,7 +600,7 @@ async function updateSelector() {
 	try {
 		await zarrLayer.setSelector(buildSelector());
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 
