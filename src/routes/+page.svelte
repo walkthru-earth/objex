@@ -22,6 +22,7 @@ import { getFileTypeInfo } from '$lib/file-icons/index.js';
 import { t } from '$lib/i18n/index.svelte.js';
 import { browser } from '$lib/stores/browser.svelte.js';
 import { connections } from '$lib/stores/connections.svelte.js';
+import { settings } from '$lib/stores/settings.svelte.js';
 import { eagerUrlTabId, tabs } from '$lib/stores/tabs.svelte.js';
 import {
 	clearUrlState,
@@ -390,9 +391,11 @@ const pageDescription = $derived.by(() => {
 <div class="flex flex-1 overflow-hidden">
 	{#if isDesktop}
 		<!-- Desktop layout: Icon Rail + Stable Flex Layout -->
-		<Sidebar />
+		{#if settings.showConnectionRail}
+			<Sidebar />
+		{/if}
 		<div class="flex flex-1 overflow-hidden">
-			{#if desktopSidebarOpen && hasBrowserConnection && browser.activeConnection}
+			{#if desktopSidebarOpen && hasBrowserConnection && browser.activeConnection && settings.showFileTree}
 				<div class="h-full w-64 shrink-0 border-e border-zinc-200 xl:w-72 dark:border-zinc-800">
 					<FileTreeSidebar connection={browser.activeConnection} initialPath={initialFilePath} />
 				</div>
@@ -461,8 +464,10 @@ const pageDescription = $derived.by(() => {
 					</button>
 				</Sheet.Header>
 				<div class="flex min-h-0 flex-1">
-					<Sidebar />
-					{#if hasBrowserConnection && browser.activeConnection}
+					{#if settings.showConnectionRail}
+						<Sidebar />
+					{/if}
+					{#if hasBrowserConnection && browser.activeConnection && settings.showFileTree}
 						<div class="flex-1 overflow-hidden">
 							<FileTreeSidebar connection={browser.activeConnection} initialPath={initialFilePath} />
 						</div>
