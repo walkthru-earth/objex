@@ -209,7 +209,7 @@ async function loadConfigConnections() {
 			...(seed.rootPrefix ? { rootPrefix: seed.rootPrefix } : {})
 		});
 		const conn = connections.getById(id);
-		if (conn && conn.anonymous && !firstAnon) firstAnon = conn;
+		if (conn?.anonymous && !firstAnon) firstAnon = conn;
 	}
 	// Auto-open the first public bucket so the demo flow stays zero-click.
 	// Private seeds remain as un-browsed rows; clicking one runs the normal
