@@ -206,7 +206,7 @@ async function saveMarkdown(markdown: string) {
 		editMode = false;
 		await loadMarkdown();
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		error = handleLoadError(err);
 	}
 }
 </script>
