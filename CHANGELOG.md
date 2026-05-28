@@ -1,5 +1,53 @@
 # @walkthru-earth/objex
 
+## 1.4.0
+
+### Minor Changes
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`73efc55`](https://github.com/walkthru-earth/objex/commit/73efc555bc7e0f4a742bc6d62f36f70647ed1e44) Thanks [@yharby](https://github.com/yharby)! - Wire config-driven basemaps and default connections into the live app.
+
+  - Hosts can now set the basemap list, the default basemap per theme, and the preloaded buckets from `config.json` or `?config=<url>` without a rebuild. A basemap picker in the Settings panel lets the user override the basemap, with an Auto option that follows the theme.
+  - `MapContainer` resolves its basemap through the new pure `resolveBasemap()` selector and falls back to the hardcoded CartoDB styles when no basemaps are configured, so a failed config never blanks the map. Raster basemaps are supported via a generated MapLibre style.
+  - The connection rail seeds its rows from `config.json` connections on first run, auto-opening the first anonymous bucket and saving private buckets as rows that prompt for credentials on click. When no connections are configured it falls back to the Source Cooperative demo bucket.
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`7f2cf89`](https://github.com/walkthru-earth/objex/commit/7f2cf89b6e763a81527c9d076c00a7dd71031b6b) Thanks [@yharby](https://github.com/yharby)! - Add a runtime config and an in-app settings panel.
+
+  - A bundled `static/config.json` (or a remote `?config=<url>` file) now seeds defaults for theme, locale, row and STAC item limits, chrome visibility, basemaps, and connection seeds, so hosts can customize objex without a rebuild. Malformed config falls back to safe defaults and the app still boots.
+  - New pure helpers in `@walkthru-earth/objex-utils` (`AppConfig`, `mergeAppConfig`, `resolveSetting`, `parseVisibilityParam`, and value coercers) provide a field-by-field merge of untrusted JSON and a first-match-wins precedence resolver. Covered by unit tests.
+  - The settings store resolves each value through query parameter, then localStorage, then config, then a hardcoded fallback. Only keys the user explicitly changes are persisted, so config edits still reach untouched keys.
+  - A new settings panel (gear icon in the sidebar) edits appearance, language, data limits, and interface visibility, with copy config JSON and reset to defaults. Per-link overrides via `?sidebar=`, `?tree=`, `?panel=`, and `?config=` are supported, and toggles locked by a link parameter are shown as read-only.
+
+### Patch Changes
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`c600e58`](https://github.com/walkthru-earth/objex/commit/c600e5845f58ad54ed8d99cdf84b0f8963543fa1) Thanks [@yharby](https://github.com/yharby)! - Improve generic S3-compatible support and connection URL handling.
+
+  - Relabel the `minio` provider to "MinIO / RustFS / Custom" so self-hosted and S3-compatible stores (MinIO, RustFS, Ceph RGW, and other custom endpoints) are a first-class choice. No `id` change, so existing connections and host detection keep working.
+  - Fix the file tree "Copy HTTP URL" action emitting an AWS URL for non-AWS connections. It now routes through a shared, provider-aware `buildHttpsUrlForConnection` helper that resolves GCS, R2, Wasabi, and the rest correctly, including connections with an empty endpoint.
+  - Replace the silent, misleading "Empty bucket" state when a bucket listing is blocked. The file tree now detects a CORS/network failure and explains it, with guidance that the bucket needs a CORS policy or proxy access.
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`1df37d5`](https://github.com/walkthru-earth/objex/commit/1df37d56e9b3291b835c993945dba0192124aeaf) Thanks [@yharby](https://github.com/yharby)! - Clarify the two-layer utility split. Rename `cog-pure` to `cog-info` and the app-side `url` to `signed-url`, move the markdown SQL execution context into `@walkthru-earth/objex-utils` as `MarkdownSqlContext` (engine injected by the host), add a two-layer utility map to the root guide, and fix stale documentation paths. No runtime behavior changes.
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`f2b86fb`](https://github.com/walkthru-earth/objex/commit/f2b86fb918b7a76f6144bfc1545691ac13956eb0) Thanks [@yharby](https://github.com/yharby)! - Harden the pure utilities against polynomial ReDoS (CodeQL `js/polynomial-redos`). No public API or behavior change, the same inputs produce the same outputs, but worst-case inputs now run in linear time instead of O(n^2).
+
+  - `connection-identity` and `storage-url`: replace the `/\/+$/` and `/^\/+|\/+$/g` slash-trim regexes with linear character-scan helpers.
+  - `cloud-url`: rewrite the `s3://` and `gcs://` matchers from `([^/]+)\/?(.*)` to `([^/]+)(?:\/(.*))?` to remove the `[^/]+` / `.*` backtracking ambiguity.
+  - `markdown-sql`: match the sql-fence name with `[ \t]` instead of `\s` so the trailing newline is an unambiguous boundary.
+  - `column-types`: strip the parenthesized type span via `indexOf`/`lastIndexOf` slicing instead of `/\(.*\)/`.
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`0f213aa`](https://github.com/walkthru-earth/objex/commit/0f213aa1c8d0ac7b25561e4d02b5ad9c4bdae61d) Thanks [@yharby](https://github.com/yharby)! - Upgrade the `@developmentseed/deck.gl-{raster,geotiff,zarr,epsg,proj,geotiff}` stack from 0.6.1 to 0.7.0 and slim the pnpm patch set.
+
+  - 0.7.0 forwards `onTileLoad` / `onTileError` / `onTileUnload` / `onViewportLoad` through `RasterTileLayer` natively (deck.gl-raster PR [#546](https://github.com/walkthru-earth/objex/issues/546)), so the entire `deck.gl-raster` pnpm patch was removed.
+  - `MosaicLayer` now forwards `debounceTime` natively and renamed its tile callbacks to source-level props (`onSourceLoad` / `onSourceError` / `onSourceUnload` / `onViewportLoad`). `StacMosaicViewer` migrated from `onTileUnload` to `onSourceUnload`, and that hunk was dropped from the geotiff patch.
+  - The remaining geotiff patch keeps only three hunks that upstream still does not ship by default. The proj4 `+over` antimeridian fix, the `inferRenderPipeline` re-export, and the `r16unorm` to `r32float` Firefox/macOS texture fallback.
+  - `MinimalTileData` now imports from `@developmentseed/deck.gl-raster` (it is no longer re-exported by `deck.gl-geotiff`).
+
+- [#15](https://github.com/walkthru-earth/objex/pull/15) [`3da79e0`](https://github.com/walkthru-earth/objex/commit/3da79e0c4b50e343886259d9b678e24cdefdfd08) Thanks [@yharby](https://github.com/yharby)! - Relocate framework-agnostic utilities into `packages/objex-utils/src/`. The source for `wkb`, `hex`, `format`, `column-types`, `file-sort`, `error`, `lru`, `connection-identity`, `storage-smoketest`, `stac-storage-extension`, `cog-info`, `cog-asset`, `channel-composite`, `stac`, `stac-source`, `parquet-metadata`, `geoarrow`, `geometry-type`, `storage-url`, `cloud-url`, `host-detection`, `stac-facets`, `stac-pushdown`, `stac-geoparquet`, `markdown-sql` now lives inside the `objex-utils` package. The `src/lib/utils/<name>.ts` source files were removed. Consumers import these utilities from `@walkthru-earth/objex-utils` directly.
+
+  Added a build-time guardrail (`scripts/verify-objex-utils-bundle.mjs`, wired into `pnpm --filter @walkthru-earth/objex-utils run build`) that fails the build if any top-level import of `@developmentseed/*`, `proj4`, `wkt-parser`, `maplibre-gl`, `@luma.gl/*`, `@deck.gl/*`, `deck.gl`, `pdfjs-dist`, `shiki`, `@babylonjs/*`, `zarrita`, `@zarrita/*`, `pmtiles`, `flatgeobuf`, `@zip.js/*`, `@cogeotiff/*`, `@carbonplan/*`, `chart.js`, `marked`, `mermaid`, `@milkdown/*`, `@codemirror/*`, `ansi_up`, `@mapbox/*`, `@chunkd/*`, `aws4fetch`, `sql-formatter`, `lz-string`, `pbf`, or `@duckdb/*` reaches the `dist/` output. This locks in the lesson from walkthru-earth/objex#11 (the `cog-info.ts` split pattern), so future re-exports cannot regress consumer Vite pre-bundling.
+
+- Updated dependencies [[`73efc55`](https://github.com/walkthru-earth/objex/commit/73efc555bc7e0f4a742bc6d62f36f70647ed1e44), [`c600e58`](https://github.com/walkthru-earth/objex/commit/c600e5845f58ad54ed8d99cdf84b0f8963543fa1), [`1df37d5`](https://github.com/walkthru-earth/objex/commit/1df37d56e9b3291b835c993945dba0192124aeaf), [`f2b86fb`](https://github.com/walkthru-earth/objex/commit/f2b86fb918b7a76f6144bfc1545691ac13956eb0), [`7f2cf89`](https://github.com/walkthru-earth/objex/commit/7f2cf89b6e763a81527c9d076c00a7dd71031b6b), [`0f213aa`](https://github.com/walkthru-earth/objex/commit/0f213aa1c8d0ac7b25561e4d02b5ad9c4bdae61d), [`3da79e0`](https://github.com/walkthru-earth/objex/commit/3da79e0c4b50e343886259d9b678e24cdefdfd08)]:
+  - @walkthru-earth/objex-utils@1.4.0
+
 ## 1.3.1
 
 ### Patch Changes
