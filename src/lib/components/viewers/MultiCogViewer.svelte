@@ -12,6 +12,7 @@ import {
 	extractCogAssets,
 	isSingleAssetComposite,
 	isStacItem,
+	LruCache,
 	PRESETS,
 	pickNaturalColorComposite,
 	presetMatchesComposite,
@@ -91,7 +92,7 @@ let abortController = new AbortController();
 let mapRef: maplibregl.Map | null = null;
 let overlayRef: MapboxOverlay | null = null;
 let hasFittedOnce = false;
-let presignCache = new Map<string, Promise<string>>();
+const presignCache = new LruCache<string, Promise<string>>({ max: 64 });
 
 // Pixel inspection: same UX as CogViewer / StacMosaicViewer. Click → read one
 // pixel from each active composite channel's GeoTIFF and show channel/asset/value.
@@ -114,7 +115,7 @@ let detachInspector: (() => void) | null = null;
 // custom getTileData/renderTile pair that honors per-channel bandIndex picks.
 // Without this, the single-asset multi-band path (e.g. Sentinel-2 `visual`,
 // NAIP `image`) silently falls back to bands 0/1/2 regardless of the picker.
-let geotiffCache = new Map<string, Promise<GeoTIFF>>();
+const geotiffCache = new LruCache<string, Promise<GeoTIFF>>({ max: 64 });
 let loadGen = 0;
 let layerVersion = 0;
 let rebuildTimer: number | null = null;
@@ -160,8 +161,8 @@ function resetViewer(): void {
 	overlayRef = null;
 	assets = [];
 	composite = null;
-	presignCache = new Map();
-	geotiffCache = new Map();
+	presignCache.clear();
+	geotiffCache.clear();
 	loading = true;
 	error = null;
 	bounds = undefined;
