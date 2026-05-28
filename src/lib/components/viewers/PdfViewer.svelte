@@ -138,7 +138,7 @@ async function renderPage(
 		await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
 	} catch (err) {
 		if (gen === renderGeneration) {
-			error = err instanceof Error ? err.message : String(err);
+			error = handleLoadError(err);
 		}
 	}
 }
