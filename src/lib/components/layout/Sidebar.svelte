@@ -47,9 +47,9 @@ let autoConnecting = $state(false);
 $effect(() => {
 	connections.load().then(async () => {
 		await handleAutoDetection();
-		// On first visit (no connections, no URL params), load the demo bucket
+		// On first visit (no connections, no URL params), seed connections from config
 		if (connections.items.length === 0 && !new URL(window.location.href).searchParams.has('url')) {
-			await loadDemoConnection();
+			await loadConfigConnections();
 		}
 	});
 });
@@ -185,6 +185,38 @@ async function handleAutoDetection() {
 		// Show indicator for hostname-detected bucket
 		detectedHost = detected;
 		if (isMigrating) tabs.endMigration();
+	}
+}
+
+async function loadConfigConnections() {
+	const seeds = appConfig.value.connections;
+	if (seeds.length === 0) {
+		// No configured connections (e.g. config failed to load): preserve the
+		// historic first-run demo bucket so the empty app is never a dead end.
+		await loadDemoConnection();
+		return;
+	}
+	let firstAnon: Connection | null = null;
+	for (const seed of seeds) {
+		const { id } = await connections.save({
+			name: seed.name,
+			provider: seed.provider,
+			endpoint: seed.endpoint ?? '',
+			bucket: seed.bucket,
+			region: seed.region ?? '',
+			anonymous: seed.anonymous ?? false,
+			...(seed.authMethod ? { authMethod: seed.authMethod } : {}),
+			...(seed.rootPrefix ? { rootPrefix: seed.rootPrefix } : {})
+		});
+		const conn = connections.getById(id);
+		if (conn && conn.anonymous && !firstAnon) firstAnon = conn;
+	}
+	// Auto-open the first public bucket so the demo flow stays zero-click.
+	// Private seeds remain as un-browsed rows; clicking one runs the normal
+	// ensureCredentials prompt via handleBrowseConnection.
+	if (firstAnon) {
+		browser.browse(firstAnon);
+		syncUrlParam(firstAnon);
 	}
 }
 
