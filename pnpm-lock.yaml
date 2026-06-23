@@ -178,7 +178,7 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
       zarrita:
-        specifier: ^0.7.3
+        specifier: ^0.7.1
         version: 0.7.3
     devDependencies:
       '@biomejs/biome':
